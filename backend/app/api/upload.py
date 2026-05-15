@@ -55,9 +55,9 @@ async def upload_video(file: UploadFile = File(...)):
     })
 
     return {
-    "message": "upload success",
-    "file_id": file_id,
-    "path": filepath,
-    "transcription": transcription["text"],
-"hooks": transcription["hooks"]
-}
+        "success": True,
+        "video_url": f"/media/{os.path.basename(first_clip)}",
+        "timeline": transcription["timeline"],
+        "project_id": file_id,
+        "duration": duration,
+    }
