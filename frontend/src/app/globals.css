@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: dark;
+}
+
 body {
-  @apply bg-slate-950 text-slate-100;
+  @apply bg-[#0B1020] text-slate-100 antialiased;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
