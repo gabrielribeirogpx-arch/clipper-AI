@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import math
 import re
+import subprocess
 from typing import Dict, List
 
 from moviepy.editor import CompositeVideoClip, VideoFileClip
@@ -147,15 +148,15 @@ def create_tiktok_subtitles(video_path, segments, output_path):
 
     API intentionally unchanged.
     """
-    video = VideoFileClip(video_path)
-    video_audio = video.audio
+    base_clip = VideoFileClip(video_path)
 
     reframer = ReframingService()
-    reframed_video = reframer.apply(video)
+    reframed_video = reframer.apply(base_clip)
 
     words = _collect_words(segments)
     cinematic_video = _apply_cinematic_camera_motion(reframed_video, words)
-    cinematic_video = cinematic_video.set_audio(video_audio)
+    if base_clip.audio:
+        cinematic_video = cinematic_video.set_audio(base_clip.audio)
 
     renderer = SubtitleRenderer()
     word_layers = renderer.build_word_layers(
@@ -165,22 +166,36 @@ def create_tiktok_subtitles(video_path, segments, output_path):
     )
 
     final_video = CompositeVideoClip([cinematic_video, *word_layers], size=cinematic_video.size)
-    final_video = final_video.set_audio(video_audio)
+    final_video.audio = base_clip.audio
+    if base_clip.audio:
+        final_video = final_video.set_audio(base_clip.audio)
+
     final_video.write_videofile(
         output_path,
         codec="libx264",
         audio_codec="aac",
-        audio=True,
-        preset="medium",
-        fps=24,
         temp_audiofile="temp-audio.m4a",
         remove_temp=True,
+        fps=24,
+        preset="medium",
     )
+
+    ffprobe_cmd = [
+        "ffprobe",
+        "-v", "error",
+        "-show_streams",
+        "-i", output_path,
+    ]
+    ffprobe_proc = subprocess.run(ffprobe_cmd, capture_output=True, text=True, check=False)
+    ffprobe_output = (ffprobe_proc.stdout or "") + (ffprobe_proc.stderr or "")
+    print(f"[ffprobe] {output_path}\n{ffprobe_output}")
+    if "codec_type=audio" not in ffprobe_output or "codec_name=aac" not in ffprobe_output:
+        raise RuntimeError(f"Rendered video is missing AAC audio stream: {output_path}")
 
     final_video.close()
     cinematic_video.close()
     reframed_video.close()
-    if reframed_video is not video:
-        video.close()
+    if reframed_video is not base_clip:
+        base_clip.close()
 
     return output_path
