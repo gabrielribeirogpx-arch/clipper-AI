@@ -1,12 +1,35 @@
-venv/
+# Python
+backend/venv/
 __pycache__/
 *.pyc
 
-app/uploads/
-app/clips/
+# Uploads
+backend/app/uploads/
+backend/app/clips/
+backend/app/subtitles/
 
-*.mp4
-*.wav
-*.aac
+# Node
+frontend/node_modules/
 
+# Next
+frontend/.next/
+frontend/out/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
 .env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+
+# Cache
+.cache/
