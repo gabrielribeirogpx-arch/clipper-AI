@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { getRenderState } from '@/lib/api';
 
 export type TrackType = 'subtitles' | 'broll' | 'hooks' | 'cuts' | 'effects';
 
@@ -111,8 +112,7 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
       return { tracks: nextTracks };
     }),
   hydrateFromBackend: async () => {
-    const response = await fetch('http://localhost:8000/timeline/render-state');
-    const data = await response.json();
+    const data = await getRenderState();
     const mapTrack = (items: ClipBlock[] = [], track: TrackType) =>
       items.map((item) => ({ ...item, track }));
     set({
