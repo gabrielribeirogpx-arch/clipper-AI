@@ -1,29 +1,46 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { shouldSyncProgress } from '@/lib/playbackEngine';
 import { useMounted } from '@/hooks/useMounted';
 import { useTimelineStore } from '@/store/timelineStore';
 
-type ReactPlayerHandle = {
-  getCurrentTime?: () => number;
-  seekTo?: (amount: number, type?: 'seconds' | 'fraction') => void;
-};
-
-const ReactPlayer = dynamic(() => import('react-player'), { ssr: false, loading: () => <div className="h-full w-full animate-pulse bg-slate-900" /> });
+const DEFAULT_VIDEO_URL = 'http://127.0.0.1:8000/media/clip_0.mp4';
 
 export function VideoPreview() {
   const { currentTime, setCurrentTime, isPlaying, setPlaying, duration, videoUrl } = useTimelineStore();
   const mounted = useMounted();
-  const playerRef = useRef<ReactPlayerHandle | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const resolvedVideoUrl = videoUrl && videoUrl.trim().length > 0 ? videoUrl : DEFAULT_VIDEO_URL;
 
   useEffect(() => {
-    if (!mounted) return;
-    const playedSeconds = playerRef.current?.getCurrentTime?.() ?? 0;
-    if (shouldSyncProgress(currentTime - playedSeconds)) playerRef.current?.seekTo?.(currentTime, 'seconds');
+    if (!mounted || !videoRef.current) return;
+    const video = videoRef.current;
+    const drift = currentTime - video.currentTime;
+    if (shouldSyncProgress(drift)) video.currentTime = currentTime;
   }, [currentTime, mounted]);
+
+  useEffect(() => {
+    if (!mounted || !videoRef.current) return;
+    const video = videoRef.current;
+    video.volume = 1;
+    if (isPlaying) {
+      void video.play();
+      return;
+    }
+    video.pause();
+  }, [isPlaying, mounted]);
+
+  useEffect(() => {
+    if (!mounted || !videoRef.current) return;
+    videoRef.current.load();
+  }, [resolvedVideoUrl, mounted]);
+
+  useEffect(() => {
+    console.log(resolvedVideoUrl);
+  }, [resolvedVideoUrl]);
 
   if (!mounted) return <div className="h-[760px] rounded-[2rem] border border-white/10 bg-white/5" />;
 
@@ -40,20 +57,26 @@ export function VideoPreview() {
               <div className="pointer-events-none absolute inset-0 z-20 bg-[linear-gradient(118deg,rgba(255,255,255,0.18)_0%,transparent_30%,transparent_70%,rgba(255,255,255,0.08)_100%)]" />
               <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,.22),transparent_38%)]" />
               <div className="aspect-video">
-                <ReactPlayer
-                  ref={undefined}
-                  url={videoUrl ?? undefined}
-                  width="100%"
-                  height="100%"
-                  playing={isPlaying}
+                <video
+                  key={resolvedVideoUrl}
+                  ref={videoRef}
+                  src={resolvedVideoUrl}
                   controls
-                  playsinline
-                  config={{ file: { attributes: { playsInline: true, muted: false, controls: true } } }}
-                  onProgress={(state: { playedSeconds: number }) => setCurrentTime(state.playedSeconds)}
-                  onReady={(player: ReactPlayerHandle) => {
-                    playerRef.current = player;
+                  playsInline
+                  preload="auto"
+                  crossOrigin="anonymous"
+                  className="h-full w-full"
+                  onLoadedMetadata={() => {
+                    console.log('VIDEO METADATA LOADED');
+                    if (videoRef.current) {
+                      videoRef.current.volume = 1;
+                      useTimelineStore.setState({ duration: videoRef.current.duration || 0 });
+                    }
                   }}
-                  onDuration={(value: number) => useTimelineStore.setState({ duration: value })}
+                  onCanPlay={() => {
+                    console.log('VIDEO READY');
+                  }}
+                  onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
                 />
               </div>
             </div>
