@@ -175,10 +175,17 @@ def create_tiktok_subtitles(video_path, segments, output_path):
     words = _collect_words(segments)
     cinematic_video = _apply_cinematic_camera_motion(reframed_video, words)
     renderer = SubtitleRenderer()
+    caption_position = "bottom"
+    preset = "cinematic"
+    if segments and isinstance(segments[0], dict):
+        caption_position = str(segments[0].get("caption_position", "bottom"))
+        preset = str(segments[0].get("caption_preset", "cinematic"))
     word_layers = renderer.build_word_layers(
         words=words,
         video_w=int(cinematic_video.w),
         video_h=int(cinematic_video.h),
+        caption_position=caption_position,
+        preset=preset,
     )
 
     final_video = CompositeVideoClip([cinematic_video, *word_layers], size=cinematic_video.size)

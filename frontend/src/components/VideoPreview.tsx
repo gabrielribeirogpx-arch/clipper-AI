@@ -4,12 +4,36 @@ import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { shouldSyncProgress } from '@/lib/playbackEngine';
 import { useMounted } from '@/hooks/useMounted';
-import { useTimelineStore } from '@/store/timelineStore';
+import { CaptionPreset, useTimelineStore } from '@/store/timelineStore';
 
 const DEFAULT_VIDEO_URL = 'http://127.0.0.1:8000/media/clip_0.mp4';
+const PRESET_STYLES: Record<CaptionPreset, { lineHeight: string; letterSpacing: string; glow: string }> = {
+  cinematic: { lineHeight: '1.18', letterSpacing: '0.03em', glow: 'drop-shadow(0 0 22px rgba(80,160,255,.35))' },
+  tiktok: { lineHeight: '1.1', letterSpacing: '0.02em', glow: 'drop-shadow(0 0 16px rgba(255,212,0,.28))' },
+  hormozi: { lineHeight: '1.05', letterSpacing: '0.015em', glow: 'drop-shadow(0 0 18px rgba(255,122,0,.32))' },
+  minimal: { lineHeight: '1.28', letterSpacing: '0.01em', glow: 'drop-shadow(0 0 10px rgba(255,255,255,.2))' },
+  neon: { lineHeight: '1.12', letterSpacing: '0.025em', glow: 'drop-shadow(0 0 22px rgba(70,160,255,.55))' },
+};
+
+function smartBreak(text: string): string[] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= 3) return [words.join(' ')];
+  const lines: string[] = [];
+  let current: string[] = [];
+  for (const w of words) {
+    current.push(w);
+    if (current.length >= 3 || /[,.!?;:]$/.test(w)) {
+      lines.push(current.join(' '));
+      current = [];
+    }
+    if (lines.length === 2) break;
+  }
+  if (current.length > 0 && lines.length < 2) lines.push(current.join(' '));
+  return lines.slice(0, 2);
+}
 
 export function VideoPreview() {
-  const { currentTime, setCurrentTime, isPlaying, setPlaying, duration, videoUrl } = useTimelineStore();
+  const { currentTime, setCurrentTime, isPlaying, setPlaying, duration, videoUrl, tracks } = useTimelineStore();
   const mounted = useMounted();
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -41,6 +65,12 @@ export function VideoPreview() {
   useEffect(() => {
     console.log(resolvedVideoUrl);
   }, [resolvedVideoUrl]);
+
+  const activeSubtitle = tracks.subtitles.find((block) => currentTime >= block.start && currentTime <= block.end) ?? tracks.subtitles[0];
+  const preset = (activeSubtitle?.style?.captionPreset ?? 'cinematic') as CaptionPreset;
+  const position = activeSubtitle?.style?.captionPosition ?? 'bottom';
+  const heroWord = activeSubtitle?.text?.split(/\s+/).find((word) => word.length > 4) ?? '';
+  const lines = smartBreak(activeSubtitle?.text ?? '');
 
   if (!mounted) return <div className="h-[760px] rounded-[2rem] border border-white/10 bg-white/5" />;
 
@@ -78,6 +108,20 @@ export function VideoPreview() {
                   }}
                   onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
                 />
+                {activeSubtitle?.text && (
+                  <div className={`pointer-events-none absolute inset-x-6 z-30 ${position === 'top' ? 'top-[10%]' : position === 'middle' ? 'top-[45%] -translate-y-1/2' : 'bottom-[16%]'}`}>
+                    <div className="mx-auto max-w-[78%] rounded-2xl px-6 py-3 text-center" style={{ filter: PRESET_STYLES[preset].glow }}>
+                      {lines.map((line, idx) => (
+                        <div key={`${line}-${idx}`} className="font-extrabold uppercase text-white" style={{ fontFamily: 'Montserrat, Anton, Arial Black, Arial, sans-serif', fontSize: 'clamp(28px, 3.7vw, 60px)', lineHeight: PRESET_STYLES[preset].lineHeight, letterSpacing: PRESET_STYLES[preset].letterSpacing, textShadow: '0 6px 0 #000, 0 0 28px rgba(0,0,0,.45), 0 0 16px rgba(80,160,255,.28)', animation: 'captionFade 0.2s ease-out' }}>
+                          {line.split(' ').map((word) => {
+                            const active = heroWord && word.toLowerCase().includes(heroWord.toLowerCase());
+                            return <span key={`${line}-${word}`} className={active ? 'animate-pulse' : ''} style={{ color: active ? '#FFD400' : '#FFFFFF', WebkitTextStroke: '2px #000', display: 'inline-block', transform: active ? 'scale(1.15)' : 'scale(1)', transition: 'all 140ms ease-out' }}>{word} </span>;
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -91,6 +135,7 @@ export function VideoPreview() {
           <span className="text-base font-medium text-slate-100">{currentTime.toFixed(2)}s</span>
         </div>
       </div>
+      <style jsx global>{`@keyframes captionFade { from { opacity: .55; transform: translateY(10px) scale(.96);} to { opacity: 1; transform: translateY(0) scale(1);} }`} </style>
     </motion.section>
   );
 }
