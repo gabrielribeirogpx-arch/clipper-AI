@@ -25,36 +25,43 @@ export function VideoPreview() {
     if (shouldSyncProgress(currentTime - playedSeconds)) playerRef.current?.seekTo?.(currentTime, 'seconds');
   }, [currentTime, mounted]);
 
-  if (!mounted) return <div className="h-[560px] rounded-3xl border border-white/10 bg-white/5" />;
+  if (!mounted) return <div className="h-[700px] rounded-[2rem] border border-white/10 bg-white/5" />;
 
   return (
-    <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="relative flex justify-center rounded-3xl border border-white/10 bg-[#111827]/55 p-8 shadow-[0_30px_80px_rgba(0,0,0,.6)] backdrop-blur-2xl">
-      <div className="absolute inset-0 rounded-3xl bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,.15),transparent_50%),radial-gradient(circle_at_50%_100%,rgba(168,85,247,.16),transparent_55%)]" />
-      <div className="relative w-full max-w-[420px]">
-        <div className="rounded-[28px] border border-cyan-300/25 bg-black p-2 shadow-[0_0_60px_rgba(34,211,238,.25),0_0_70px_rgba(168,85,247,.18)]">
-          <div className="relative overflow-hidden rounded-[22px] border border-white/10 bg-black">
-            <div className="aspect-[9/16]">
-              <ReactPlayer
-                ref={undefined}
-                url="https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
-                width="100%"
-                height="100%"
-                playing={isPlaying}
-                controls={false}
-                onProgress={(state: { playedSeconds: number }) => setCurrentTime(state.playedSeconds)}
-                onReady={(player: ReactPlayerHandle) => {
-                  playerRef.current = player;
-                }}
-              />
+    <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[2.25rem] border border-white/15 bg-[#0f172a]/62 p-10 shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_40px_120px_rgba(0,0,0,.58)] backdrop-blur-3xl">
+      <div className="pointer-events-none absolute -left-24 top-10 h-72 w-72 rounded-full bg-cyan-500/25 blur-[110px]" />
+      <div className="pointer-events-none absolute -right-20 bottom-6 h-72 w-72 rounded-full bg-violet-500/28 blur-[120px]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_2%,rgba(34,211,238,.24),transparent_40%),radial-gradient(circle_at_50%_102%,rgba(168,85,247,.2),transparent_45%)]" />
+
+      <div className="relative mx-auto w-full max-w-[840px]">
+        <div className="rounded-[2.2rem] border border-white/20 bg-gradient-to-b from-[#1f2937] to-black p-3 shadow-[0_0_90px_rgba(34,211,238,.24),0_0_120px_rgba(168,85,247,.2)]">
+          <div className="rounded-[1.8rem] border border-white/15 bg-black/95 p-2">
+            <div className="relative overflow-hidden rounded-[1.35rem] border border-white/10 bg-black">
+              <div className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(120deg,rgba(255,255,255,0.14)_0%,transparent_28%,transparent_72%,rgba(255,255,255,0.08)_100%)]" />
+              <div className="aspect-video">
+                <ReactPlayer
+                  ref={undefined}
+                  url="https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
+                  width="100%"
+                  height="100%"
+                  playing={isPlaying}
+                  controls={false}
+                  onProgress={(state: { playedSeconds: number }) => setCurrentTime(state.playedSeconds)}
+                  onReady={(player: ReactPlayerHandle) => {
+                    playerRef.current = player;
+                  }}
+                />
+              </div>
             </div>
           </div>
         </div>
-        <div className="mt-4 flex items-center gap-3">
-          <button onClick={() => setPlaying(!isPlaying)} className="rounded-xl bg-gradient-to-r from-cyan-300 to-violet-400 px-4 py-2 text-sm font-bold text-slate-950">{isPlaying ? 'Pause' : 'Play'}</button>
-          <div className="h-2 flex-1 rounded-full bg-white/10">
+
+        <div className="mt-6 flex items-center gap-4 rounded-2xl border border-white/10 bg-[#0b1224]/75 px-4 py-3 backdrop-blur-xl">
+          <button onClick={() => setPlaying(!isPlaying)} className="rounded-xl bg-gradient-to-r from-cyan-300 to-violet-400 px-6 py-2.5 text-sm font-bold text-slate-950 shadow-[0_0_22px_rgba(34,211,238,.35)]">{isPlaying ? 'Pause' : 'Play'}</button>
+          <div className="h-2.5 flex-1 rounded-full bg-white/10">
             <div className="h-full rounded-full bg-gradient-to-r from-cyan-300 to-violet-400" style={{ width: `${Math.min((currentTime / 60) * 100, 100)}%` }} />
           </div>
-          <span className="text-xs text-slate-300">{currentTime.toFixed(2)}s</span>
+          <span className="text-sm font-medium text-slate-200">{currentTime.toFixed(2)}s</span>
         </div>
       </div>
     </motion.section>
