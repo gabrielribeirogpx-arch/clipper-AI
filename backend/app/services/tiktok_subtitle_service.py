@@ -148,11 +148,14 @@ def create_tiktok_subtitles(video_path, segments, output_path):
     API intentionally unchanged.
     """
     video = VideoFileClip(video_path)
+    video_audio = video.audio
+
     reframer = ReframingService()
     reframed_video = reframer.apply(video)
 
     words = _collect_words(segments)
     cinematic_video = _apply_cinematic_camera_motion(reframed_video, words)
+    cinematic_video = cinematic_video.set_audio(video_audio)
 
     renderer = SubtitleRenderer()
     word_layers = renderer.build_word_layers(
@@ -162,12 +165,14 @@ def create_tiktok_subtitles(video_path, segments, output_path):
     )
 
     final_video = CompositeVideoClip([cinematic_video, *word_layers], size=cinematic_video.size)
-    final_video = final_video.set_audio(video.audio)
+    final_video = final_video.set_audio(video_audio)
     final_video.write_videofile(
         output_path,
         codec="libx264",
-        audio=True,
         audio_codec="aac",
+        audio=True,
+        preset="medium",
+        fps=24,
         temp_audiofile="temp-audio.m4a",
         remove_temp=True,
     )
