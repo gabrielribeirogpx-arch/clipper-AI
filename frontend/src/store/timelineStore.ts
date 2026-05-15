@@ -2,40 +2,97 @@
 
 import { create } from 'zustand';
 
-type ClipBlock = { id: string; label: string; start: number; end: number; text?: string };
+export type TrackType = 'subtitles' | 'broll' | 'hooks' | 'cuts' | 'effects';
+
+export type BlockStyle = {
+  color?: string;
+  animation?: 'none' | 'fade' | 'pop' | 'slide';
+  zoom?: number;
+  emphasis?: 'none' | 'bold' | 'highlight';
+};
+
+export type ClipBlock = {
+  id: string;
+  track: TrackType;
+  label: string;
+  start: number;
+  end: number;
+  text?: string;
+  style?: BlockStyle;
+};
+
+export type RenderJob = {
+  id: string;
+  clipName: string;
+  state: 'queued' | 'rendering' | 'completed' | 'failed';
+  progress: number;
+};
 
 type TimelineState = {
   duration: number;
   currentTime: number;
   isPlaying: boolean;
-  subtitles: ClipBlock[];
-  broll: ClipBlock[];
-  hooks: ClipBlock[];
-  cuts: ClipBlock[];
+  zoom: number;
+  selectedBlockId: string | null;
+  tracks: Record<TrackType, ClipBlock[]>;
+  renderQueue: RenderJob[];
   setCurrentTime: (time: number) => void;
   setPlaying: (playing: boolean) => void;
-  updateBlock: (track: 'subtitles' | 'broll' | 'hooks' | 'cuts', id: string, patch: Partial<ClipBlock>) => void;
+  setZoom: (zoom: number) => void;
+  selectBlock: (id: string | null) => void;
+  updateBlock: (track: TrackType, id: string, patch: Partial<ClipBlock>) => void;
+  moveBlock: (track: TrackType, id: string, start: number, end: number) => void;
 };
 
-const seed = {
+const clampTime = (value: number, duration: number) => Math.min(Math.max(value, 0), duration);
+const SNAP = 0.1;
+const snap = (time: number) => Math.round(time / SNAP) * SNAP;
+
+const tracksSeed: Record<TrackType, ClipBlock[]> = {
+  subtitles: [
+    { id: 'sub-1', track: 'subtitles', label: 'Abertura', text: 'Gancho inicial com promessa', start: 0, end: 4, style: { animation: 'pop', zoom: 1.1 } },
+    { id: 'sub-2', track: 'subtitles', label: 'Valor', text: 'Explica benefício principal', start: 4, end: 10, style: { animation: 'fade', emphasis: 'bold' } }
+  ],
+  broll: [{ id: 'br-1', track: 'broll', label: 'B-roll Produto', start: 3, end: 8 }],
+  hooks: [{ id: 'hk-1', track: 'hooks', label: 'Hook 1', start: 0, end: 2.5 }],
+  cuts: [{ id: 'ct-1', track: 'cuts', label: 'Cut A', start: 8, end: 8.2 }],
+  effects: [{ id: 'fx-1', track: 'effects', label: 'Glow', start: 1.4, end: 2.2 }]
+};
+
+export const useTimelineStore = create<TimelineState>((set, get) => ({
   duration: 60,
   currentTime: 0,
   isPlaying: false,
-  subtitles: [
-    { id: 'sub-1', label: 'Abertura', text: 'Gancho inicial com promessa', start: 0, end: 4 },
-    { id: 'sub-2', label: 'Valor', text: 'Explica benefício principal', start: 4, end: 10 }
+  zoom: 1,
+  selectedBlockId: 'sub-1',
+  tracks: tracksSeed,
+  renderQueue: [
+    { id: 'job-1', clipName: 'Clip 01', state: 'queued', progress: 0 },
+    { id: 'job-2', clipName: 'Clip 02', state: 'rendering', progress: 62 },
+    { id: 'job-3', clipName: 'Clip 03', state: 'completed', progress: 100 },
+    { id: 'job-4', clipName: 'Clip 04', state: 'failed', progress: 18 }
   ],
-  broll: [{ id: 'br-1', label: 'B-roll Produto', start: 3, end: 8 }],
-  hooks: [{ id: 'hk-1', label: 'Hook 1', start: 0, end: 2.5 }],
-  cuts: [{ id: 'ct-1', label: 'Cut A', start: 8, end: 8.2 }]
-};
-
-export const useTimelineStore = create<TimelineState>((set) => ({
-  ...seed,
-  setCurrentTime: (currentTime) => set({ currentTime }),
+  setCurrentTime: (currentTime) => set({ currentTime: clampTime(currentTime, get().duration) }),
   setPlaying: (isPlaying) => set({ isPlaying }),
+  setZoom: (zoom) => set({ zoom: Math.min(3, Math.max(0.5, zoom)) }),
+  selectBlock: (selectedBlockId) => set({ selectedBlockId }),
   updateBlock: (track, id, patch) =>
     set((state) => ({
-      [track]: state[track].map((block) => (block.id === id ? { ...block, ...patch } : block))
+      tracks: {
+        ...state.tracks,
+        [track]: state.tracks[track].map((block) => (block.id === id ? { ...block, ...patch } : block))
+      }
+    })),
+  moveBlock: (track, id, start, end) =>
+    set((state) => ({
+      tracks: {
+        ...state.tracks,
+        [track]: state.tracks[track].map((block) => {
+          if (block.id !== id) return block;
+          const nextStart = snap(clampTime(start, state.duration));
+          const nextEnd = snap(clampTime(Math.max(nextStart + 0.1, end), state.duration));
+          return { ...block, start: nextStart, end: nextEnd };
+        })
+      }
     }))
 }));
