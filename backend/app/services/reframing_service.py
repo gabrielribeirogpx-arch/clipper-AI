@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from moviepy.video.fx.crop import crop
 
-from app.services.face_tracking import analyze_clip_tracking_points
-from app.services.motion_smoothing import FramingWindow, interpolate_window, smooth_windows
-
 
 class ReframingService:
     """Auto-reframe horizontal videos to vertical 9:16 keeping main speaker centered."""
@@ -26,23 +23,15 @@ class ReframingService:
         target_w = int(height * (self.target_ratio[0] / self.target_ratio[1]))
         target_w = max(2, min(width, target_w))
 
-        tracking = analyze_clip_tracking_points(clip, sample_fps=self.sample_fps)
-        windows = [FramingWindow(time=p.time, center_x=p.center_x, center_y=p.center_y) for p in tracking]
-        windows = smooth_windows(windows, alpha=self.smooth_alpha)
+        x1 = max((width - target_w) // 2, 0)
+        x2 = x1 + target_w
 
-        def x1_at(t: float) -> float:
-            win = interpolate_window(windows, float(t))
-            center_x_px = win.center_x * width
-            x1 = center_x_px - target_w / 2
-            return max(0, min(width - target_w, x1))
-
-        safe_top = int(height * 0.02)
-        safe_bottom = int(height * 0.86)
-
-        return crop(
+        reframed = crop(
             clip,
-            x1=x1_at,
-            y1=safe_top,
-            x2=lambda t: x1_at(t) + target_w,
-            y2=safe_bottom,
+            x1=x1,
+            x2=x2,
+            y1=0,
+            y2=height,
         ).resize((1080, 1920))
+
+        return reframed.set_audio(clip.audio)
