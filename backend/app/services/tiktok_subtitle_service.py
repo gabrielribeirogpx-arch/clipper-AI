@@ -143,6 +143,25 @@ def _collect_words(segments: List[Dict]) -> List[Dict]:
     return words
 
 
+def _probe_streams(label: str, media_path: str) -> str:
+    ffprobe_cmd = [
+        "ffprobe",
+        "-hide_banner",
+        "-show_streams",
+        media_path,
+    ]
+    probe_proc = subprocess.run(ffprobe_cmd, capture_output=True, text=True, check=False)
+    combined_output = (probe_proc.stdout or "") + (probe_proc.stderr or "")
+    video_streams = combined_output.count("codec_type=video") + combined_output.count("Video:")
+    audio_streams = combined_output.count("codec_type=audio") + combined_output.count("Audio:")
+    print(f"[PIPELINE][ffprobe][{label}] path={media_path}")
+    print(f"[PIPELINE][ffprobe][{label}] returncode={probe_proc.returncode}")
+    print(f"[PIPELINE][ffprobe][{label}] video_streams_detected={video_streams}")
+    print(f"[PIPELINE][ffprobe][{label}] audio_streams_detected={audio_streams}")
+    print(f"[PIPELINE][ffprobe][{label}] output:\n{combined_output}")
+    return combined_output
+
+
 def create_tiktok_subtitles(video_path, segments, output_path):
     """Render premium subtitles and export video.
 
@@ -165,6 +184,10 @@ def create_tiktok_subtitles(video_path, segments, output_path):
     final_video = CompositeVideoClip([cinematic_video, *word_layers], size=cinematic_video.size)
     silent_output = output_path.replace(".mp4", "_silent.mp4")
     audio_output = output_path.replace(".mp4", ".aac")
+    mux_output = output_path.replace(".mp4", "_mux.mp4")
+
+    print(f"[PIPELINE] original_file={video_path}")
+    _probe_streams("original", video_path)
 
     final_video.write_videofile(
         silent_output,
@@ -179,6 +202,11 @@ def create_tiktok_subtitles(video_path, segments, output_path):
     reframed_video.close()
     base_clip.close()
 
+    print(f"[PIPELINE] raw_clip={video_path}")
+    _probe_streams("raw_clip", video_path)
+    print(f"[PIPELINE] silent_output={silent_output}")
+    _probe_streams("silent_output", silent_output)
+
     extract_audio_cmd = [
         "ffmpeg",
         "-y",
@@ -188,11 +216,18 @@ def create_tiktok_subtitles(video_path, segments, output_path):
         audio_output,
     ]
     extract_audio_proc = subprocess.run(extract_audio_cmd, capture_output=True, text=True, check=False)
+    print(f"[PIPELINE][extract_audio] cmd={' '.join(extract_audio_cmd)}")
+    print(f"[PIPELINE][extract_audio] returncode={extract_audio_proc.returncode}")
+    print(f"[PIPELINE][extract_audio] stderr:\n{extract_audio_proc.stderr}")
     if extract_audio_proc.returncode != 0:
         raise RuntimeError(
             f"Failed to extract source audio with ffmpeg.\n"
             f"STDOUT:\n{extract_audio_proc.stdout}\nSTDERR:\n{extract_audio_proc.stderr}"
         )
+
+    print(f"[PIPELINE] audio_extract={audio_output} exists={os.path.exists(audio_output)}")
+    if os.path.exists(audio_output):
+        _probe_streams("audio_extract", audio_output)
 
     mux_cmd = [
         "ffmpeg",
@@ -204,14 +239,23 @@ def create_tiktok_subtitles(video_path, segments, output_path):
         "-c:v", "copy",
         "-c:a", "aac",
         "-shortest",
-        output_path,
+        mux_output,
     ]
     mux_proc = subprocess.run(mux_cmd, capture_output=True, text=True, check=False)
+    print(f"[PIPELINE][mux] cmd={' '.join(mux_cmd)}")
+    print(f"[PIPELINE][mux] returncode={mux_proc.returncode}")
+    print(f"[PIPELINE][mux] stderr:\n{mux_proc.stderr}")
     if mux_proc.returncode != 0:
         raise RuntimeError(
             f"Failed to mux final video/audio with ffmpeg.\n"
             f"STDOUT:\n{mux_proc.stdout}\nSTDERR:\n{mux_proc.stderr}"
         )
+
+    print(f"[PIPELINE] mux_output={mux_output} exists={os.path.exists(mux_output)}")
+    if os.path.exists(mux_output):
+        _probe_streams("mux_output", mux_output)
+
+    os.replace(mux_output, output_path)
 
     ffprobe_cmd = [
         "ffprobe",
@@ -224,9 +268,5 @@ def create_tiktok_subtitles(video_path, segments, output_path):
         raise RuntimeError(f"Rendered video is missing AAC audio stream: {output_path}")
     if "Video:" not in ffprobe_output:
         raise RuntimeError(f"Rendered video is missing video stream: {output_path}")
-
-    for temp_path in (silent_output, audio_output):
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
 
     return output_path
