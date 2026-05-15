@@ -1,6 +1,7 @@
 'use client';
 
 import { memo, useMemo, useRef } from 'react';
+import { useMounted } from '@/hooks/useMounted';
 import { motion } from 'framer-motion';
 import { pixelsToSeconds, secondsToPixels } from '@/lib/timelineEngine';
 import { TrackType, useTimelineStore } from '@/store/timelineStore';
@@ -17,8 +18,17 @@ export const TimelineTracks = memo(function TimelineTracks() {
   const { duration, currentTime, tracks, setCurrentTime, moveBlock, selectBlock, zoom, setZoom } = useTimelineStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const pxPerSecond = useMemo(() => 36 * zoom, [zoom]);
+  const mounted = useMounted();
 
   const cursorLeft = secondsToPixels(currentTime, pxPerSecond);
+
+  if (!mounted) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl">
+        <div className="h-56 animate-pulse rounded-xl bg-slate-900/80" />
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl">
@@ -43,6 +53,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
               <div className="relative h-12 rounded bg-slate-900/90">
                 {tracks[name].map((block) => (
                   <motion.div
+                    initial={false}
                     key={block.id}
                     drag="x"
                     dragMomentum={false}
