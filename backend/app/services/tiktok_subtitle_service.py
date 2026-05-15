@@ -6,6 +6,8 @@ os.environ["IMAGEMAGICK_BINARY"] = r"C:\Program Files\ImageMagick-7.1.2-Q16-HDRI
 
 from moviepy.editor import CompositeVideoClip, TextClip, VideoFileClip
 
+from app.services.reframing_service import ReframingService
+
 
 # Keywords that should receive stronger emphasis and motion.
 EMPHASIS_KEYWORDS = {
@@ -87,6 +89,10 @@ def create_tiktok_subtitles(video_path, segments, output_path):
     API intentionally kept unchanged for backward compatibility.
     """
     video = VideoFileClip(video_path)
+
+    # Auto cinematic reframing for horizontal footage (OpusClip/CapCut style).
+    reframer = ReframingService()
+    video = reframer.apply(video)
 
     video_w = int(video.w)
     video_h = int(video.h)
