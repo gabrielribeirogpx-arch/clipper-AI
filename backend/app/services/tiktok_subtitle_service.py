@@ -164,7 +164,7 @@ def create_tiktok_subtitles(video_path, segments, output_path):
 
     final_video = CompositeVideoClip([cinematic_video, *word_layers], size=cinematic_video.size)
     silent_output = output_path.replace(".mp4", "_silent.mp4")
-    extracted_audio = output_path.replace(".mp4", "_source_audio.aac")
+    audio_output = output_path.replace(".mp4", ".aac")
 
     final_video.write_videofile(
         silent_output,
@@ -184,8 +184,8 @@ def create_tiktok_subtitles(video_path, segments, output_path):
         "-y",
         "-i", video_path,
         "-vn",
-        "-c:a", "aac",
-        extracted_audio,
+        "-acodec", "copy",
+        audio_output,
     ]
     extract_audio_proc = subprocess.run(extract_audio_cmd, capture_output=True, text=True, check=False)
     if extract_audio_proc.returncode != 0:
@@ -198,7 +198,7 @@ def create_tiktok_subtitles(video_path, segments, output_path):
         "ffmpeg",
         "-y",
         "-i", silent_output,
-        "-i", extracted_audio,
+        "-i", audio_output,
         "-map", "0:v:0",
         "-map", "1:a:0",
         "-c:v", "copy",
@@ -215,19 +215,17 @@ def create_tiktok_subtitles(video_path, segments, output_path):
 
     ffprobe_cmd = [
         "ffprobe",
-        "-v", "error",
-        "-show_streams",
-        "-i", output_path,
+        output_path,
     ]
     ffprobe_proc = subprocess.run(ffprobe_cmd, capture_output=True, text=True, check=False)
     ffprobe_output = (ffprobe_proc.stdout or "") + (ffprobe_proc.stderr or "")
     print(f"[ffprobe] {output_path}\n{ffprobe_output}")
-    if "codec_type=audio" not in ffprobe_output or "codec_name=aac" not in ffprobe_output:
+    if "Audio: aac" not in ffprobe_output:
         raise RuntimeError(f"Rendered video is missing AAC audio stream: {output_path}")
-    if "codec_type=video" not in ffprobe_output:
+    if "Video:" not in ffprobe_output:
         raise RuntimeError(f"Rendered video is missing video stream: {output_path}")
 
-    for temp_path in (silent_output, extracted_audio):
+    for temp_path in (silent_output, audio_output):
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
