@@ -46,7 +46,9 @@ export function VideoPreview() {
                   width="100%"
                   height="100%"
                   playing={isPlaying}
-                  controls={false}
+                  controls
+                  playsinline
+                  config={{ file: { attributes: { playsInline: true, muted: false, controls: true } } }}
                   onProgress={(state: { playedSeconds: number }) => setCurrentTime(state.playedSeconds)}
                   onReady={(player: ReactPlayerHandle) => {
                     playerRef.current = player;
