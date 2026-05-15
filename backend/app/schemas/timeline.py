@@ -11,10 +11,12 @@ class TimelineBlock(BaseModel):
 
 
 class RenderStateResponse(BaseModel):
+    videoUrl: Optional[str] = None
     duration: float
-    current_time: float
     clips: List[TimelineBlock]
-    reframing: List[TimelineBlock]
+    subtitles: List[TimelineBlock]
+    hooks: List[TimelineBlock]
+    broll: List[TimelineBlock]
     cuts: List[TimelineBlock]
 
 
