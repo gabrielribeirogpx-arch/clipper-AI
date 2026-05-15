@@ -1,19 +1,30 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useRef } from 'react';
 import { shouldSyncProgress } from '@/lib/playbackEngine';
 import { useMounted } from '@/hooks/useMounted';
 import { useTimelineStore } from '@/store/timelineStore';
 
-const ReactPlayer = dynamic(() => import('react-player'), {
+type ReactPlayerHandle = {
+  getCurrentTime?: () => number;
+  seekTo?: (amount: number, type?: 'seconds' | 'fraction') => void;
+};
+
+const ReactPlayerBase = dynamic(() => import('react-player'), {
   ssr: false,
   loading: () => <div className="h-full w-full animate-pulse bg-slate-900" />
 });
 
+const ReactPlayer = forwardRef<ReactPlayerHandle, Record<string, unknown>>((props, ref) => (
+  <ReactPlayerBase {...props} ref={ref} />
+));
+
+ReactPlayer.displayName = 'VideoPreviewReactPlayer';
+
 export function VideoPreview() {
   const { currentTime, setCurrentTime, isPlaying, setPlaying } = useTimelineStore();
-  const playerRef = useRef<any>(null);
+  const playerRef = useRef<ReactPlayerHandle | null>(null);
   const mounted = useMounted();
 
   useEffect(() => {
@@ -33,7 +44,7 @@ export function VideoPreview() {
             height="100%"
             playing={isPlaying}
             controls={false}
-            onProgress={(state) => setCurrentTime(state.playedSeconds)}
+            onProgress={(state: { playedSeconds: number }) => setCurrentTime(state.playedSeconds)}
           />
         ) : (
           <div className="h-full w-full animate-pulse bg-slate-900" />
