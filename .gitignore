@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+
+app/uploads/
+app/clips/
+
+*.mp4
+*.wav
+*.aac
+
+.env
