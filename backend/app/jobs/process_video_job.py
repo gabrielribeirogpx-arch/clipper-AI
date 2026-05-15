@@ -12,7 +12,7 @@ def process_video(video_path):
 
     generated_clips = []
 
-    print("\nHOOKS ENCONTRADOS:\n")
+    print("\nHOOKS RANKEADOS:\n")
 
     for index, hook in enumerate(hooks):
 
@@ -35,7 +35,10 @@ def process_video(video_path):
             "clip": clip_path,
             "start": hook["start"],
             "end": hook["end"],
-            "text": hook["text"]
+            "text": hook["text"],
+            "viral_score": hook["viral_score"],
+            "emotional_score": hook["emotional_score"],
+            "retention_score": hook["retention_score"],
         })
 
     full_text = " ".join(
