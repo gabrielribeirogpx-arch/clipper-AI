@@ -162,7 +162,15 @@ def create_tiktok_subtitles(video_path, segments, output_path):
     )
 
     final_video = CompositeVideoClip([cinematic_video, *word_layers], size=cinematic_video.size)
-    final_video.write_videofile(output_path, codec="libx264", audio_codec="aac")
+    final_video = final_video.set_audio(video.audio)
+    final_video.write_videofile(
+        output_path,
+        codec="libx264",
+        audio=True,
+        audio_codec="aac",
+        temp_audiofile="temp-audio.m4a",
+        remove_temp=True,
+    )
 
     final_video.close()
     cinematic_video.close()
