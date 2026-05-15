@@ -155,9 +155,6 @@ def create_tiktok_subtitles(video_path, segments, output_path):
 
     words = _collect_words(segments)
     cinematic_video = _apply_cinematic_camera_motion(reframed_video, words)
-    if base_clip.audio:
-        cinematic_video = cinematic_video.set_audio(base_clip.audio)
-
     renderer = SubtitleRenderer()
     word_layers = renderer.build_word_layers(
         words=words,
@@ -166,19 +163,55 @@ def create_tiktok_subtitles(video_path, segments, output_path):
     )
 
     final_video = CompositeVideoClip([cinematic_video, *word_layers], size=cinematic_video.size)
-    final_video.audio = base_clip.audio
-    if base_clip.audio:
-        final_video = final_video.set_audio(base_clip.audio)
+    silent_output = output_path.replace(".mp4", "_silent.mp4")
+    extracted_audio = output_path.replace(".mp4", "_source_audio.aac")
 
     final_video.write_videofile(
-        output_path,
+        silent_output,
         codec="libx264",
-        audio_codec="aac",
-        temp_audiofile="temp-audio.m4a",
-        remove_temp=True,
+        audio=False,
         fps=24,
         preset="medium",
     )
+
+    final_video.close()
+    cinematic_video.close()
+    reframed_video.close()
+    base_clip.close()
+
+    extract_audio_cmd = [
+        "ffmpeg",
+        "-y",
+        "-i", video_path,
+        "-vn",
+        "-c:a", "aac",
+        extracted_audio,
+    ]
+    extract_audio_proc = subprocess.run(extract_audio_cmd, capture_output=True, text=True, check=False)
+    if extract_audio_proc.returncode != 0:
+        raise RuntimeError(
+            f"Failed to extract source audio with ffmpeg.\n"
+            f"STDOUT:\n{extract_audio_proc.stdout}\nSTDERR:\n{extract_audio_proc.stderr}"
+        )
+
+    mux_cmd = [
+        "ffmpeg",
+        "-y",
+        "-i", silent_output,
+        "-i", extracted_audio,
+        "-map", "0:v:0",
+        "-map", "1:a:0",
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-shortest",
+        output_path,
+    ]
+    mux_proc = subprocess.run(mux_cmd, capture_output=True, text=True, check=False)
+    if mux_proc.returncode != 0:
+        raise RuntimeError(
+            f"Failed to mux final video/audio with ffmpeg.\n"
+            f"STDOUT:\n{mux_proc.stdout}\nSTDERR:\n{mux_proc.stderr}"
+        )
 
     ffprobe_cmd = [
         "ffprobe",
@@ -191,11 +224,11 @@ def create_tiktok_subtitles(video_path, segments, output_path):
     print(f"[ffprobe] {output_path}\n{ffprobe_output}")
     if "codec_type=audio" not in ffprobe_output or "codec_name=aac" not in ffprobe_output:
         raise RuntimeError(f"Rendered video is missing AAC audio stream: {output_path}")
+    if "codec_type=video" not in ffprobe_output:
+        raise RuntimeError(f"Rendered video is missing video stream: {output_path}")
 
-    final_video.close()
-    cinematic_video.close()
-    reframed_video.close()
-    if reframed_video is not base_clip:
-        base_clip.close()
+    for temp_path in (silent_output, extracted_audio):
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
     return output_path
