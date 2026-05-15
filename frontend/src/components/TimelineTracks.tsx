@@ -36,6 +36,11 @@ export const TimelineTracks = memo(function TimelineTracks() {
       <div
         ref={containerRef}
         className="relative overflow-x-auto rounded-[1.5rem] border border-white/12 bg-[#060b15] p-5 shadow-[inset_0_2px_26px_rgba(0,0,0,.48)]"
+        onClick={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const timelineX = e.clientX - rect.left + e.currentTarget.scrollLeft;
+          setCurrentTime(pixelsToSeconds(timelineX, pxPerSecond));
+        }}
         onMouseMove={(e) => {
           if (e.buttons !== 1) return;
           const rect = e.currentTarget.getBoundingClientRect();
@@ -51,15 +56,15 @@ export const TimelineTracks = memo(function TimelineTracks() {
               <div className="relative h-20 rounded-xl border border-white/12 bg-slate-900/90 shadow-[inset_0_2px_18px_rgba(0,0,0,.45)]">
                 <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,rgba(255,255,255,.03)_0%,transparent_20%,transparent_80%,rgba(255,255,255,0.08)_100%)]" />
                 <div className="pointer-events-none absolute inset-0 opacity-35 [background-image:linear-gradient(to_right,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:14px_100%]" />
-                {tracks[name].map((block) => (
+                {tracks[name].slice(0, 300).map((block) => (
                   <motion.div
                     key={block.id}
                     drag="x"
                     dragMomentum={false}
                     whileHover={{ scale: 1.02, y: -3 }}
                     onClick={() => {
-                      selectBlock(block.id);
                       setCurrentTime(block.start);
+                      selectBlock(block.id);
                     }}
                     onDragEnd={(_, info) => {
                       const deltaSec = pixelsToSeconds(info.offset.x, pxPerSecond);

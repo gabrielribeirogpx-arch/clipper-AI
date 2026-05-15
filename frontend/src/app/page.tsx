@@ -6,6 +6,7 @@ import { TimelineTracks } from '@/components/TimelineTracks';
 import { VideoPreview } from '@/components/VideoPreview';
 import { useTimelineStore } from '@/store/timelineStore';
 import { useMounted } from '@/hooks/useMounted';
+import { useEffect } from 'react';
 
 const navItems = [
   { label: 'Projects', icon: '⬢', active: false },
@@ -41,6 +42,12 @@ function RenderQueuePanel() {
 
 export default function Home() {
   const mounted = useMounted();
+  const hydrateFromBackend = useTimelineStore((state) => state.hydrateFromBackend);
+
+  useEffect(() => {
+    void hydrateFromBackend();
+  }, [hydrateFromBackend]);
+
   if (!mounted) return <main className="min-h-screen bg-[#05070f]" />;
 
   return (

@@ -29,6 +29,7 @@ export type RenderJob = {
 };
 
 type TimelineState = {
+  videoUrl: string | null;
   duration: number;
   currentTime: number;
   isPlaying: boolean;
@@ -36,6 +37,7 @@ type TimelineState = {
   selectedBlockId: string | null;
   tracks: Record<TrackType, ClipBlock[]>;
   renderQueue: RenderJob[];
+  hydrateFromBackend: () => Promise<void>;
   setCurrentTime: (time: number) => void;
   setPlaying: (playing: boolean) => void;
   setZoom: (zoom: number) => void;
@@ -60,12 +62,13 @@ const tracksSeed: Record<TrackType, ClipBlock[]> = {
 };
 
 export const useTimelineStore = create<TimelineState>((set, get) => ({
+  videoUrl: null,
   duration: 60,
   currentTime: 0,
   isPlaying: false,
   zoom: 1,
   selectedBlockId: 'sub-1',
-  tracks: tracksSeed,
+  tracks: { ...tracksSeed, effects: [] },
   renderQueue: [
     { id: 'job-1', clipName: 'Clip 01', state: 'queued', progress: 0 },
     { id: 'job-2', clipName: 'Clip 02', state: 'rendering', progress: 62 },
@@ -84,15 +87,44 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
       }
     })),
   moveBlock: (track, id, start, end) =>
-    set((state) => ({
+    set((state) => {
+      const moved = state.tracks[track].map((block) => {
+        if (block.id !== id) return block;
+        const nextStart = snap(clampTime(start, state.duration));
+        const nextEnd = snap(clampTime(Math.max(nextStart + 0.1, end), state.duration));
+        return { ...block, start: nextStart, end: nextEnd };
+      });
+
+      const nextTracks = { ...state.tracks, [track]: moved };
+      const payload = {
+        subtitles: nextTracks.subtitles,
+        broll: nextTracks.broll,
+        hooks: nextTracks.hooks,
+        cuts: nextTracks.cuts,
+      };
+      void fetch('http://localhost:8000/timeline/update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      return { tracks: nextTracks };
+    }),
+  hydrateFromBackend: async () => {
+    const response = await fetch('http://localhost:8000/timeline/render-state');
+    const data = await response.json();
+    const mapTrack = (items: ClipBlock[] = [], track: TrackType) =>
+      items.map((item) => ({ ...item, track }));
+    set({
+      videoUrl: data.videoUrl ? `http://localhost:8000${data.videoUrl}` : null,
+      duration: data.duration ?? 0,
       tracks: {
-        ...state.tracks,
-        [track]: state.tracks[track].map((block) => {
-          if (block.id !== id) return block;
-          const nextStart = snap(clampTime(start, state.duration));
-          const nextEnd = snap(clampTime(Math.max(nextStart + 0.1, end), state.duration));
-          return { ...block, start: nextStart, end: nextEnd };
-        })
+        subtitles: mapTrack(data.subtitles, 'subtitles'),
+        broll: mapTrack(data.broll, 'broll'),
+        hooks: mapTrack(data.hooks, 'hooks'),
+        cuts: mapTrack(data.cuts, 'cuts'),
+        effects: [],
       }
-    }))
+    });
+  }
 }));

@@ -15,7 +15,7 @@ type ReactPlayerHandle = {
 const ReactPlayer = dynamic(() => import('react-player'), { ssr: false, loading: () => <div className="h-full w-full animate-pulse bg-slate-900" /> });
 
 export function VideoPreview() {
-  const { currentTime, setCurrentTime, isPlaying, setPlaying } = useTimelineStore();
+  const { currentTime, setCurrentTime, isPlaying, setPlaying, duration, videoUrl } = useTimelineStore();
   const mounted = useMounted();
   const playerRef = useRef<ReactPlayerHandle | null>(null);
 
@@ -42,7 +42,7 @@ export function VideoPreview() {
               <div className="aspect-video">
                 <ReactPlayer
                   ref={undefined}
-                  url="https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
+                  url={videoUrl ?? undefined}
                   width="100%"
                   height="100%"
                   playing={isPlaying}
@@ -51,6 +51,7 @@ export function VideoPreview() {
                   onReady={(player: ReactPlayerHandle) => {
                     playerRef.current = player;
                   }}
+                  onDuration={(value: number) => useTimelineStore.setState({ duration: value })}
                 />
               </div>
             </div>
@@ -60,7 +61,7 @@ export function VideoPreview() {
         <div className="mt-7 flex items-center gap-5 rounded-[1.3rem] border border-white/10 bg-[#0a1122]/76 px-5 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,.1)] backdrop-blur-xl">
           <button onClick={() => setPlaying(!isPlaying)} className="rounded-xl bg-gradient-to-r from-cyan-300 to-violet-400 px-7 py-3 text-sm font-bold text-slate-950 shadow-[0_0_28px_rgba(34,211,238,.4)]">{isPlaying ? 'Pause' : 'Play'}</button>
           <div className="h-3 flex-1 rounded-full bg-white/10 p-[2px]">
-            <div className="h-full rounded-full bg-gradient-to-r from-cyan-300 to-violet-400 shadow-[0_0_24px_rgba(34,211,238,.45)]" style={{ width: `${Math.min((currentTime / 60) * 100, 100)}%` }} />
+            <div className="h-full rounded-full bg-gradient-to-r from-cyan-300 to-violet-400 shadow-[0_0_24px_rgba(34,211,238,.45)]" style={{ width: `${Math.min((currentTime / Math.max(duration, 0.1)) * 100, 100)}%` }} />
           </div>
           <span className="text-base font-medium text-slate-100">{currentTime.toFixed(2)}s</span>
         </div>
