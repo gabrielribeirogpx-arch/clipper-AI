@@ -33,7 +33,8 @@ def process_video(video_path):
         subtitled_clip_path = create_tiktok_subtitles(
             raw_clip_path,
             transcription["segments"],
-            f"app/clips/clip_{index}.mp4"
+            f"app/clips/clip_{index}.mp4",
+            speaker_segments=transcription.get("speaker_segments", []),
         )
 
         segment_timeline = broll_engine.build_timeline([
