@@ -8,9 +8,10 @@ CLIPS_DIR = "app/clips"
 os.makedirs(CLIPS_DIR, exist_ok=True)
 
 
-def cut_clip(input_file, start, end, output_name):
+def cut_clip(input_file, start, end, output_name, output_dir: str = CLIPS_DIR):
 
-    output_path = f"{CLIPS_DIR}/{output_name}"
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = f"{output_dir}/{output_name}"
 
     command = [
         "ffmpeg",
@@ -37,12 +38,13 @@ def cut_clip(input_file, start, end, output_name):
     return output_path
 
 
-def apply_broll_overlay(clip_path: str, timeline: List[Dict], output_name: str) -> str:
+def apply_broll_overlay(clip_path: str, timeline: List[Dict], output_name: str, output_dir: str = CLIPS_DIR) -> str:
     """Apply contextual b-roll overlays with smooth fade transitions."""
     if not timeline:
         return clip_path
 
-    output_path = f"{CLIPS_DIR}/{output_name}"
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = f"{output_dir}/{output_name}"
 
     command = ["ffmpeg", "-y", "-i", clip_path]
     valid_items = []

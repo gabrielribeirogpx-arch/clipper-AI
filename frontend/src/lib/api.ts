@@ -9,6 +9,8 @@ export type UploadResponse = {
 
 export type YouTubeIngestRequest = {
   youtube_url: string;
+  analysis_name?: string;
+  output_folder?: string;
   start_time?: string;
   end_time?: string;
   min_clip_length?: number;
@@ -19,11 +21,13 @@ const API_BASE = 'http://localhost:8000';
 
 export function uploadVideo(
   file: File,
+  analysisName?: string,
   onProgress?: (progress: number) => void,
 ): Promise<UploadResponse> {
   return new Promise((resolve, reject) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (analysisName?.trim()) formData.append('analysis_name', analysisName.trim());
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${API_BASE}/upload`);

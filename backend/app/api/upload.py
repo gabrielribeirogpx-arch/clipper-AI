@@ -1,4 +1,8 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from datetime import datetime
+from pathlib import Path
+import re
+
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from app.jobs.process_video_job import process_video
 from app.data.timeline_state import set_timeline_state
 from app.schemas.upload import YoutubeIngestRequest
@@ -10,11 +14,40 @@ import shutil
 router = APIRouter()
 
 UPLOAD_DIR = "app/uploads"
+CLIPS_DIR = "app/clips"
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+
+def _sanitize_analysis_folder(raw_name: str | None) -> str | None:
+    if not raw_name:
+        return None
+    normalized = raw_name.strip().replace(" ", "_")
+    normalized = normalized.replace("/", "_").replace("\\", "_")
+    normalized = re.sub(r"[^a-zA-Z0-9_-]", "", normalized)
+    normalized = normalized.strip("._-")
+    if not normalized or normalized in {".", ".."}:
+        return None
+    return normalized
+
+
+def _resolve_analysis_folder(analysis_name: str | None, output_folder: str | None) -> str:
+    folder = _sanitize_analysis_folder(output_folder) or _sanitize_analysis_folder(analysis_name)
+    if folder:
+        return folder
+    return datetime.utcnow().strftime("analysis_%Y%m%d_%H%M%S")
+
+
+def _to_media_url(path: str) -> str:
+    rel_path = Path(path).as_posix().replace("app/clips/", "", 1)
+    return f"/media/{rel_path}"
+
 @router.post("/upload")
-async def upload_video(file: UploadFile = File(...)):
+async def upload_video(
+    file: UploadFile = File(...),
+    analysis_name: str | None = Form(default=None),
+    output_folder: str | None = Form(default=None),
+):
 
     file_id = str(uuid.uuid4())
 
@@ -23,7 +56,12 @@ async def upload_video(file: UploadFile = File(...)):
     with open(filepath, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    transcription = process_video(filepath)
+    analysis_folder = _resolve_analysis_folder(analysis_name, output_folder)
+    output_dir = os.path.join(CLIPS_DIR, analysis_folder)
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"[ANALYSIS FOLDER CREATED] {output_dir}")
+
+    transcription = process_video(filepath, output_dir=output_dir)
     return _build_upload_response(transcription, file_id, filepath)
 
 
@@ -39,8 +77,14 @@ async def ingest_youtube(payload: YoutubeIngestRequest):
     except YouTubeDownloadError as error:
         raise HTTPException(status_code=400, detail={"error": error.message}) from error
 
+    analysis_folder = _resolve_analysis_folder(payload.analysis_name, payload.output_folder)
+    output_dir = os.path.join(CLIPS_DIR, analysis_folder)
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"[ANALYSIS FOLDER CREATED] {output_dir}")
+
     transcription = process_video(
         filepath,
+        output_dir=output_dir,
         min_clip_length=payload.min_clip_length,
         max_clip_length=payload.max_clip_length,
         max_clips=payload.max_clips,
@@ -60,9 +104,9 @@ def _build_upload_response(transcription, file_id: str, filepath: str):
 
     set_timeline_state({
         "renderMode": "preview",
-        "videoUrl": f"/media/{os.path.basename(first_preview_clip)}",
-        "previewVideoUrl": f"/media/{os.path.basename(first_preview_clip)}",
-        "exportVideoUrl": f"/media/{os.path.basename(first_export_clip)}",
+        "videoUrl": _to_media_url(first_preview_clip),
+        "previewVideoUrl": _to_media_url(first_preview_clip),
+        "exportVideoUrl": _to_media_url(first_export_clip),
         "duration": duration,
         "clips": [
             {
@@ -71,9 +115,9 @@ def _build_upload_response(transcription, file_id: str, filepath: str):
                 "start": hook["start"],
                 "end": hook["end"],
                 "duration": round(hook["end"] - hook["start"], 2),
-                "clip_path": f"/media/{os.path.basename(hook['clip_path'])}",
-                "preview_video": f"/media/{os.path.basename(hook['preview_clip'])}",
-                "export_video": f"/media/{os.path.basename(hook['export_clip'])}",
+                "clip_path": _to_media_url(hook["clip_path"]),
+                "preview_video": _to_media_url(hook["preview_clip"]),
+                "export_video": _to_media_url(hook["export_clip"]),
                 "viral_score": hook["viral_score"],
                 "hook_score": hook.get("hook_score", hook["viral_score"]),
                 "retention_score": hook["retention_score"],
@@ -105,15 +149,15 @@ def _build_upload_response(transcription, file_id: str, filepath: str):
 
     return {
         "success": True,
-        "video_url": f"/media/{os.path.basename(first_preview_clip)}",
-        "preview_video_url": f"/media/{os.path.basename(first_preview_clip)}",
-        "export_video_url": f"/media/{os.path.basename(first_export_clip)}",
+        "video_url": _to_media_url(first_preview_clip),
+        "preview_video_url": _to_media_url(first_preview_clip),
+        "export_video_url": _to_media_url(first_export_clip),
         "timeline": transcription["timeline"],
         "project_id": file_id,
         "duration": duration,
         "clips": [
             {
-                "clip_path": f"/media/{os.path.basename(hook['clip_path'])}",
+                "clip_path": _to_media_url(hook["clip_path"]),
                 "viral_score": hook["viral_score"],
                 "hook_score": hook.get("hook_score", hook["viral_score"]),
                 "title_suggestion": hook.get("title_suggestion", ""),

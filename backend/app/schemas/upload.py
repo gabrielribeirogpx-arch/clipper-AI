@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field
 
 class YoutubeIngestRequest(BaseModel):
     youtube_url: str
+    analysis_name: str | None = None
+    output_folder: str | None = None
     start_time: str | None = None
     end_time: str | None = None
     min_clip_length: int = Field(default=30, ge=10, le=300)
