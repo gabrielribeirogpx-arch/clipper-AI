@@ -13,7 +13,6 @@ def process_video(video_path):
     broll_engine = BRollEngine()
 
     generated_clips = []
-    timeline_subtitles = []
     timeline_broll = []
     timeline_cuts = []
 
@@ -30,7 +29,7 @@ def process_video(video_path):
             f"raw_clip_{index}.mp4"
         )
 
-        subtitled_clip_path = create_tiktok_subtitles(
+        processed_clip_path = create_tiktok_subtitles(
             raw_clip_path,
             transcription["segments"],
             f"app/clips/clip_{index}.mp4",
@@ -43,21 +42,17 @@ def process_video(video_path):
         ])
 
         preview_clip_path = apply_broll_overlay(
-            subtitled_clip_path,
+            processed_clip_path,
             segment_timeline,
             f"clip_{index}_preview.mp4"
         )
 
         export_clip_path = apply_broll_overlay(
-            subtitled_clip_path,
+            processed_clip_path,
             segment_timeline,
             f"clip_{index}_export.mp4"
         )
 
-        hook_subtitles = [
-            segment for segment in transcription["segments"]
-            if hook["start"] <= segment.get("start", 0) <= hook["end"]
-        ]
 
         generated_clips.append({
             "preview_clip": preview_clip_path,
@@ -78,15 +73,6 @@ def process_video(video_path):
             "end": hook["start"] + 0.1,
         })
 
-        for subtitle_index, segment in enumerate(hook_subtitles):
-            timeline_subtitles.append({
-                "id": f"sub-{index}-{subtitle_index}",
-                "label": "Subtitle",
-                "start": float(segment.get("start", 0)),
-                "end": float(segment.get("end", segment.get("start", 0) + 0.5)),
-                "text": segment.get("text", "").strip(),
-            })
-
         for broll_index, broll_segment in enumerate(segment_timeline):
             timeline_broll.append({
                 "id": f"br-{index}-{broll_index}",
@@ -103,7 +89,6 @@ def process_video(video_path):
         "text": full_text,
         "hooks": generated_clips,
         "timeline": {
-            "subtitles": timeline_subtitles,
             "broll": timeline_broll,
             "cuts": timeline_cuts,
         },

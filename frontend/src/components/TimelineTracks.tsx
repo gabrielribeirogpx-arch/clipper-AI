@@ -7,8 +7,6 @@ import { TimelineBlock, TrackType, useTimelineStore } from '@/store/timelineStor
 import { pixelsToSeconds, secondsToPixels } from '@/lib/timelineEngine';
 
 const trackStyles: Record<TrackType, string> = {
-  subtitles:
-    'from-cyan-500/88 via-sky-400/82 to-cyan-300/72 border-cyan-200/55 shadow-[0_12px_30px_rgba(14,165,233,.34)]',
   broll:
     'from-violet-500/88 via-purple-400/82 to-fuchsia-300/74 border-violet-200/55 shadow-[0_12px_30px_rgba(168,85,247,.34)]',
   hooks:
@@ -20,7 +18,6 @@ const trackStyles: Record<TrackType, string> = {
 };
 
 const TRACK_HEIGHT = 88;
-const SUBTITLE_MIN_SECONDS = 1.2;
 
 const formatTime = (seconds: number) => {
   const total = Math.max(0, Math.floor(seconds));
@@ -35,25 +32,6 @@ const getRulerStep = (zoom: number) => {
   if (zoom >= 1) return 2;
   if (zoom >= 0.7) return 4;
   return 8;
-};
-
-const layoutSubtitleLanes = (blocks: TimelineBlock[]) => {
-  const lanes: number[] = [];
-  const mapped = blocks
-    .slice(0, 300)
-    .sort((a, b) => a.start - b.start)
-    .map((block) => {
-      let lane = lanes.findIndex((end) => block.start >= end + 0.12);
-      if (lane === -1) {
-        lanes.push(block.end);
-        lane = lanes.length - 1;
-      } else {
-        lanes[lane] = block.end;
-      }
-      return { block, lane };
-    });
-
-  return { mapped, laneCount: Math.max(1, lanes.length) };
 };
 
 export const TimelineTracks = memo(function TimelineTracks() {
@@ -76,7 +54,6 @@ export const TimelineTracks = memo(function TimelineTracks() {
     });
   }, [duration, pxPerSecond, rulerStep]);
 
-  const subtitleLayout = useMemo(() => layoutSubtitleLanes(tracks.subtitles), [tracks.subtitles]);
 
   if (!mounted) return <div className="h-[460px] rounded-[2rem] border border-white/10 bg-white/5" />;
 
@@ -122,9 +99,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
 
           <div className="grid gap-3">
             {(Object.keys(tracks) as TrackType[]).map((name) => {
-              const subtitleMode = name === 'subtitles';
-              const laneHeight = subtitleMode ? Math.max(1, subtitleLayout.laneCount) * 30 : TRACK_HEIGHT;
-              const rowHeight = Math.max(TRACK_HEIGHT, laneHeight + 16);
+              const rowHeight = TRACK_HEIGHT + 16;
 
               return (
                 <div key={name} className="grid grid-cols-[160px_1fr] gap-3">
@@ -134,31 +109,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
                   <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#0b1324]/95" style={{ height: rowHeight }}>
                     <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,rgba(255,255,255,.035),transparent_30%,transparent_70%,rgba(255,255,255,.06))]" />
                     <div className="pointer-events-none absolute inset-0 opacity-30 [background-image:linear-gradient(to_right,rgba(148,163,184,.16)_1px,transparent_1px)]" style={{ backgroundSize: `${pxPerSecond / 4}px 100%` }} />
-                    {subtitleMode
-                      ? subtitleLayout.mapped.map(({ block, lane }) => {
-                          const width = Math.max(secondsToPixels(block.end - block.start, pxPerSecond), secondsToPixels(SUBTITLE_MIN_SECONDS, pxPerSecond));
-                          return (
-                            <motion.div
-                              key={block.id}
-                              drag="x"
-                              dragMomentum={false}
-                              whileHover={{ y: -2, scale: 1.01 }}
-                              onClick={() => {
-                                setCurrentTime(block.start);
-                                selectBlock(block.id);
-                              }}
-                              onDragEnd={(_, info) => {
-                                const deltaSec = pixelsToSeconds(info.offset.x, pxPerSecond);
-                                moveBlock(name, block.id, block.start + deltaSec, block.end + deltaSec);
-                              }}
-                              className={`absolute flex h-7 items-center rounded-lg border bg-gradient-to-r px-3 text-xs font-semibold text-white ${trackStyles[name]}`}
-                              style={{ left: secondsToPixels(block.start, pxPerSecond), top: 8 + lane * 30, width }}
-                            >
-                              <span className="truncate">{block.label}</span>
-                            </motion.div>
-                          );
-                        })
-                      : tracks[name].slice(0, 300).map((block) => (
+                    {tracks[name].slice(0, 300).map((block) => (
                           <motion.div
                             key={block.id}
                             drag="x"

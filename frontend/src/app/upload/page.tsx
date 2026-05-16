@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { uploadVideo } from '@/lib/api';
 import { useUploadStore } from '@/store/uploadStore';
 
-const PROCESS_STAGES = ['Analyzing speech...', 'Detecting viral hooks...', 'Creating cinematic cuts...', 'Generating subtitles...', 'Applying reframing...', 'Creating AI timeline...'];
+const PROCESS_STAGES = ['Analyzing speech...', 'Detecting viral hooks...', 'Creating cinematic cuts...', 'Applying reframing...', 'Creating AI timeline...'];
 const MAX_SIZE = 1024 * 1024 * 1024;
 
 export default function UploadPage() {

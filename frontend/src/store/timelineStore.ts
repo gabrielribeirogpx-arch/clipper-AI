@@ -3,17 +3,13 @@
 import { create } from 'zustand';
 import { getRenderState } from '@/lib/api';
 
-export type TrackType = 'subtitles' | 'broll' | 'hooks' | 'cuts' | 'effects';
-export type CaptionPreset = 'cinematic' | 'tiktok' | 'hormozi' | 'minimal' | 'neon';
-export type CaptionPosition = 'top' | 'middle' | 'bottom';
+export type TrackType = 'broll' | 'hooks' | 'cuts' | 'effects';
 
 export type BlockStyle = {
   color?: string;
   animation?: 'none' | 'fade' | 'pop' | 'smooth';
   zoom?: number;
   emphasis?: 'none' | 'bold' | 'highlight';
-  captionPreset?: CaptionPreset;
-  captionPosition?: CaptionPosition;
 };
 
 export type ClipBlock = {
@@ -62,10 +58,6 @@ const SNAP = 0.1;
 const snap = (time: number) => Math.round(time / SNAP) * SNAP;
 
 const tracksSeed: Record<TrackType, ClipBlock[]> = {
-  subtitles: [
-    { id: 'sub-1', track: 'subtitles', label: 'Abertura', text: 'Gancho inicial com promessa', start: 0, end: 4, style: { animation: 'pop', zoom: 1.1, captionPreset: 'hormozi', captionPosition: 'bottom' } },
-    { id: 'sub-2', track: 'subtitles', label: 'Valor', text: 'Explica benefício principal', start: 4, end: 10, style: { animation: 'fade', emphasis: 'bold', captionPreset: 'cinematic', captionPosition: 'middle' } }
-  ],
   broll: [{ id: 'br-1', track: 'broll', label: 'B-roll Produto', start: 3, end: 8 }],
   hooks: [{ id: 'hk-1', track: 'hooks', label: 'Hook 1', start: 0, end: 2.5 }],
   cuts: [{ id: 'ct-1', track: 'cuts', label: 'Cut A', start: 8, end: 8.2 }],
@@ -81,7 +73,7 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
   currentTime: 0,
   isPlaying: false,
   zoom: 1,
-  selectedBlockId: 'sub-1',
+  selectedBlockId: null,
   tracks: { ...tracksSeed, effects: [] },
   renderQueue: [
     { id: 'job-1', clipName: 'Clip 01', state: 'queued', progress: 0 },
@@ -111,7 +103,6 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
 
       const nextTracks = { ...state.tracks, [track]: moved };
       const payload = {
-        subtitles: nextTracks.subtitles,
         broll: nextTracks.broll,
         hooks: nextTracks.hooks,
         cuts: nextTracks.cuts,
@@ -138,7 +129,6 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
       videoUrl: renderMode === 'export' ? exportVideoUrl : previewVideoUrl,
       duration: data.duration ?? 0,
       tracks: {
-        subtitles: mapTrack(data.subtitles, 'subtitles'),
         broll: mapTrack(data.broll, 'broll'),
         hooks: mapTrack(data.hooks, 'hooks'),
         cuts: mapTrack(data.cuts, 'cuts'),

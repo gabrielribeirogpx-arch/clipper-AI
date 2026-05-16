@@ -10,7 +10,6 @@ timeline_state: dict[str, Any] = {
     "exportVideoUrl": None,
     "duration": 0.0,
     "clips": [],
-    "subtitles": [],
     "hooks": [],
     "broll": [],
     "cuts": [],

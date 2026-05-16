@@ -10,11 +10,6 @@ def get_render_state():
     return get_timeline_state()
 
 
-@router.get("/subtitles")
-def get_subtitles():
-    return get_timeline_state().get("subtitles", [])
-
-
 @router.get("/b-roll")
 def get_broll():
     return get_timeline_state().get("broll", [])
@@ -23,7 +18,6 @@ def get_broll():
 @router.put("/update")
 def update_timeline(payload: TimelineUpdateRequest):
     current_state = get_timeline_state()
-    current_state["subtitles"] = [item.model_dump() for item in payload.subtitles]
     current_state["broll"] = [item.model_dump() for item in payload.broll]
     current_state["hooks"] = [item.model_dump() for item in payload.hooks]
     current_state["cuts"] = [item.model_dump() for item in payload.cuts]
