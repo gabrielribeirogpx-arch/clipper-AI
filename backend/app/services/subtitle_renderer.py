@@ -26,6 +26,8 @@ class SubtitleStyleConfig:
     max_words_per_line: int = 3
     max_lines_per_caption: int = 2
     cinematic_line_height_ratio: float = 1.22
+    min_chunk_duration: float = 0.72
+    max_chunk_duration: float = 2.8
 
 
 class SubtitleRenderer:
@@ -120,90 +122,95 @@ class SubtitleRenderer:
         if not words:
             return clips
 
+        timed_words: List[Dict[str, float | str]] = []
+        for w in words:
+            if "start" not in w or "end" not in w:
+                continue
+            raw = str(w.get("word", "")).strip()
+            if not raw:
+                continue
+            ws, we = float(w["start"]), float(w["end"])
+            if we <= ws:
+                continue
+            timed_words.append({"word": raw.upper(), "start": ws, "end": we})
+
+        if not timed_words:
+            return clips
+
         safe = self._safe_area(video_w, video_h)
         max_caption_w = int(video_w * self.config.max_caption_width_ratio)
         style = self._resolve_style(preset)
         font_name = self.resolve_font()
         caption_center_y = self._caption_center_y(safe, video_h, caption_position)
 
-        phrase_words = [str(w.get("word", "")).upper().strip() for w in words[:6]]
-        phrase_words = [w for w in phrase_words if w]
-        lines = self._build_caption_lines(phrase_words)
-        if not lines:
-            return clips
-
-        line_texts = [" ".join(line) for line in lines]
-        base_size = self._dynamic_font_size(video_w, video_h, len(phrase_words), caption_position, float(style["preset_factor"]))
-        line_height_px = int(base_size * self.config.cinematic_line_height_ratio)
-        block_shift = int((len(line_texts) - 1) * line_height_px * 0.5)
-
-        for word_data in words:
-            if "start" not in word_data or "end" not in word_data:
+        chunks: List[List[Dict[str, float | str]]] = []
+        current: List[Dict[str, float | str]] = []
+        for word_data in timed_words:
+            if not current:
+                current = [word_data]
                 continue
-            raw_word = str(word_data.get("word", "")).strip()
-            if not raw_word:
-                continue
-            word = raw_word.upper()
-            word_start = float(word_data["start"])
-            word_end = float(word_data["end"])
-            if word_end <= word_start:
-                continue
+            duration = float(word_data["end"]) - float(current[0]["start"])
+            gap = float(word_data["start"]) - float(current[-1]["end"])
+            if len(current) >= 5 or duration >= self.config.max_chunk_duration or gap > 0.30:
+                chunks.append(current)
+                current = [word_data]
+            else:
+                current.append(word_data)
+        if current:
+            chunks.append(current)
 
-            emphasis = self._is_emphasis_word(raw_word)
-            font_size = int(base_size * (1.12 if emphasis else 1.0))
-            stroke_width = max(2, int(font_size * 0.055))
-            fill_color = "#FFD24A" if emphasis else "#FFFFFF"
-            glow_color = "#FFB347" if emphasis else "#B6E3FF"
+        for chunk in chunks:
+            phrase_words = [str(w["word"]) for w in chunk]
+            lines = self._build_caption_lines(phrase_words)
+            if not lines:
+                continue
+            line_texts = [" ".join(line) for line in lines]
+            chunk_start = float(chunk[0]["start"])
+            chunk_end = max(float(chunk[-1]["end"]), chunk_start + self.config.min_chunk_duration)
+            chunk_duration = chunk_end - chunk_start
 
-            duration = max(0.01, word_end - word_start)
-            fade_in_t = min(0.08, duration * 0.35)
-            fade_out_t = min(0.08, duration * 0.30)
+            base_size = self._dynamic_font_size(video_w, video_h, len(phrase_words), caption_position, float(style["preset_factor"]))
+            base_size = max(32, min(74, base_size))
+            line_height_px = int(base_size * self.config.cinematic_line_height_ratio)
+            block_shift = int((len(line_texts) - 1) * line_height_px * 0.5)
+            stroke_width = max(2, int(base_size * 0.05))
 
             for line_idx, line_text in enumerate(line_texts):
                 y = caption_center_y - block_shift + (line_idx * line_height_px)
-                contains_active = word in line_text.split()
-
                 inactive = (
                     TextClip(line_text, fontsize=base_size, font=font_name, color="#FFFFFF", kerning=int(style["line_kerning"]), method="caption", size=(max_caption_w, None), align="center", stroke_color="#000000", stroke_width=stroke_width)
-                    .set_opacity(0.94)
+                    .set_opacity(0.92)
                     .set_position(("center", y))
-                    .set_start(word_start)
-                    .set_end(word_end)
+                    .set_start(chunk_start)
+                    .set_end(chunk_end)
                 )
                 clips.append(inactive)
 
-                if not contains_active:
-                    continue
-
-                scale_peak = 1.12 if emphasis else 1.08
-
-                def scale_fn(t: float, st=word_start, en=word_end, peak=scale_peak):
-                    n = (t - st) / max(1e-6, en - st)
-                    n = max(0.0, min(1.0, n))
-                    return 1.0 + (peak - 1.0) * self._soft_bounce(n)
-
-                active = (
-                    TextClip(line_text, fontsize=font_size, font=font_name, color=fill_color, kerning=int(style["line_kerning"]), method="caption", size=(max_caption_w, None), align="center", stroke_color="#000000", stroke_width=stroke_width)
-                    .set_opacity(1.0)
-                    .resize(scale_fn)
-                    .set_position(("center", y))
-                    .set_start(word_start)
-                    .set_end(word_end)
-                    .crossfadein(fade_in_t)
-                    .crossfadeout(fade_out_t)
-                )
-                glow = (
-                    TextClip(line_text, fontsize=font_size, font=font_name, color=glow_color if preset != "neon" else "#71A6FF", kerning=int(style["line_kerning"]), method="caption", size=(max_caption_w, None), align="center", stroke_color=glow_color, stroke_width=max(1, stroke_width - 1))
-                    .set_opacity(float(style["glow_opacity"]))
-                    .set_position(("center", y))
-                    .set_start(word_start)
-                    .set_end(word_end)
-                )
-                clips.extend([glow, active])
+            for word_data in chunk:
+                word = str(word_data["word"])
+                word_start = float(word_data["start"])
+                word_end = float(word_data["end"])
+                emphasis = self._is_emphasis_word(word)
+                fill_color = "#FFD24A" if emphasis else "#FFFFFF"
+                for line_idx, line_text in enumerate(line_texts):
+                    if word not in line_text.split():
+                        continue
+                    y = caption_center_y - block_shift + (line_idx * line_height_px)
+                    active = (
+                        TextClip(line_text, fontsize=base_size, font=font_name, color=fill_color, kerning=int(style["line_kerning"]), method="caption", size=(max_caption_w, None), align="center", stroke_color="#000000", stroke_width=stroke_width)
+                        .set_opacity(1.0)
+                        .set_position(("center", y))
+                        .set_start(word_start)
+                        .set_end(word_end)
+                        .crossfadein(min(0.05, chunk_duration * 0.08))
+                        .crossfadeout(min(0.05, chunk_duration * 0.08))
+                    )
+                    clips.append(active)
 
         if debug_layout:
-            debug_text = f"SAFE {safe['left']}:{safe['top']} {safe['right']}:{safe['bottom']} | MAXW {max_caption_w}"
+            debug_text = f"SAFE {safe['left']}:{safe['top']} {safe['right']}:{safe['bottom']} | MAXW {max_caption_w} | CHUNKS {len(chunks)}"
             debug = TextClip(debug_text, fontsize=24, font=font_name, color="#00FF9A", method="caption", size=(video_w, None), align="center")
-            clips.append(debug.set_position(("center", safe["top"] // 2)).set_start(0).set_end(max(float(words[-1].get("end", 1.0)), 1.0)).set_opacity(0.55))
+            clips.append(debug.set_position(("center", safe["top"] // 2)).set_start(0).set_end(max(float(timed_words[-1].get("end", 1.0)), 1.0)).set_opacity(0.55))
 
         return clips
+
