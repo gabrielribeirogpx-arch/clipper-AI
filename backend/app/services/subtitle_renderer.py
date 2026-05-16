@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Literal, Optional, Sequence, Tuple
+from typing import Dict, List, Literal, Optional, Sequence
 
 from moviepy.editor import TextClip
 
@@ -117,6 +117,21 @@ class SubtitleRenderer:
             return int(video_h * 0.53)
         return safe["bottom"] - int(video_h * 0.08)
 
+    def _measure_text_width(self, text: str, font_name: str, font_size: int, kerning: int) -> int:
+        sample = TextClip(
+            txt=text,
+            fontsize=font_size,
+            font=font_name,
+            color="#FFFFFF",
+            stroke_color="#000000",
+            stroke_width=max(8, int(font_size * 0.15)),
+            kerning=kerning,
+            method="label",
+        )
+        width = int(sample.w)
+        sample.close()
+        return width
+
     def build_word_layers(self, words: List[Dict], video_w: int, video_h: int, caption_position: Literal["top", "middle", "bottom"] = "bottom", preset: str = "cinematic", debug_layout: bool = False) -> List[TextClip]:
         clips: List[TextClip] = []
         if not words:
@@ -159,36 +174,72 @@ class SubtitleRenderer:
             chunks.append(current)
 
         for chunk in chunks:
+            chunk_words = [str(w["word"]) for w in chunk]
+            chunk_text = " ".join(chunk_words)
+            chunk_start = float(chunk[0]["start"])
+            chunk_end = float(chunk[-1]["end"])
+
             base_size = self._dynamic_font_size(video_w, video_h, len(chunk), caption_position, float(style["preset_factor"]))
             base_size = max(84, min(172, base_size))
-            y = caption_center_y
+            kerning = int(style["line_kerning"])
 
-            for word_data in chunk:
+            base_sentence = (
+                TextClip(
+                    txt=chunk_text,
+                    fontsize=base_size,
+                    font=font_name,
+                    color="#FFFFFF",
+                    stroke_color="#000000",
+                    stroke_width=max(8, int(base_size * 0.15)),
+                    kerning=kerning,
+                    method="label",
+                )
+                .set_opacity(1.0)
+                .set_position(("center", caption_center_y))
+                .set_start(chunk_start)
+                .set_end(chunk_end)
+            )
+            clips.append(base_sentence)
+
+            chunk_w = int(base_sentence.w)
+            chunk_left = (video_w - chunk_w) / 2.0
+            measured_cache: Dict[str, int] = {}
+
+            def width_for(text: str) -> int:
+                if text not in measured_cache:
+                    measured_cache[text] = self._measure_text_width(text, font_name, base_size, kerning)
+                return measured_cache[text]
+
+            prefix = ""
+            for i, word_data in enumerate(chunk):
                 word = str(word_data["word"])
                 word_start = float(word_data["start"])
                 word_end = float(word_data["end"])
 
                 emphasis = self._is_emphasis_word(word)
-                active_size = int(base_size * (1.34 if emphasis else 1.24))
-                fill_color = "#FFE600"
+                active_size = int(base_size * (1.18 if emphasis else 1.12))
+                x_center = chunk_left + width_for(prefix + word) - (width_for(word) / 2.0)
+                x_pos = int(round(x_center))
 
                 active = (
                     TextClip(
                         txt=word,
                         fontsize=active_size,
                         font=font_name,
-                        color=fill_color,
+                        color="#FFE600",
                         stroke_color="#000000",
                         stroke_width=max(10, int(active_size * 0.17)),
-                        kerning=int(style["line_kerning"]),
-                        method="label"
+                        kerning=kerning,
+                        method="label",
                     )
                     .set_opacity(1.0)
-                    .set_position(("center", y))
+                    .set_position((x_pos - int(active_size * 0.02), caption_center_y))
                     .set_start(word_start)
                     .set_end(word_end)
-                    .resize(lambda t: 1.0 + 0.14 * self._soft_bounce(t / max(0.001, word_end - word_start)))
+                    .resize(lambda t: 1.0 + 0.10 * self._soft_bounce(t / max(0.001, word_end - word_start)))
                 )
                 clips.append(active)
+
+                prefix = f"{prefix}{word} "
 
         return clips
