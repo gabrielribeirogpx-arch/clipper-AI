@@ -1,3 +1,5 @@
+import os
+
 from app.services.whisper_service import transcribe_video
 from app.services.hook_detector import detect_hooks
 from app.services.ffmpeg_service import cut_clip, apply_broll_overlay
@@ -9,12 +11,16 @@ from app.services.ai_local_service import generate_clip_metadata
 
 def process_video(
     video_path,
+    output_dir: str = "app/clips",
     min_clip_length: int = 30,
     max_clip_length: int = 90,
     max_clips: int = 25,
     min_score: float = 0.45,
     overlap_tolerance: float = 0.6,
 ):
+
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"[CLIP OUTPUT PATH] {output_dir}")
 
     transcription = transcribe_video(video_path)
 
@@ -46,13 +52,14 @@ def process_video(
             video_path,
             hook["start"],
             hook["end"],
-            f"raw_clip_{index}.mp4"
+            f"raw_clip_{index}.mp4",
+            output_dir=output_dir,
         )
 
         processed_clip_path = render_vertical_clip(
             raw_clip_path,
             transcription["segments"],
-            f"app/clips/clip_{index}.mp4",
+            os.path.join(output_dir, f"clip_{index}.mp4"),
             speaker_segments=transcription.get("speaker_segments", []),
         )
 
@@ -64,13 +71,15 @@ def process_video(
         preview_clip_path = apply_broll_overlay(
             processed_clip_path,
             segment_timeline,
-            f"clip_{index}_preview.mp4"
+            f"clip_{index}_preview.mp4",
+            output_dir=output_dir,
         )
 
         export_clip_path = apply_broll_overlay(
             processed_clip_path,
             segment_timeline,
-            f"clip_{index}_export.mp4"
+            f"clip_{index}_export.mp4",
+            output_dir=output_dir,
         )
 
 

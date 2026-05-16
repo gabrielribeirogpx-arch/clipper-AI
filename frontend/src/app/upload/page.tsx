@@ -111,6 +111,7 @@ export default function UploadPage() {
   const [error, setError] = useState<string | null>(null);
   const [recentUploads, setRecentUploads] = useState<string[]>([]);
   const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [analysisName, setAnalysisName] = useState('');
   const [startSeconds, setStartSeconds] = useState(0);
   const [endSeconds, setEndSeconds] = useState(MAX_YOUTUBE_DURATION_SECONDS);
   const fileRef = useRef<File | null>(null);
@@ -127,7 +128,7 @@ export default function UploadPage() {
     setError(null);
     store.setUploadedVideo({ name: file.name, size: file.size, type: file.type, previewUrl: URL.createObjectURL(file) });
     store.setUploadStatus('uploading');
-    const result = await uploadVideo(file, store.setUploadProgress).catch((e) => {
+    const result = await uploadVideo(file, analysisName, store.setUploadProgress).catch((e) => {
       store.setUploadStatus('error');
       throw e;
     });
@@ -148,6 +149,7 @@ export default function UploadPage() {
     store.setUploadStatus('processing');
     const result = await ingestYouTubeVideo({
       youtube_url: youtubeUrl.trim(),
+      analysis_name: analysisName.trim() || undefined,
       start_time: toHhMmSs(startSeconds),
       end_time: toHhMmSs(endSeconds),
       min_clip_length: 30,
@@ -204,6 +206,7 @@ export default function UploadPage() {
         </motion.div>
 
         <div className="mt-8 grid gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <input value={analysisName} onChange={(e) => setAnalysisName(e.target.value)} placeholder="Nome da análise (opcional)" className="rounded-lg bg-slate-900 px-3 py-2 text-sm" />
           <input value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)} placeholder="https://youtube.com/live/..." className="rounded-lg bg-slate-900 px-3 py-2 text-sm" />
           <YouTubeRangeSelector duration={MAX_YOUTUBE_DURATION_SECONDS} start={startSeconds} end={endSeconds} onStart={setStartSeconds} onEnd={setEndSeconds} />
           <button onClick={() => void processYoutube().catch((e) => setError(e.message))} className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold transition hover:bg-violet-400">
