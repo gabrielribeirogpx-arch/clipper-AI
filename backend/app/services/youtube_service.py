@@ -9,6 +9,7 @@ from dataclasses import dataclass
 UPLOAD_DIR = "app/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 logger = logging.getLogger(__name__)
+COOKIES_FILE = "backend/cookies.txt"
 
 @dataclass
 class YouTubeDownloadError(Exception):
@@ -97,13 +98,19 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
         "4",
         "--extractor-args",
         "youtube:player_client=web,android",
-        "--cookies-from-browser",
-        "chrome",
         "-f",
         "mp4/bestvideo+bestaudio/best",
         "-o",
         output_template,
     ]
+
+    cookies_file_path = os.path.abspath(COOKIES_FILE)
+    if os.path.isfile(cookies_file_path):
+        logger.info("YouTube cookies file found", extra={"cookies_file": cookies_file_path})
+        logger.info("Authenticated yt-dlp mode enabled", extra={"cookies_file": cookies_file_path})
+        command.extend(["--cookies", cookies_file_path])
+    else:
+        logger.info("YouTube cookies file missing", extra={"cookies_file": cookies_file_path})
 
     ffmpeg_location = _resolve_ffmpeg_location()
     if ffmpeg_location:
@@ -119,7 +126,14 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
 
     command.append(youtube_url)
     logger.info("Executing yt-dlp command", extra={"command": command})
-    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    try:
+        result = subprocess.run(command, check=False, capture_output=True, text=True)
+    except Exception as exc:  # pragma: no cover - defensive runtime guard
+        logger.exception("yt-dlp execution crashed", extra={"command": command})
+        raise YouTubeDownloadError(
+            message=f"Failed to execute yt-dlp: {exc}",
+            category="execution_error",
+        ) from exc
     print("YT-DLP STDOUT:", result.stdout)
     print("YT-DLP STDERR:", result.stderr)
     print("YT-DLP RETURN CODE:", result.returncode)
@@ -152,5 +166,9 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
 
     matches = sorted([f for f in os.listdir(UPLOAD_DIR) if f.startswith("yt_")], key=lambda x: os.path.getmtime(os.path.join(UPLOAD_DIR, x)), reverse=True)
     if not matches:
-        raise RuntimeError("Failed to download YouTube video")
+        logger.error("yt-dlp reported success but no output file was found", extra={"upload_dir": UPLOAD_DIR})
+        raise YouTubeDownloadError(
+            message="Failed to locate downloaded YouTube video file.",
+            category="missing_output",
+        )
     return os.path.join(UPLOAD_DIR, matches[0])
