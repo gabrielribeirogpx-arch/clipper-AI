@@ -25,10 +25,14 @@ async def upload_video(file: UploadFile = File(...)):
 
     hooks = transcription["hooks"]
     duration = max([hook["end"] for hook in hooks], default=0.0)
-    first_clip = hooks[0]["clip"] if hooks else filepath
+    first_preview_clip = hooks[0]["preview_clip"] if hooks else filepath
+    first_export_clip = hooks[0]["export_clip"] if hooks else filepath
 
     set_timeline_state({
-        "videoUrl": f"/media/{os.path.basename(first_clip)}",
+        "renderMode": "preview",
+        "videoUrl": f"/media/{os.path.basename(first_preview_clip)}",
+        "previewVideoUrl": f"/media/{os.path.basename(first_preview_clip)}",
+        "exportVideoUrl": f"/media/{os.path.basename(first_export_clip)}",
         "duration": duration,
         "clips": [
             {
@@ -56,7 +60,9 @@ async def upload_video(file: UploadFile = File(...)):
 
     return {
         "success": True,
-        "video_url": f"/media/{os.path.basename(first_clip)}",
+        "video_url": f"/media/{os.path.basename(first_preview_clip)}",
+        "preview_video_url": f"/media/{os.path.basename(first_preview_clip)}",
+        "export_video_url": f"/media/{os.path.basename(first_export_clip)}",
         "timeline": transcription["timeline"],
         "project_id": file_id,
         "duration": duration,

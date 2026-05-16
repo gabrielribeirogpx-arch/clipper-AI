@@ -34,8 +34,13 @@ export type RenderJob = {
   progress: number;
 };
 
+type RenderMode = 'preview' | 'export';
+
 type TimelineState = {
+  renderMode: RenderMode;
   videoUrl: string | null;
+  previewVideoUrl: string | null;
+  exportVideoUrl: string | null;
   duration: number;
   currentTime: number;
   isPlaying: boolean;
@@ -68,7 +73,10 @@ const tracksSeed: Record<TrackType, ClipBlock[]> = {
 };
 
 export const useTimelineStore = create<TimelineState>((set, get) => ({
+  renderMode: 'preview',
   videoUrl: null,
+  previewVideoUrl: null,
+  exportVideoUrl: null,
   duration: 60,
   currentTime: 0,
   isPlaying: false,
@@ -120,8 +128,14 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
     const data = await getRenderState();
     const mapTrack = (items: ClipBlock[] = [], track: TrackType) =>
       items.map((item) => ({ ...item, track }));
+    const previewVideoUrl = data.previewVideoUrl ? `http://localhost:8000${data.previewVideoUrl}` : null;
+    const exportVideoUrl = data.exportVideoUrl ? `http://localhost:8000${data.exportVideoUrl}` : null;
+    const renderMode: RenderMode = data.renderMode === 'export' ? 'export' : 'preview';
     set({
-      videoUrl: data.videoUrl ? `http://localhost:8000${data.videoUrl}` : null,
+      renderMode,
+      previewVideoUrl,
+      exportVideoUrl,
+      videoUrl: renderMode === 'export' ? exportVideoUrl : previewVideoUrl,
       duration: data.duration ?? 0,
       tracks: {
         subtitles: mapTrack(data.subtitles, 'subtitles'),

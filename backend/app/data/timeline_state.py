@@ -4,7 +4,10 @@ from typing import Any
 
 
 timeline_state: dict[str, Any] = {
+    "renderMode": "preview",
     "videoUrl": None,
+    "previewVideoUrl": None,
+    "exportVideoUrl": None,
     "duration": 0.0,
     "clips": [],
     "subtitles": [],
