@@ -1,8 +1,8 @@
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, HTTPException
 from app.jobs.process_video_job import process_video
 from app.data.timeline_state import set_timeline_state
 from app.schemas.upload import YoutubeIngestRequest
-from app.services.youtube_service import download_youtube_video
+from app.services.youtube_service import YouTubeDownloadError, download_youtube_video
 import os
 import uuid
 import shutil
@@ -30,11 +30,14 @@ async def upload_video(file: UploadFile = File(...)):
 @router.post("/ingest/youtube")
 async def ingest_youtube(payload: YoutubeIngestRequest):
     file_id = str(uuid.uuid4())
-    filepath = download_youtube_video(
-        payload.youtube_url,
-        start_time=payload.start_time,
-        end_time=payload.end_time,
-    )
+    try:
+        filepath = download_youtube_video(
+            payload.youtube_url,
+            start_time=payload.start_time,
+            end_time=payload.end_time,
+        )
+    except YouTubeDownloadError as error:
+        raise HTTPException(status_code=400, detail={"error": error.message}) from error
 
     transcription = process_video(
         filepath,
