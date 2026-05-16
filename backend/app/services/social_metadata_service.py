@@ -66,7 +66,15 @@ def generate_social_metadata(clip_text: str, viral_score: float) -> Dict[str, st
     caption = f"this {caption_focus} moment got out of control 😳 wait for the ending"
 
     hashtags = ["#viral", "#shorts"]
-    hashtags.extend(f"#{word.replace("'", "")}" for word in keywords[:4])
+    clean_keywords = [
+        word.replace("'", "")
+        for word in keywords[:4]
+    ]
+
+    hashtags.extend(
+        f"#{word}"
+        for word in clean_keywords
+    )
 
     deduped_tags = list(dict.fromkeys(hashtags))[:6]
 
