@@ -12,6 +12,16 @@ from app.services.reframing_service import ReframingService
 SAFE_CPU_RENDER = os.getenv("SAFE_CPU_RENDER", "false").strip().lower() in {"1", "true", "yes", "on"}
 MAX_TRACKING_WIDTH = 1920
 TARGET_RENDER_SIZE = (1080, 1920)
+FINAL_EXPORT_SETTINGS = {
+    "codec": "libx264",
+    "preset": "slow",
+    "crf": 18,
+    "bitrate": "8M",
+    "maxrate": "12M",
+    "bufsize": "16M",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+}
 
 
 def _probe_dimensions(media_path: str) -> tuple[int, int]:
@@ -58,15 +68,33 @@ def render_vertical_clip(video_path: str, segments: List[Dict], output_path: str
 
     final_video.write_videofile(
         output_path,
-        codec="libx264",
-        audio_codec="aac",
+        codec=FINAL_EXPORT_SETTINGS["codec"],
+        audio_codec=FINAL_EXPORT_SETTINGS["audio_codec"],
         fps=30,
-        preset="medium",
+        preset=FINAL_EXPORT_SETTINGS["preset"],
+        bitrate=FINAL_EXPORT_SETTINGS["bitrate"],
+        ffmpeg_params=[
+            "-crf", str(FINAL_EXPORT_SETTINGS["crf"]),
+            "-maxrate", FINAL_EXPORT_SETTINGS["maxrate"],
+            "-bufsize", FINAL_EXPORT_SETTINGS["bufsize"],
+            "-b:a", FINAL_EXPORT_SETTINGS["audio_bitrate"],
+            "-movflags", "+faststart",
+        ],
+    )
+
+    print("[EXPORT QUALITY] final vertical render")
+    print(
+        "[FFMPEG SETTINGS] "
+        f"codec={FINAL_EXPORT_SETTINGS['codec']} preset={FINAL_EXPORT_SETTINGS['preset']} "
+        f"crf={FINAL_EXPORT_SETTINGS['crf']} bitrate={FINAL_EXPORT_SETTINGS['bitrate']} "
+        f"maxrate={FINAL_EXPORT_SETTINGS['maxrate']} bufsize={FINAL_EXPORT_SETTINGS['bufsize']} "
+        f"audio_codec={FINAL_EXPORT_SETTINGS['audio_codec']} audio_bitrate={FINAL_EXPORT_SETTINGS['audio_bitrate']}"
     )
 
     final_w, final_h = _probe_dimensions(output_path)
     if (final_w, final_h) != TARGET_RENDER_SIZE:
         raise RuntimeError(f"Rendered video has invalid size {final_w}x{final_h}; expected 1080x1920")
+    print(f"[FINAL RESOLUTION] {final_w}x{final_h}")
 
     if proxy_created and tracking_source != video_path and os.path.exists(tracking_source):
         tracking_clip.close()

@@ -73,6 +73,7 @@ def process_video(
             segment_timeline,
             f"clip_{index}_preview.mp4",
             output_dir=output_dir,
+            quality_profile="preview",
         )
 
         export_clip_path = apply_broll_overlay(
@@ -80,6 +81,7 @@ def process_video(
             segment_timeline,
             f"clip_{index}_export.mp4",
             output_dir=output_dir,
+            quality_profile="export",
         )
 
 
