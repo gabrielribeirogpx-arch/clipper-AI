@@ -1,13 +1,13 @@
 import whisperx
 
 
-device = "cpu"
+device = "cuda"
 CAPTION_PRE_ROLL_SECONDS = 0.25
 
 model = whisperx.load_model(
     "base",
     device,
-    compute_type="int8"
+    compute_type="float16"
 )
 
 
@@ -31,11 +31,7 @@ def _run_diarization(audio, aligned_result):
 def transcribe_video(video_path, diarize: bool = True):
     audio = whisperx.load_audio(video_path)
 
-    result = model.transcribe(
-        audio,
-        vad_filter=False,
-        condition_on_previous_text=False,
-    )
+    result = model.transcribe(audio)
 
     model_a, metadata = whisperx.load_align_model(
         language_code=result["language"],

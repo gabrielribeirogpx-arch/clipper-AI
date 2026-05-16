@@ -160,11 +160,7 @@ class SubtitleRenderer:
             chunks.append(current)
 
         for chunk in chunks:
-            phrase_words = [str(w["word"]) for w in chunk]
-            lines = self._build_caption_lines(phrase_words)
-            if not lines:
-                continue
-            line_texts = [" ".join(line) for line in lines]
+            phrase_words = []
             chunk_start = float(chunk[0]["start"])
             chunk_end = max(float(chunk[-1]["end"]), chunk_start + self.config.min_chunk_duration)
             chunk_duration = chunk_end - chunk_start
@@ -172,45 +168,34 @@ class SubtitleRenderer:
             base_size = self._dynamic_font_size(video_w, video_h, len(phrase_words), caption_position, float(style["preset_factor"]))
             base_size = max(32, min(74, base_size))
             line_height_px = int(base_size * self.config.cinematic_line_height_ratio)
-            block_shift = int((len(line_texts) - 1) * line_height_px * 0.5)
-            stroke_width = max(2, int(base_size * 0.05))
-
-            for line_idx, line_text in enumerate(line_texts):
-                y = caption_center_y - block_shift + (line_idx * line_height_px)
-                inactive = (
-                    TextClip(line_text, fontsize=base_size, font=font_name, color="#FFFFFF", kerning=int(style["line_kerning"]), method="caption", size=(max_caption_w, None), align="center", stroke_color="#000000", stroke_width=stroke_width)
-                    .set_opacity(0.92)
-                    .set_position(("center", y))
-                    .set_start(chunk_start)
-                    .set_end(chunk_end)
-                )
-                clips.append(inactive)
-
+            block_shift = 0
+                
             for word_data in chunk:
                 word = str(word_data["word"])
                 word_start = float(word_data["start"])
                 word_end = float(word_data["end"])
+
                 emphasis = self._is_emphasis_word(word)
                 fill_color = "#FFD24A" if emphasis else "#FFFFFF"
-                for line_idx, line_text in enumerate(line_texts):
-                    if word not in line_text.split():
-                        continue
-                    y = caption_center_y - block_shift + (line_idx * line_height_px)
-                    active = (
-                        TextClip(line_text, fontsize=base_size, font=font_name, color=fill_color, kerning=int(style["line_kerning"]), method="caption", size=(max_caption_w, None), align="center", stroke_color="#000000", stroke_width=stroke_width)
-                        .set_opacity(1.0)
-                        .set_position(("center", y))
-                        .set_start(word_start)
-                        .set_end(word_end)
-                        .crossfadein(min(0.05, chunk_duration * 0.08))
-                        .crossfadeout(min(0.05, chunk_duration * 0.08))
-                    )
-                    clips.append(active)
 
-        if debug_layout:
-            debug_text = f"SAFE {safe['left']}:{safe['top']} {safe['right']}:{safe['bottom']} | MAXW {max_caption_w} | CHUNKS {len(chunks)}"
-            debug = TextClip(debug_text, fontsize=24, font=font_name, color="#00FF9A", method="caption", size=(video_w, None), align="center")
-            clips.append(debug.set_position(("center", safe["top"] // 2)).set_start(0).set_end(max(float(timed_words[-1].get("end", 1.0)), 1.0)).set_opacity(0.55))
+                y = caption_center_y
+
+                active = (
+                    TextClip(
+                        txt=word,
+                        fontsize=base_size,
+                        font=font_name,
+                        color=fill_color,
+                        kerning=int(style["line_kerning"]),
+                        method="label"
+                    )
+                    .set_opacity(1.0)
+                    .set_position(("center", y))
+                    .set_start(word_start)
+                    .set_end(word_end)
+                )
+
+            clips.append(active)
 
         return clips
 

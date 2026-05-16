@@ -230,13 +230,18 @@ def create_tiktok_subtitles(video_path, segments, output_path, speaker_segments=
     caption_position = "bottom"
     preset = "cinematic"
     debug_layout = False
-    reframed_video = reframer.apply(base_clip, speaker_segments=speaker_segments, debug=debug_layout)
+    print(f"[DEBUG] base_clip={base_clip}")
+    reframed_video = reframer.apply(
+        VideoFileClip(video_path).without_audio()
+) 
 
     words = _collect_words(segments)
     if segments and isinstance(segments[0], dict):
         segments[0]["camera_keyframes"] = reframer.camera_keyframes
-    renderer = SubtitleRenderer()
-    cinematic_video = reframed_video if SAFE_CPU_RENDER else _apply_cinematic_camera_motion(reframed_video, words, debug=debug_layout)
+        renderer = SubtitleRenderer()
+
+    cinematic_video = reframed_video
+
     word_layers = renderer.build_word_layers(
         words=words,
         video_w=int(cinematic_video.w),
@@ -246,99 +251,90 @@ def create_tiktok_subtitles(video_path, segments, output_path, speaker_segments=
         debug_layout=debug_layout,
     )
 
-    final_video = CompositeVideoClip([cinematic_video, *word_layers], size=cinematic_video.size)
-    silent_output = output_path.replace(".mp4", "_silent.mp4")
-    audio_output = output_path.replace(".mp4", ".aac")
-    mux_output = output_path.replace(".mp4", "_mux.mp4")
+    render_w = int(cinematic_video.w)
+    render_h = int(cinematic_video.h)
 
-    print(f"[PIPELINE] original_file={video_path}")
-    _probe_streams("original", video_path)
+    # libx264 exige dimensões pares
+    if render_w % 2 != 0:
+        render_w -= 1
 
-    render_fps = 20 if SAFE_CPU_RENDER else 24
-    final_video.write_videofile(
-        silent_output,
-        codec="libx264",
-        audio=False,
-        fps=render_fps,
-        preset="veryfast",
-        threads=4,
-        ffmpeg_params=["-pix_fmt", "yuv420p"],
+    if render_h % 2 != 0:
+        render_h -= 1
+
+    from moviepy.video.fx.all import resize
+
+    cinematic_video = resize(
+    cinematic_video,
+    newsize=(render_w, render_h)
+)
+
+    if cinematic_video is None:
+        raise RuntimeError("cinematic_video became None after resize")
+
+    valid_layers = [cinematic_video]
+
+    for layer in word_layers:
+        if layer is not None:
+            valid_layers.append(layer)
+
+    final_video = CompositeVideoClip(
+        valid_layers,
+        size=(render_w, render_h)
     )
 
-    final_video.close()
-    cinematic_video.close()
-    reframed_video.close()
-    base_clip.close()
+    from moviepy.video.fx.all import resize, crop
 
-    print(f"[PIPELINE] raw_clip={video_path}")
-    _probe_streams("raw_clip", video_path)
-    print(f"[PIPELINE] silent_output={silent_output}")
-    _probe_streams("silent_output", silent_output)
+    final_video = resize(final_video, height=1920)
 
-    extract_audio_cmd = [
-        "ffmpeg",
-        "-y",
-        "-i", video_path,
-        "-vn",
-        "-acodec", "copy",
-        audio_output,
-    ]
-    extract_audio_proc = subprocess.run(extract_audio_cmd, capture_output=True, text=True, check=False)
-    print(f"[PIPELINE][extract_audio] cmd={' '.join(extract_audio_cmd)}")
-    print(f"[PIPELINE][extract_audio] returncode={extract_audio_proc.returncode}")
-    print(f"[PIPELINE][extract_audio] stderr:\n{extract_audio_proc.stderr}")
-    if extract_audio_proc.returncode != 0:
-        raise RuntimeError(
-            f"Failed to extract source audio with ffmpeg.\n"
-            f"STDOUT:\n{extract_audio_proc.stdout}\nSTDERR:\n{extract_audio_proc.stderr}"
+    if final_video.w > 1080:
+        x_center = final_video.w / 2
+
+        final_video = crop(
+            final_video,
+            width=1080,
+            height=1920,
+            x_center=x_center,
+            y_center=960
         )
 
-    print(f"[PIPELINE] audio_extract={audio_output} exists={os.path.exists(audio_output)}")
-    if os.path.exists(audio_output):
-        _probe_streams("audio_extract", audio_output)
-
-    mux_cmd = [
-        "ffmpeg",
-        "-y",
-        "-i", silent_output,
-        "-i", audio_output,
-        "-map", "0:v:0",
-        "-map", "1:a:0",
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-shortest",
-        mux_output,
-    ]
-    mux_proc = subprocess.run(mux_cmd, capture_output=True, text=True, check=False)
-    print(f"[PIPELINE][mux] cmd={' '.join(mux_cmd)}")
-    print(f"[PIPELINE][mux] returncode={mux_proc.returncode}")
-    print(f"[PIPELINE][mux] stderr:\n{mux_proc.stderr}")
-    if mux_proc.returncode != 0:
-        raise RuntimeError(
-            f"Failed to mux final video/audio with ffmpeg.\n"
-            f"STDOUT:\n{mux_proc.stdout}\nSTDERR:\n{mux_proc.stderr}"
-        )
-
-    print(f"[PIPELINE] mux_output={mux_output} exists={os.path.exists(mux_output)}")
-    if os.path.exists(mux_output):
-        _probe_streams("mux_output", mux_output)
-
-    os.replace(mux_output, output_path)
-
-    ffprobe_cmd = ["ffprobe", output_path]
-    ffprobe_proc = subprocess.run(ffprobe_cmd, capture_output=True, text=True, check=False)
-    ffprobe_output = (ffprobe_proc.stdout or "") + (ffprobe_proc.stderr or "")
-    print(f"[ffprobe] {output_path}\n{ffprobe_output}")
-    if "Audio: aac" not in ffprobe_output:
-        raise RuntimeError(f"Rendered video is missing AAC audio stream: {output_path}")
-    if "Video:" not in ffprobe_output:
-        raise RuntimeError(f"Rendered video is missing video stream: {output_path}")
+    final_video = final_video.set_audio(
+        VideoFileClip(video_path).audio
+    )
+    
+    final_video.write_videofile(
+        output_path,
+        codec="libx264",
+        audio_codec="aac",
+        fps=30,
+        preset="medium"
+    )
 
     final_w, final_h = _probe_dimensions(output_path)
+
     if (final_w, final_h) != TARGET_RENDER_SIZE:
-        raise RuntimeError(f"Rendered video has invalid size {final_w}x{final_h}; expected 1080x1920")
+        raise RuntimeError(
+            f"Rendered video has invalid size {final_w}x{final_h}; expected 1080x1920"
+        )
 
     if proxy_created and tracking_source != video_path and os.path.exists(tracking_source):
-        os.remove(tracking_source)
+        try:
+            cinematic_video.close()
+        except:
+            pass
+
+        try:
+            final_video.close()
+        except:
+            pass
+
+        try:
+            reframed_video.close()
+        except:
+            pass
+
+        try:
+            os.remove(tracking_source)
+        except PermissionError:
+            print(f"[WARN] could not delete proxy: {tracking_source}")
 
     return output_path
