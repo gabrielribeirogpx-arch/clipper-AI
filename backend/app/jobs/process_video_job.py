@@ -4,6 +4,7 @@ from app.services.ffmpeg_service import cut_clip, apply_broll_overlay
 from app.services.vertical_render_service import render_vertical_clip
 from app.services.broll_engine import BRollEngine
 from app.services.social_metadata_service import generate_social_metadata
+from app.services.ai_local_service import generate_clip_metadata
 
 
 def process_video(
@@ -74,6 +75,7 @@ def process_video(
 
 
         metadata = generate_social_metadata(hook.get("text", ""), hook.get("viral_score", 0))
+        ai_metadata = generate_clip_metadata(hook.get("text", ""))
 
         generated_clips.append({
             "clip_path": processed_clip_path,
@@ -82,14 +84,18 @@ def process_video(
             "start": hook["start"],
             "end": hook["end"],
             "text": hook["text"],
-            "viral_score": hook["viral_score"],
+            "viral_score": ai_metadata.get("score", hook["viral_score"]),
             "hook_score": hook.get("hook_score", hook["viral_score"]),
             "emotional_score": hook["emotional_score"],
             "retention_score": hook["retention_score"],
-            "title_suggestion": metadata["title"],
-            "caption_suggestion": metadata["caption"],
-            "description_suggestion": metadata["description"],
+            "title_suggestion": ai_metadata.get("titles", [metadata["title"]])[0],
+            "caption_suggestion": ai_metadata.get("hook", metadata["caption"]),
+            "description_suggestion": ai_metadata.get("description", metadata["description"]),
             "hashtags": metadata["hashtags"],
+            "emotion": ai_metadata.get("emotion", "neutro"),
+            "category": ai_metadata.get("category", "curiosidade"),
+            "viral_reason": ai_metadata.get("viral_reason", ""),
+            "title_options": ai_metadata.get("titles", []),
             "broll_timeline": segment_timeline,
         })
 

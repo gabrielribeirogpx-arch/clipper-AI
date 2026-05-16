@@ -82,6 +82,10 @@ def _build_upload_response(transcription, file_id: str, filepath: str):
                 "caption": hook.get("caption_suggestion", ""),
                 "description": hook.get("description_suggestion", ""),
                 "hashtags": hook.get("hashtags", []),
+                "emotion": hook.get("emotion", "neutro"),
+                "category": hook.get("category", "curiosidade"),
+                "viral_reason": hook.get("viral_reason", ""),
+                "title_options": hook.get("title_options", []),
             }
             for index, hook in enumerate(hooks)
         ],
@@ -116,6 +120,10 @@ def _build_upload_response(transcription, file_id: str, filepath: str):
                 "caption_suggestion": hook.get("caption_suggestion", ""),
                 "description_suggestion": hook.get("description_suggestion", ""),
                 "hashtags": hook.get("hashtags", []),
+                "emotion": hook.get("emotion", "neutro"),
+                "category": hook.get("category", "curiosidade"),
+                "viral_reason": hook.get("viral_reason", ""),
+                "title_options": hook.get("title_options", []),
                 "clip_start": hook["start"],
                 "clip_end": hook["end"],
                 "emotional_score": hook["emotional_score"],
