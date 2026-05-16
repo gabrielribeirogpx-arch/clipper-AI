@@ -119,20 +119,25 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
 
     command.append(youtube_url)
     logger.info("Executing yt-dlp command", extra={"command": command})
-    try:
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
-    except subprocess.CalledProcessError as error:
-        category, message = _classify_ytdlp_error(error.stderr or "", error.stdout or "")
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    print("YT-DLP STDOUT:", result.stdout)
+    print("YT-DLP STDERR:", result.stderr)
+    print("YT-DLP RETURN CODE:", result.returncode)
+
+    if result.returncode != 0:
+        category, message = _classify_ytdlp_error(result.stderr or "", result.stdout or "")
+        raw_error = (result.stderr or result.stdout or message or "yt-dlp command failed").strip()
         logger.error(
             "yt-dlp command failed",
             extra={
                 "command": command,
-                "stdout": error.stdout,
-                "stderr": error.stderr,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "returncode": result.returncode,
                 "error_category": category,
             },
         )
-        raise YouTubeDownloadError(message=message, category=category) from error
+        raise YouTubeDownloadError(message=raw_error, category=category)
 
     logger.info(
         "yt-dlp command finished",
@@ -140,6 +145,7 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
             "command": command,
             "stdout": result.stdout,
             "stderr": result.stderr,
+            "returncode": result.returncode,
             "error_category": "none",
         },
     )
