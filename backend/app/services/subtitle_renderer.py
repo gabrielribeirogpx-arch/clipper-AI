@@ -160,16 +160,14 @@ class SubtitleRenderer:
             chunks.append(current)
 
         for chunk in chunks:
-            phrase_words = []
             chunk_start = float(chunk[0]["start"])
             chunk_end = max(float(chunk[-1]["end"]), chunk_start + self.config.min_chunk_duration)
             chunk_duration = chunk_end - chunk_start
 
-            base_size = self._dynamic_font_size(video_w, video_h, len(phrase_words), caption_position, float(style["preset_factor"]))
+            base_size = self._dynamic_font_size(video_w, video_h, len(chunk), caption_position, float(style["preset_factor"]))
             base_size = max(32, min(74, base_size))
             line_height_px = int(base_size * self.config.cinematic_line_height_ratio)
-            block_shift = 0
-                
+
             for word_data in chunk:
                 word = str(word_data["word"])
                 word_start = float(word_data["start"])
@@ -194,8 +192,6 @@ class SubtitleRenderer:
                     .set_start(word_start)
                     .set_end(word_end)
                 )
-
-            clips.append(active)
+                clips.append(active)
 
         return clips
-
