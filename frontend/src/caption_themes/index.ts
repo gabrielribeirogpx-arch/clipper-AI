@@ -44,7 +44,7 @@ export type CaptionTheme = {
   style: ThemeStyle;
   animation: ThemeAnimation;
   splitText: (text: string) => string[];
-  wordTokens: (line: string, heroWord: string) => CaptionWordToken[];
+  wordTokens: (line: string, activeWordIndex?: number) => CaptionWordToken[];
 };
 
 const safeSplit = (text: string): string[] => text.trim().split(/\s+/).filter(Boolean);
@@ -61,23 +61,38 @@ const splitBalanced = (text: string, wordsPerLine = 3, maxLines = 2): string[] =
   return lines;
 };
 
-const splitMicroChunks = (text: string, chunkSizes: number[] = [2, 3]): string[] => {
-  const words = safeSplit(text);
-  if (words.length === 0) return [];
+const splitSemanticChunks = (text: string, maxWordsPerChunk = 2): string[] => {
+  const normalized = text.trim().replace(/\s+/g, ' ');
+  if (!normalized) return [];
+
+  const phraseParts = normalized
+    .split(/([,;:.!?])/)
+    .reduce<string[]>((acc, part, index, arr) => {
+      if (!part.trim()) return acc;
+      if (/^[,;:.!?]$/.test(part) && acc.length > 0) {
+        acc[acc.length - 1] = `${acc[acc.length - 1]}${part}`;
+        return acc;
+      }
+      const next = arr[index + 1];
+      if (next && /^[,;:.!?]$/.test(next)) {
+        acc.push(`${part.trim()}${next}`);
+        return acc;
+      }
+      acc.push(part.trim());
+      return acc;
+    }, []);
 
   const chunks: string[] = [];
-  let cursor = 0;
-  let step = 0;
-
-  while (cursor < words.length) {
-    const requestedSize = chunkSizes[step % chunkSizes.length] ?? 2;
-    const remaining = words.length - cursor;
-    const size = Math.max(1, Math.min(requestedSize, remaining));
-    chunks.push(words.slice(cursor, cursor + size).join(' '));
-    cursor += size;
-    step += 1;
+  for (const phrase of phraseParts) {
+    const words = safeSplit(phrase);
+    if (words.length <= maxWordsPerChunk) {
+      chunks.push(words.join(' '));
+      continue;
+    }
+    for (let i = 0; i < words.length; i += maxWordsPerChunk) {
+      chunks.push(words.slice(i, i + maxWordsPerChunk).join(' '));
+    }
   }
-
   return chunks;
 };
 
@@ -88,12 +103,9 @@ const splitCinematic = (text: string): string[] => {
   return [words.slice(0, middle).join(' '), words.slice(middle).join(' ')];
 };
 
-const baseTokens = (line: string, heroWord: string, uppercase = false): CaptionWordToken[] => {
+const baseTokens = (line: string, activeWordIndex = 0, uppercase = false): CaptionWordToken[] => {
   const words = line.split(' ').filter(Boolean);
-  const hero = heroWord.toLowerCase();
-  const heroIndex = words.findIndex((word) => hero.length > 0 && word.toLowerCase().includes(hero));
-  const fallbackIndex = words.length > 1 ? 1 : 0;
-  const activeIndex = heroIndex >= 0 ? heroIndex : fallbackIndex;
+  const activeIndex = Math.max(0, Math.min(activeWordIndex, Math.max(words.length - 1, 0)));
 
   return words.map((word, index) => ({
     text: uppercase ? word.toUpperCase() : word,
@@ -111,11 +123,11 @@ export const CAPTION_THEMES: Record<CaptionPreset, CaptionTheme> = {
       positionClass: { top: 'top-[10%]', middle: 'top-[44%] -translate-y-1/2', bottom: 'bottom-[14%]' },
       maxWidth: 'min(58vw, 460px)'
     },
-    typography: { fontFamily: 'Montserrat, Anton, Arial Black, sans-serif', fontWeight: 900, fontSize: 'clamp(22px, 2.3vw, 32px)', letterSpacing: '0.01em', lineHeight: 1.14 },
-    style: { baseColor: '#F6F8FC', highlightedColor: '#FFD028', stroke: '1.1px rgba(0,0,0,0.65)', textShadow: '0 3px 8px rgba(0,0,0,0.42)', glowFilter: 'drop-shadow(0 0 3px rgba(255,208,40,.16))' },
-    animation: { lineInitial: { opacity: 0, y: 6, scale: 0.97 }, lineAnimate: { opacity: 1, y: 0, scale: 1 }, lineTransition: { duration: 0.14, ease: 'easeOut' }, wordActiveScale: 1.09 },
-    splitText: (text) => splitMicroChunks(text, [2]),
-    wordTokens: (line, heroWord) => baseTokens(line, heroWord)
+    typography: { fontFamily: 'Montserrat, Anton, Arial Black, sans-serif', fontWeight: 900, fontSize: 'clamp(18px, 1.9vw, 26px)', letterSpacing: '0.008em', lineHeight: 1.02 },
+    style: { baseColor: '#F6F8FC', highlightedColor: '#FFD028', stroke: '1px rgba(0,0,0,0.58)', textShadow: '0 2px 6px rgba(0,0,0,0.36)', glowFilter: 'drop-shadow(0 0 1px rgba(255,208,40,.08))' },
+    animation: { lineInitial: { opacity: 0, y: 3, scale: 0.99 }, lineAnimate: { opacity: 1, y: 0, scale: 1 }, lineTransition: { duration: 0.08, ease: 'easeOut' }, wordActiveScale: 1.06 },
+    splitText: (text) => splitSemanticChunks(text, 2),
+    wordTokens: (line, activeWordIndex) => baseTokens(line, activeWordIndex)
   },
   tiktok: {
     preset: 'tiktok',
@@ -124,13 +136,13 @@ export const CAPTION_THEMES: Record<CaptionPreset, CaptionTheme> = {
       innerClassName: 'mx-auto rounded-xl px-1.5 py-1 md:px-3 md:py-1.5',
       lineClassName: 'text-center',
       positionClass: { top: 'top-[10%]', middle: 'top-[45%] -translate-y-1/2', bottom: 'bottom-[13%]' },
-      maxWidth: 'min(64vw, 520px)'
+      maxWidth: '70%'
     },
-    typography: { fontFamily: 'Montserrat, Anton, Arial Black, sans-serif', fontWeight: 900, fontSize: 'clamp(30px, 4vw, 60px)', letterSpacing: '0.018em', lineHeight: 1.02, textTransform: 'uppercase' },
-    style: { baseColor: '#FFFFFF', highlightedColor: '#FFD028', stroke: '1.8px rgba(0,0,0,0.94)', textShadow: '0 4px 10px rgba(0,0,0,0.62)', glowFilter: 'drop-shadow(0 0 4px rgba(255,208,40,.2))' },
-    animation: { lineInitial: { opacity: 0, scale: 0.9, y: 8 }, lineAnimate: { opacity: 1, scale: 1, y: 0 }, lineTransition: { duration: 0.12, ease: 'easeOut' }, wordActiveScale: 1.2 },
-    splitText: (text) => splitMicroChunks(text, [2, 3]),
-    wordTokens: (line, heroWord) => baseTokens(line, heroWord, true)
+    typography: { fontFamily: 'Montserrat, Anton, Arial Black, sans-serif', fontWeight: 900, fontSize: 'clamp(22px, 2.8vw, 38px)', letterSpacing: '0.014em', lineHeight: 0.95, textTransform: 'uppercase' },
+    style: { baseColor: '#FFFFFF', highlightedColor: '#FFD028', stroke: '1.2px rgba(0,0,0,0.9)', textShadow: '0 2px 7px rgba(0,0,0,0.48)', glowFilter: 'drop-shadow(0 0 1px rgba(255,208,40,.12))' },
+    animation: { lineInitial: { opacity: 0, scale: 0.97, y: 4 }, lineAnimate: { opacity: 1, scale: 1, y: 0 }, lineTransition: { duration: 0.08, ease: 'easeOut' }, wordActiveScale: 1.09 },
+    splitText: (text) => splitSemanticChunks(text, 2),
+    wordTokens: (line, activeWordIndex) => baseTokens(line, activeWordIndex, true)
   },
   cinematic: {
     preset: 'cinematic',
@@ -139,13 +151,13 @@ export const CAPTION_THEMES: Record<CaptionPreset, CaptionTheme> = {
       innerClassName: 'mx-auto rounded-lg px-2 py-1.5 md:px-4 md:py-2',
       lineClassName: 'text-center',
       positionClass: { top: 'top-[11%]', middle: 'top-[46%] -translate-y-1/2', bottom: 'bottom-[15%]' },
-      maxWidth: 'min(60vw, 500px)'
+      maxWidth: '70%'
     },
-    typography: { fontFamily: 'Montserrat, Anton, Arial Black, sans-serif', fontWeight: 900, fontSize: 'clamp(24px, 2.9vw, 44px)', letterSpacing: '0.02em', lineHeight: 1.2 },
-    style: { baseColor: '#F2F5FA', highlightedColor: '#FFD028', stroke: '1.3px rgba(0,0,0,0.76)', textShadow: '0 4px 12px rgba(0,0,0,0.5)', glowFilter: 'drop-shadow(0 0 3px rgba(255,208,40,.14))' },
-    animation: { lineInitial: { opacity: 0, y: 8, scale: 0.96 }, lineAnimate: { opacity: 1, y: 0, scale: 1 }, lineTransition: { duration: 0.24, ease: 'easeInOut' }, wordActiveScale: 1.1 },
-    splitText: (text) => splitMicroChunks(text, [3]),
-    wordTokens: (line, heroWord) => baseTokens(line, heroWord)
+    typography: { fontFamily: 'Montserrat, Anton, Arial Black, sans-serif', fontWeight: 900, fontSize: 'clamp(20px, 2.3vw, 32px)', letterSpacing: '0.016em', lineHeight: 1.02 },
+    style: { baseColor: '#F2F5FA', highlightedColor: '#FFD028', stroke: '1.1px rgba(0,0,0,0.7)', textShadow: '0 2px 8px rgba(0,0,0,0.42)', glowFilter: 'drop-shadow(0 0 1px rgba(255,208,40,.1))' },
+    animation: { lineInitial: { opacity: 0, y: 4, scale: 0.98 }, lineAnimate: { opacity: 1, y: 0, scale: 1 }, lineTransition: { duration: 0.1, ease: 'easeOut' }, wordActiveScale: 1.07 },
+    splitText: (text) => splitSemanticChunks(text, 2),
+    wordTokens: (line, activeWordIndex) => baseTokens(line, activeWordIndex)
   },
   hormozi: null as unknown as CaptionTheme,
   neon: null as unknown as CaptionTheme,
