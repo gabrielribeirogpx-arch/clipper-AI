@@ -108,7 +108,7 @@ export function VideoPreview() {
                   }}
                   onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
                 />
-                {activeSubtitle?.text && (
+                {false && activeSubtitle?.text && (
                   <div className={`pointer-events-none absolute inset-x-6 z-30 ${position === 'top' ? 'top-[10%]' : position === 'middle' ? 'top-[45%] -translate-y-1/2' : 'bottom-[16%]'}`}>
                     <div className="mx-auto max-w-[78%] rounded-2xl px-6 py-3 text-center" style={{ filter: PRESET_STYLES[preset].glow }}>
                       {lines.map((line, idx) => (

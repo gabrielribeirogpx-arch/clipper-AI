@@ -90,48 +90,45 @@ def _ease_in_out_sine(t: float) -> float:
     return -(math.cos(math.pi * t) - 1) / 2
 
 
-def _apply_cinematic_camera_motion(clip, words: List[Dict]):
+def _apply_cinematic_camera_motion(clip, words: List[Dict], debug: bool = False):
     events = _collect_zoom_events(words)
-    if not events:
-        return clip
+    base_zoom = 1.03
 
-    base_zoom = 1.025
+    duration = max(0.01, float(getattr(clip, "duration", 0.0) or 0.0))
+    state = {"x": 0.0, "y": 0.0, "z": base_zoom, "last_t": 0.0}
 
-    def envelope(event, t: float) -> float:
-        if t < event["start"] or t > event["end"]:
-            return 0.0
-        if t <= event["peak"]:
-            p = (t - event["start"]) / max(1e-6, event["peak"] - event["start"])
-            return _ease_out_cubic(p)
-        p = (t - event["peak"]) / max(1e-6, event["end"] - event["peak"])
-        return 1.0 - _ease_in_out_sine(p)
-
-    def zoom_at(t: float) -> float:
-        dynamic = 0.0
+    def desired_zoom(t: float) -> float:
+        z = base_zoom
         for event in events:
-            env = envelope(event, t)
-            if env <= 0:
+            if t < event["start"] - 0.12 or t > event["end"] + 0.18:
                 continue
-            dynamic += (0.08 + 0.14 * event["intensity"]) * env
-        return min(1.34, base_zoom + dynamic)
+            peak_t = max(event["start"], min(event["peak"], t))
+            rise = _ease_out_cubic(max(0.0, min(1.0, (peak_t - event["start"]) / max(1e-6, event["peak"] - event["start"])) ))
+            decay = 1.0 if t <= event["peak"] else (1.0 - _ease_in_out_sine((t - event["peak"]) / max(1e-6, event["end"] - event["peak"])))
+            env = min(rise, decay)
+            z += (0.03 + 0.06 * event["intensity"]) * env
+        return max(1.0, min(1.18, z))
+
+    def smooth_step(target: float, current: float, dt: float, speed: float) -> float:
+        a = max(0.0, min(1.0, dt * speed))
+        return current + (target - current) * a
 
     def position_at(t: float):
-        shake_x = 0.0
-        shake_y = 0.0
-        for i, event in enumerate(events):
-            env = envelope(event, t)
-            if env <= 0:
-                continue
-            micro_amp = (1.6 + 4.6 * event["intensity"]) * env
-            if event["is_shout"]:
-                micro_amp *= 1.18
-            shake_x += math.sin((t * 13.0) + (i * 1.7)) * micro_amp
-            shake_y += math.cos((t * 11.0) + (i * 1.2)) * (micro_amp * 0.6)
+        dt = max(0.0, min(0.2, t - state["last_t"]))
+        state["last_t"] = t
+        target_x = math.sin(t * 0.18) * 2.2
+        target_y = math.cos(t * 0.14) * 1.6
+        if abs(target_x - state["x"]) < 1.2:
+            target_x = state["x"]
+        if abs(target_y - state["y"]) < 1.2:
+            target_y = state["y"]
+        state["x"] = smooth_step(target_x, state["x"], dt, 2.1)
+        state["y"] = smooth_step(target_y, state["y"], dt, 2.1)
+        state["z"] = smooth_step(desired_zoom(t), state["z"], dt, 2.6)
+        return (state["x"], state["y"])
 
-        natural_drift = math.sin(t * 0.55) * 3.0
-        return (shake_x, shake_y + natural_drift)
-
-    return clip.resize(lambda t: zoom_at(float(t))).set_position(position_at)
+    result = clip.resize(lambda t: state.setdefault("z", base_zoom) if t <= 0 else desired_zoom(float(t))).set_position(position_at)
+    return result
 
 
 def _collect_words(segments: List[Dict]) -> List[Dict]:
@@ -173,7 +170,6 @@ def create_tiktok_subtitles(video_path, segments, output_path):
     reframed_video = reframer.apply(base_clip)
 
     words = _collect_words(segments)
-    cinematic_video = _apply_cinematic_camera_motion(reframed_video, words)
     renderer = SubtitleRenderer()
     caption_position = "bottom"
     preset = "cinematic"
@@ -182,6 +178,8 @@ def create_tiktok_subtitles(video_path, segments, output_path):
         caption_position = str(segments[0].get("caption_position", "bottom"))
         preset = str(segments[0].get("caption_preset", "cinematic"))
         debug_layout = bool(segments[0].get("caption_debug", False))
+
+    cinematic_video = _apply_cinematic_camera_motion(reframed_video, words, debug=debug_layout)
     word_layers = renderer.build_word_layers(
         words=words,
         video_w=int(cinematic_video.w),
