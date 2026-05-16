@@ -46,6 +46,7 @@ export type GeneratedClip = {
   title: string;
   caption: string;
   description: string;
+  hashtags?: string[];
 };
 
 type RenderMode = 'preview' | 'export';

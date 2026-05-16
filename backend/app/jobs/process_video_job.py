@@ -3,6 +3,7 @@ from app.services.hook_detector import detect_hooks
 from app.services.ffmpeg_service import cut_clip, apply_broll_overlay
 from app.services.vertical_render_service import render_vertical_clip
 from app.services.broll_engine import BRollEngine
+from app.services.social_metadata_service import generate_social_metadata
 
 
 def process_video(
@@ -72,6 +73,8 @@ def process_video(
         )
 
 
+        metadata = generate_social_metadata(hook.get("text", ""), hook.get("viral_score", 0))
+
         generated_clips.append({
             "clip_path": processed_clip_path,
             "preview_clip": preview_clip_path,
@@ -83,9 +86,10 @@ def process_video(
             "hook_score": hook.get("hook_score", hook["viral_score"]),
             "emotional_score": hook["emotional_score"],
             "retention_score": hook["retention_score"],
-            "title_suggestion": hook.get("title", hook["text"][:70]),
-            "caption_suggestion": hook.get("caption", "This moment changes everything..."),
-            "description_suggestion": hook.get("description", hook["text"]),
+            "title_suggestion": metadata["title"],
+            "caption_suggestion": metadata["caption"],
+            "description_suggestion": metadata["description"],
+            "hashtags": metadata["hashtags"],
             "broll_timeline": segment_timeline,
         })
 

@@ -28,6 +28,18 @@ function ClipCard({ clip }: { clip: GeneratedClip }) {
         <span>Retention: {clip.retention_score}</span><span>Emotion: {clip.emotion_score}</span>
         <span>Duration: {clip.duration}s</span><span>{clip.start.toFixed(1)}s → {clip.end.toFixed(1)}s</span>
       </div>
+
+      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-200">
+        <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-cyan-200/90">Title</p>
+        <p className="text-sm font-semibold text-white">{clip.title}</p>
+        <p className="mt-3 mb-1 text-[10px] uppercase tracking-[0.18em] text-cyan-200/90">Description</p>
+        <p className="text-slate-300">{clip.description}</p>
+        <p className="mt-3 mb-1 text-[10px] uppercase tracking-[0.18em] text-cyan-200/90">Caption</p>
+        <p className="text-slate-100">{clip.caption}</p>
+        {!!clip.hashtags?.length && (
+          <p className="mt-3 text-cyan-200">{clip.hashtags.join(' ')}</p>
+        )}
+      </div>
     </button>
   );
 }
