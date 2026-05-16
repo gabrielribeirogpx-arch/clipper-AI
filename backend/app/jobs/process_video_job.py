@@ -41,10 +41,16 @@ def process_video(video_path):
             if hook["start"] <= segment.get("start", 0) <= hook["end"]
         ])
 
-        clip_path = apply_broll_overlay(
+        preview_clip_path = apply_broll_overlay(
+            raw_clip_path,
+            segment_timeline,
+            f"clip_{index}_preview.mp4"
+        )
+
+        export_clip_path = apply_broll_overlay(
             subtitled_clip_path,
             segment_timeline,
-            f"clip_{index}_broll.mp4"
+            f"clip_{index}_export.mp4"
         )
 
         hook_subtitles = [
@@ -53,7 +59,8 @@ def process_video(video_path):
         ]
 
         generated_clips.append({
-            "clip": clip_path,
+            "preview_clip": preview_clip_path,
+            "export_clip": export_clip_path,
             "start": hook["start"],
             "end": hook["end"],
             "text": hook["text"],

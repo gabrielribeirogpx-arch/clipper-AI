@@ -7,7 +7,7 @@ import { useMounted } from '@/hooks/useMounted';
 import { useTimelineStore } from '@/store/timelineStore';
 import { resolveTheme } from '@/caption_themes';
 
-const DEFAULT_VIDEO_URL = 'http://127.0.0.1:8000/media/clip_0.mp4';
+const DEFAULT_VIDEO_URL = 'http://127.0.0.1:8000/media/raw_clip_0.mp4';
 export function VideoPreview() {
   const { currentTime, setCurrentTime, isPlaying, setPlaying, duration, videoUrl, tracks } = useTimelineStore();
   const mounted = useMounted();
