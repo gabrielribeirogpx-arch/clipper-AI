@@ -53,7 +53,7 @@ def rank_hooks(hooks: List[Dict], max_results: int = 5) -> List[Dict]:
     return ranked[:max_results]
 
 
-def detect_and_rank_hooks(segments: List[Dict], clip_window: int = 30) -> List[Dict]:
+def detect_and_rank_hooks(segments: List[Dict], min_duration: int = 30, max_duration: int = 90) -> List[Dict]:
     hooks = []
     baseline_wps = _average_wps(segments)
     last_end = 0.0
@@ -66,7 +66,8 @@ def detect_and_rank_hooks(segments: List[Dict], clip_window: int = 30) -> List[D
             continue
 
         start = max(segment["start"] - 1.5, 0)
-        end = min(start + clip_window, segments[-1]["end"])
+        dynamic_window = max(min_duration, min(max_duration, int(duration * 4)))
+        end = min(start + dynamic_window, segments[-1]["end"])
 
         window_segments = [
             seg for seg in segments
@@ -83,6 +84,7 @@ def detect_and_rank_hooks(segments: List[Dict], clip_window: int = 30) -> List[D
             "end": round(end, 2),
             "text": " ".join(seg.get("text", "").strip() for seg in window_segments).strip(),
             "source_segment_index": i,
+            "title": (segment.get("text", "").strip()[:58] + "...") if len(segment.get("text", "").strip()) > 58 else segment.get("text", "").strip(),
             **score_data,
         }
 
