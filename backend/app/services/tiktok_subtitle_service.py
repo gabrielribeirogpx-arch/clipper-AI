@@ -4,6 +4,7 @@ import os
 import math
 import re
 import subprocess
+import tempfile
 from typing import Dict, List
 
 from moviepy.editor import CompositeVideoClip, VideoFileClip
@@ -12,6 +13,9 @@ from app.services.reframing_service import ReframingService
 from app.services.subtitle_renderer import SubtitleRenderer
 
 os.environ["IMAGEMAGICK_BINARY"] = r"C:\Program Files\ImageMagick-7.1.2-Q16-HDRI\magick.exe"
+SAFE_CPU_RENDER = os.getenv("SAFE_CPU_RENDER", "false").strip().lower() in {"1", "true", "yes", "on"}
+MAX_TRACKING_WIDTH = 1920
+TARGET_RENDER_SIZE = (1080, 1920)
 
 
 IMPACT_KEYWORDS = {
@@ -159,14 +163,70 @@ def _probe_streams(label: str, media_path: str) -> str:
     return combined_output
 
 
+def _probe_dimensions(media_path: str) -> tuple[int, int]:
+    probe_cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height",
+        "-of",
+        "csv=p=0:s=x",
+        media_path,
+    ]
+    proc = subprocess.run(probe_cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError(f"Failed to probe video dimensions for {media_path}: {proc.stderr}")
+    data = (proc.stdout or "").strip()
+    if "x" not in data:
+        raise RuntimeError(f"Could not parse dimensions for {media_path}: {data}")
+    w, h = data.split("x", 1)
+    return int(w), int(h)
+
+
+def _create_proxy_if_needed(video_path: str) -> tuple[str, bool]:
+    width, _ = _probe_dimensions(video_path)
+    if width <= MAX_TRACKING_WIDTH:
+        return video_path, False
+
+    proxy_file = tempfile.NamedTemporaryFile(prefix="proxy_1080_", suffix=".mp4", delete=False)
+    proxy_file.close()
+    proxy_path = proxy_file.name
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i", video_path,
+        "-vf", "scale=1920:-2",
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-pix_fmt", "yuv420p",
+        "-an",
+        proxy_path,
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError(f"Failed to create proxy video.\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
+    return proxy_path, True
+
+
 def create_tiktok_subtitles(video_path, segments, output_path, speaker_segments=None):
     """Render premium subtitles and export video.
 
     API intentionally unchanged.
     """
-    base_clip = VideoFileClip(video_path)
+    tracking_source, proxy_created = _create_proxy_if_needed(video_path)
+    base_clip = VideoFileClip(tracking_source)
 
-    reframer = ReframingService()
+    print(f"[REFRAME] proxy_created={proxy_created}")
+    print(f"[REFRAME] tracking_resolution={int(base_clip.w)}x{int(base_clip.h)}")
+    print(f"[REFRAME] render_resolution={TARGET_RENDER_SIZE[0]}x{TARGET_RENDER_SIZE[1]}")
+    print(f"[REFRAME] memory_safe_mode={SAFE_CPU_RENDER}")
+
+    sample_fps = 4.0 if SAFE_CPU_RENDER else 6.0
+    max_zoom = 1.08 if SAFE_CPU_RENDER else 1.12
+    reframer = ReframingService(sample_fps=sample_fps, max_zoom=max_zoom)
     caption_position = "bottom"
     preset = "cinematic"
     debug_layout = False
@@ -176,7 +236,7 @@ def create_tiktok_subtitles(video_path, segments, output_path, speaker_segments=
     if segments and isinstance(segments[0], dict):
         segments[0]["camera_keyframes"] = reframer.camera_keyframes
     renderer = SubtitleRenderer()
-    cinematic_video = _apply_cinematic_camera_motion(reframed_video, words, debug=debug_layout)
+    cinematic_video = reframed_video if SAFE_CPU_RENDER else _apply_cinematic_camera_motion(reframed_video, words, debug=debug_layout)
     word_layers = renderer.build_word_layers(
         words=words,
         video_w=int(cinematic_video.w),
@@ -194,12 +254,15 @@ def create_tiktok_subtitles(video_path, segments, output_path, speaker_segments=
     print(f"[PIPELINE] original_file={video_path}")
     _probe_streams("original", video_path)
 
+    render_fps = 20 if SAFE_CPU_RENDER else 24
     final_video.write_videofile(
         silent_output,
         codec="libx264",
         audio=False,
-        fps=24,
-        preset="medium",
+        fps=render_fps,
+        preset="veryfast",
+        threads=4,
+        ffmpeg_params=["-pix_fmt", "yuv420p"],
     )
 
     final_video.close()
@@ -262,10 +325,7 @@ def create_tiktok_subtitles(video_path, segments, output_path, speaker_segments=
 
     os.replace(mux_output, output_path)
 
-    ffprobe_cmd = [
-        "ffprobe",
-        output_path,
-    ]
+    ffprobe_cmd = ["ffprobe", output_path]
     ffprobe_proc = subprocess.run(ffprobe_cmd, capture_output=True, text=True, check=False)
     ffprobe_output = (ffprobe_proc.stdout or "") + (ffprobe_proc.stderr or "")
     print(f"[ffprobe] {output_path}\n{ffprobe_output}")
@@ -273,5 +333,12 @@ def create_tiktok_subtitles(video_path, segments, output_path, speaker_segments=
         raise RuntimeError(f"Rendered video is missing AAC audio stream: {output_path}")
     if "Video:" not in ffprobe_output:
         raise RuntimeError(f"Rendered video is missing video stream: {output_path}")
+
+    final_w, final_h = _probe_dimensions(output_path)
+    if (final_w, final_h) != TARGET_RENDER_SIZE:
+        raise RuntimeError(f"Rendered video has invalid size {final_w}x{final_h}; expected 1080x1920")
+
+    if proxy_created and tracking_source != video_path and os.path.exists(tracking_source):
+        os.remove(tracking_source)
 
     return output_path
