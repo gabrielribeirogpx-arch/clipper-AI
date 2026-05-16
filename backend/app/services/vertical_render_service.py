@@ -44,7 +44,7 @@ def _create_proxy_if_needed(video_path: str) -> tuple[str, bool]:
     return proxy_path, True
 
 
-def create_tiktok_subtitles(video_path: str, segments: List[Dict], output_path: str, speaker_segments=None) -> str:
+def render_vertical_clip(video_path: str, segments: List[Dict], output_path: str, speaker_segments=None) -> str:
     """Render a vertical clip with camera reframing and original audio, without subtitles."""
     tracking_source, proxy_created = _create_proxy_if_needed(video_path)
     tracking_clip = VideoFileClip(tracking_source)

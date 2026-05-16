@@ -1,15 +1,15 @@
 from app.services.whisper_service import transcribe_video
 from app.services.hook_detector import detect_hooks
 from app.services.ffmpeg_service import cut_clip, apply_broll_overlay
-from app.services.tiktok_subtitle_service import create_tiktok_subtitles
+from app.services.vertical_render_service import render_vertical_clip
 from app.services.broll_engine import BRollEngine
 
 
-def process_video(video_path):
+def process_video(video_path, min_clip_length: int = 30, max_clip_length: int = 90):
 
     transcription = transcribe_video(video_path)
 
-    hooks = detect_hooks(transcription)
+    hooks = detect_hooks(transcription, min_duration=min_clip_length, max_duration=max_clip_length)
     broll_engine = BRollEngine()
 
     generated_clips = []
@@ -29,7 +29,7 @@ def process_video(video_path):
             f"raw_clip_{index}.mp4"
         )
 
-        processed_clip_path = create_tiktok_subtitles(
+        processed_clip_path = render_vertical_clip(
             raw_clip_path,
             transcription["segments"],
             f"app/clips/clip_{index}.mp4",
@@ -63,6 +63,7 @@ def process_video(video_path):
             "viral_score": hook["viral_score"],
             "emotional_score": hook["emotional_score"],
             "retention_score": hook["retention_score"],
+            "title_suggestion": hook.get("title", hook["text"][:70]),
             "broll_timeline": segment_timeline,
         })
 

@@ -1,6 +1,8 @@
 from fastapi import APIRouter, UploadFile, File
 from app.jobs.process_video_job import process_video
 from app.data.timeline_state import set_timeline_state
+from app.schemas.upload import YoutubeIngestRequest
+from app.services.youtube_service import download_youtube_video
 import os
 import uuid
 import shutil
@@ -22,6 +24,28 @@ async def upload_video(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
 
     transcription = process_video(filepath)
+    return _build_upload_response(transcription, file_id, filepath)
+
+
+@router.post("/ingest/youtube")
+async def ingest_youtube(payload: YoutubeIngestRequest):
+    file_id = str(uuid.uuid4())
+    filepath = download_youtube_video(
+        payload.youtube_url,
+        start_time=payload.start_time,
+        end_time=payload.end_time,
+    )
+
+    transcription = process_video(
+        filepath,
+        min_clip_length=payload.min_clip_length,
+        max_clip_length=payload.max_clip_length,
+    )
+
+    return _build_upload_response(transcription, file_id, filepath)
+
+
+def _build_upload_response(transcription, file_id: str, filepath: str):
 
     hooks = transcription["hooks"]
     duration = max([hook["end"] for hook in hooks], default=0.0)
@@ -65,4 +89,17 @@ async def upload_video(file: UploadFile = File(...)):
         "timeline": transcription["timeline"],
         "project_id": file_id,
         "duration": duration,
+        "clips": [
+            {
+                "viral_score": hook["viral_score"],
+                "title_suggestion": hook.get("title_suggestion", ""),
+                "clip_start": hook["start"],
+                "clip_end": hook["end"],
+                "emotional_score": hook["emotional_score"],
+                "retention_score": hook["retention_score"],
+                "preview_clip": hook["preview_clip"],
+                "export_clip": hook["export_clip"],
+            }
+            for hook in hooks
+        ],
     }

@@ -4,6 +4,15 @@ export type UploadResponse = {
   timeline: Record<string, unknown>;
   project_id: string;
   duration: number;
+  clips?: Array<Record<string, unknown>>;
+};
+
+export type YouTubeIngestRequest = {
+  youtube_url: string;
+  start_time?: string;
+  end_time?: string;
+  min_clip_length?: number;
+  max_clip_length?: number;
 };
 
 const API_BASE = 'http://localhost:8000';
@@ -48,4 +57,14 @@ export async function getTimeline() {
   const response = await fetch(`${API_BASE}/timeline`);
   if (!response.ok) throw new Error('Failed to fetch timeline');
   return response.json();
+}
+
+export async function ingestYouTubeVideo(payload: YouTubeIngestRequest): Promise<UploadResponse> {
+  const response = await fetch(`${API_BASE}/ingest/youtube`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error('YouTube ingestion failed');
+  return response.json() as Promise<UploadResponse>;
 }
