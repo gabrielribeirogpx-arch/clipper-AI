@@ -8,6 +8,8 @@ import { useTimelineStore } from '@/store/timelineStore';
 import { resolveTheme } from '@/caption_themes';
 
 const DEFAULT_VIDEO_URL = 'http://127.0.0.1:8000/media/raw_clip_0.mp4';
+const CAPTION_LEAD_SECONDS = 0.2;
+
 export function VideoPreview() {
   const { currentTime, setCurrentTime, isPlaying, setPlaying, duration, videoUrl, tracks } = useTimelineStore();
   const mounted = useMounted();
@@ -55,13 +57,14 @@ export function VideoPreview() {
     console.log(resolvedVideoUrl);
   }, [resolvedVideoUrl]);
 
-  const activeSubtitle = tracks.subtitles.find((block) => currentTime >= block.start && currentTime <= block.end);
+  const visualTime = Math.max(0, currentTime + CAPTION_LEAD_SECONDS);
+  const activeSubtitle = tracks.subtitles.find((block) => visualTime >= block.start && visualTime <= block.end);
   const preset = activeSubtitle?.style?.captionPreset ?? 'cinematic';
   const position = activeSubtitle?.style?.captionPosition ?? 'bottom';
   const theme = resolveTheme(preset);
   const lines = theme.splitText(activeSubtitle?.text ?? '');
   const subtitleDuration = Math.max((activeSubtitle?.end ?? 0) - (activeSubtitle?.start ?? 0), 0.01);
-  const subtitleProgress = activeSubtitle ? Math.min(Math.max((currentTime - activeSubtitle.start) / subtitleDuration, 0), 0.999) : 0;
+  const subtitleProgress = activeSubtitle ? Math.min(Math.max((visualTime - activeSubtitle.start) / subtitleDuration, 0), 0.999) : 0;
   const activeLineIndex = lines.length > 0 ? Math.floor(subtitleProgress * lines.length) : 0;
   const activeLine = lines[activeLineIndex] ?? '';
   const activeLineWords = activeLine.split(/\s+/).filter(Boolean);
@@ -137,7 +140,7 @@ export function VideoPreview() {
                                 marginRight: '0.14em',
                                 display: 'inline-block',
                                 transform: token.isHighlighted ? `scale(${theme.animation.wordActiveScale})` : 'scale(1)',
-                                transition: 'transform 120ms ease-out, color 120ms ease-out',
+                                transition: 'transform 80ms linear, color 80ms linear',
                               }}
                             >
                               {token.text}

@@ -123,7 +123,7 @@ export const CAPTION_THEMES: Record<CaptionPreset, CaptionTheme> = {
       positionClass: { top: 'top-[10%]', middle: 'top-[44%] -translate-y-1/2', bottom: 'bottom-[14%]' },
       maxWidth: 'min(58vw, 460px)'
     },
-    typography: { fontFamily: 'Montserrat, Anton, Arial Black, sans-serif', fontWeight: 900, fontSize: 'clamp(18px, 1.9vw, 26px)', letterSpacing: '0.008em', lineHeight: 1.02 },
+    typography: { fontFamily: 'Montserrat, Anton, Arial Black, sans-serif', fontWeight: 900, fontSize: 'clamp(16px, 1.75vw, 24px)', letterSpacing: '0.008em', lineHeight: 1.02 },
     style: { baseColor: '#F6F8FC', highlightedColor: '#FFD028', stroke: '1px rgba(0,0,0,0.58)', textShadow: '0 2px 6px rgba(0,0,0,0.36)', glowFilter: 'drop-shadow(0 0 1px rgba(255,208,40,.08))' },
     animation: { lineInitial: { opacity: 0, y: 3, scale: 0.99 }, lineAnimate: { opacity: 1, y: 0, scale: 1 }, lineTransition: { duration: 0.08, ease: 'easeOut' }, wordActiveScale: 1.06 },
     splitText: (text) => splitSemanticChunks(text, 2),
@@ -138,9 +138,9 @@ export const CAPTION_THEMES: Record<CaptionPreset, CaptionTheme> = {
       positionClass: { top: 'top-[10%]', middle: 'top-[45%] -translate-y-1/2', bottom: 'bottom-[13%]' },
       maxWidth: '70%'
     },
-    typography: { fontFamily: 'Montserrat, Anton, Arial Black, sans-serif', fontWeight: 900, fontSize: 'clamp(22px, 2.8vw, 38px)', letterSpacing: '0.014em', lineHeight: 0.95, textTransform: 'uppercase' },
+    typography: { fontFamily: 'Montserrat, Anton, Arial Black, sans-serif', fontWeight: 900, fontSize: 'clamp(19px, 2.5vw, 34px)', letterSpacing: '0.014em', lineHeight: 0.95, textTransform: 'uppercase' },
     style: { baseColor: '#FFFFFF', highlightedColor: '#FFD028', stroke: '1.2px rgba(0,0,0,0.9)', textShadow: '0 2px 7px rgba(0,0,0,0.48)', glowFilter: 'drop-shadow(0 0 1px rgba(255,208,40,.12))' },
-    animation: { lineInitial: { opacity: 0, scale: 0.97, y: 4 }, lineAnimate: { opacity: 1, scale: 1, y: 0 }, lineTransition: { duration: 0.08, ease: 'easeOut' }, wordActiveScale: 1.09 },
+    animation: { lineInitial: { opacity: 0, scale: 0.985, y: 2 }, lineAnimate: { opacity: 1, scale: 1, y: 0 }, lineTransition: { duration: 0.05, ease: 'easeOut' }, wordActiveScale: 1.08 },
     splitText: (text) => splitSemanticChunks(text, 2),
     wordTokens: (line, activeWordIndex) => baseTokens(line, activeWordIndex, true)
   },
@@ -153,9 +153,9 @@ export const CAPTION_THEMES: Record<CaptionPreset, CaptionTheme> = {
       positionClass: { top: 'top-[11%]', middle: 'top-[46%] -translate-y-1/2', bottom: 'bottom-[15%]' },
       maxWidth: '70%'
     },
-    typography: { fontFamily: 'Montserrat, Anton, Arial Black, sans-serif', fontWeight: 900, fontSize: 'clamp(20px, 2.3vw, 32px)', letterSpacing: '0.016em', lineHeight: 1.02 },
+    typography: { fontFamily: 'Montserrat, Anton, Arial Black, sans-serif', fontWeight: 900, fontSize: 'clamp(18px, 2.05vw, 29px)', letterSpacing: '0.016em', lineHeight: 1.02 },
     style: { baseColor: '#F2F5FA', highlightedColor: '#FFD028', stroke: '1.1px rgba(0,0,0,0.7)', textShadow: '0 2px 8px rgba(0,0,0,0.42)', glowFilter: 'drop-shadow(0 0 1px rgba(255,208,40,.1))' },
-    animation: { lineInitial: { opacity: 0, y: 4, scale: 0.98 }, lineAnimate: { opacity: 1, y: 0, scale: 1 }, lineTransition: { duration: 0.1, ease: 'easeOut' }, wordActiveScale: 1.07 },
+    animation: { lineInitial: { opacity: 0, y: 2, scale: 0.99 }, lineAnimate: { opacity: 1, y: 0, scale: 1 }, lineTransition: { duration: 0.06, ease: 'easeOut' }, wordActiveScale: 1.06 },
     splitText: (text) => splitSemanticChunks(text, 2),
     wordTokens: (line, activeWordIndex) => baseTokens(line, activeWordIndex)
   },
