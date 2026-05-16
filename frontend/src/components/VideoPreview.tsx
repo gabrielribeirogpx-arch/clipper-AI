@@ -48,6 +48,10 @@ export function VideoPreview() {
   const heroWord = activeSubtitle?.text?.split(/\s+/).find((word) => word.length > 4) ?? '';
   const theme = resolveTheme(preset);
   const lines = theme.splitText(activeSubtitle?.text ?? '');
+  const subtitleDuration = Math.max((activeSubtitle?.end ?? 0) - (activeSubtitle?.start ?? 0), 0.01);
+  const subtitleProgress = activeSubtitle ? Math.min(Math.max((currentTime - activeSubtitle.start) / subtitleDuration, 0), 0.999) : 0;
+  const activeLineIndex = lines.length > 0 ? Math.floor(subtitleProgress * lines.length) : 0;
+  const activeLine = lines[activeLineIndex] ?? '';
 
   if (!mounted) return <div className="h-[760px] rounded-[2rem] border border-white/10 bg-white/5" />;
 
@@ -88,9 +92,8 @@ export function VideoPreview() {
                 {activeSubtitle?.text && (
                   <div className={`${theme.layout.containerClassName} ${theme.layout.positionClass[position]}`}>
                     <div className={theme.layout.innerClassName} style={{ maxWidth: theme.layout.maxWidth, filter: theme.style.glowFilter }}>
-                      {lines.map((line, idx) => (
-                        <motion.div
-                          key={`${line}-${idx}`}
+                      <motion.div
+                          key={`${activeLine}-${activeLineIndex}`}
                           initial={theme.animation.lineInitial}
                           animate={theme.animation.lineAnimate}
                           transition={theme.animation.lineTransition}
@@ -103,12 +106,11 @@ export function VideoPreview() {
                             letterSpacing: theme.typography.letterSpacing,
                             textTransform: theme.typography.textTransform,
                             textShadow: theme.style.textShadow,
-                            marginBottom: idx < lines.length - 1 ? '0.18em' : 0,
                           }}
                         >
-                          {theme.wordTokens(line, heroWord).map((token, tokenIdx) => (
+                          {theme.wordTokens(activeLine, heroWord).map((token, tokenIdx) => (
                             <span
-                              key={`${line}-${token.text}-${tokenIdx}`}
+                              key={`${activeLine}-${token.text}-${tokenIdx}`}
                               style={{
                                 color: token.isHighlighted ? theme.style.highlightedColor : theme.style.baseColor,
                                 WebkitTextStroke: theme.style.stroke,
@@ -124,8 +126,7 @@ export function VideoPreview() {
                               {token.text}
                             </span>
                           ))}
-                        </motion.div>
-                      ))}
+                      </motion.div>
                     </div>
                   </div>
                 )}

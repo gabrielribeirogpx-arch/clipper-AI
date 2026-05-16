@@ -61,6 +61,26 @@ const splitBalanced = (text: string, wordsPerLine = 3, maxLines = 2): string[] =
   return lines;
 };
 
+const splitMicroChunks = (text: string, chunkSizes: number[] = [2, 3]): string[] => {
+  const words = safeSplit(text);
+  if (words.length === 0) return [];
+
+  const chunks: string[] = [];
+  let cursor = 0;
+  let step = 0;
+
+  while (cursor < words.length) {
+    const requestedSize = chunkSizes[step % chunkSizes.length] ?? 2;
+    const remaining = words.length - cursor;
+    const size = Math.max(1, Math.min(requestedSize, remaining));
+    chunks.push(words.slice(cursor, cursor + size).join(' '));
+    cursor += size;
+    step += 1;
+  }
+
+  return chunks;
+};
+
 const splitCinematic = (text: string): string[] => {
   const words = safeSplit(text);
   if (words.length <= 4) return [words.join(' ')];
@@ -69,10 +89,15 @@ const splitCinematic = (text: string): string[] => {
 };
 
 const baseTokens = (line: string, heroWord: string, uppercase = false): CaptionWordToken[] => {
+  const words = line.split(' ').filter(Boolean);
   const hero = heroWord.toLowerCase();
-  return line.split(' ').filter(Boolean).map((word) => ({
+  const heroIndex = words.findIndex((word) => hero.length > 0 && word.toLowerCase().includes(hero));
+  const fallbackIndex = words.length > 1 ? 1 : 0;
+  const activeIndex = heroIndex >= 0 ? heroIndex : fallbackIndex;
+
+  return words.map((word, index) => ({
     text: uppercase ? word.toUpperCase() : word,
-    isHighlighted: hero.length > 0 && word.toLowerCase().includes(hero)
+    isHighlighted: index === activeIndex
   }));
 };
 
@@ -81,45 +106,45 @@ export const CAPTION_THEMES: Record<CaptionPreset, CaptionTheme> = {
     preset: 'minimal',
     layout: {
       containerClassName: 'pointer-events-none absolute inset-x-3 z-30 md:inset-x-6',
-      innerClassName: 'mx-auto rounded-xl px-2 py-1 md:px-4 md:py-2',
+      innerClassName: 'mx-auto rounded-lg px-2 py-1 md:px-3 md:py-1.5',
       lineClassName: 'text-center',
-      positionClass: { top: 'top-[9%]', middle: 'top-[46%] -translate-y-1/2', bottom: 'bottom-[12%]' },
-      maxWidth: 'min(88vw, 860px)'
+      positionClass: { top: 'top-[10%]', middle: 'top-[44%] -translate-y-1/2', bottom: 'bottom-[14%]' },
+      maxWidth: 'min(58vw, 460px)'
     },
-    typography: { fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 500, fontSize: 'clamp(20px, 2.4vw, 34px)', letterSpacing: '0.012em', lineHeight: 1.24 },
-    style: { baseColor: '#FFFFFF', highlightedColor: '#EAF2FF', stroke: '0.9px rgba(0,0,0,0.7)', textShadow: '0 3px 10px rgba(0,0,0,0.45)', glowFilter: 'drop-shadow(0 0 6px rgba(255,255,255,.15))' },
-    animation: { lineInitial: { opacity: 0, y: 8 }, lineAnimate: { opacity: 1, y: 0 }, lineTransition: { duration: 0.24, ease: 'easeOut' }, wordActiveScale: 1.03 },
-    splitText: (text) => splitBalanced(text, 4, 2),
+    typography: { fontFamily: 'Montserrat, Anton, Arial Black, sans-serif', fontWeight: 900, fontSize: 'clamp(22px, 2.3vw, 32px)', letterSpacing: '0.01em', lineHeight: 1.14 },
+    style: { baseColor: '#F6F8FC', highlightedColor: '#FFD028', stroke: '1.1px rgba(0,0,0,0.65)', textShadow: '0 3px 8px rgba(0,0,0,0.42)', glowFilter: 'drop-shadow(0 0 3px rgba(255,208,40,.16))' },
+    animation: { lineInitial: { opacity: 0, y: 6, scale: 0.97 }, lineAnimate: { opacity: 1, y: 0, scale: 1 }, lineTransition: { duration: 0.14, ease: 'easeOut' }, wordActiveScale: 1.09 },
+    splitText: (text) => splitMicroChunks(text, [2]),
     wordTokens: (line, heroWord) => baseTokens(line, heroWord)
   },
   tiktok: {
     preset: 'tiktok',
     layout: {
       containerClassName: 'pointer-events-none absolute inset-x-2 z-30 md:inset-x-5',
-      innerClassName: 'mx-auto rounded-2xl px-2 py-1 md:px-4 md:py-2',
+      innerClassName: 'mx-auto rounded-xl px-1.5 py-1 md:px-3 md:py-1.5',
       lineClassName: 'text-center',
-      positionClass: { top: 'top-[8%]', middle: 'top-[46%] -translate-y-1/2', bottom: 'bottom-[11%]' },
-      maxWidth: 'min(94vw, 940px)'
+      positionClass: { top: 'top-[10%]', middle: 'top-[45%] -translate-y-1/2', bottom: 'bottom-[13%]' },
+      maxWidth: 'min(64vw, 520px)'
     },
-    typography: { fontFamily: 'Montserrat, Arial Black, sans-serif', fontWeight: 800, fontSize: 'clamp(28px, 3.9vw, 62px)', letterSpacing: '0.02em', lineHeight: 1.03, textTransform: 'uppercase' },
-    style: { baseColor: '#FFFFFF', highlightedColor: '#FFD60A', stroke: '2.8px rgba(0,0,0,0.98)', textShadow: '0 6px 0 rgba(0,0,0,0.95), 0 14px 26px rgba(0,0,0,0.7)', glowFilter: 'drop-shadow(0 0 16px rgba(255,214,10,.34))', backgroundBox: 'rgba(0,0,0,0.44)', activeBackgroundBox: 'rgba(255,214,10,0.18)' },
-    animation: { lineInitial: { opacity: 0, scale: 0.86, y: 12 }, lineAnimate: { opacity: 1, scale: 1, y: 0 }, lineTransition: { duration: 0.16, ease: 'easeOut' }, wordActiveScale: 1.18 },
-    splitText: (text) => splitBalanced(text, 2, 2),
+    typography: { fontFamily: 'Montserrat, Anton, Arial Black, sans-serif', fontWeight: 900, fontSize: 'clamp(30px, 4vw, 60px)', letterSpacing: '0.018em', lineHeight: 1.02, textTransform: 'uppercase' },
+    style: { baseColor: '#FFFFFF', highlightedColor: '#FFD028', stroke: '1.8px rgba(0,0,0,0.94)', textShadow: '0 4px 10px rgba(0,0,0,0.62)', glowFilter: 'drop-shadow(0 0 4px rgba(255,208,40,.2))' },
+    animation: { lineInitial: { opacity: 0, scale: 0.9, y: 8 }, lineAnimate: { opacity: 1, scale: 1, y: 0 }, lineTransition: { duration: 0.12, ease: 'easeOut' }, wordActiveScale: 1.2 },
+    splitText: (text) => splitMicroChunks(text, [2, 3]),
     wordTokens: (line, heroWord) => baseTokens(line, heroWord, true)
   },
   cinematic: {
     preset: 'cinematic',
     layout: {
       containerClassName: 'pointer-events-none absolute inset-x-4 z-30 md:inset-x-8',
-      innerClassName: 'mx-auto rounded-xl px-3 py-2 md:px-5 md:py-3',
+      innerClassName: 'mx-auto rounded-lg px-2 py-1.5 md:px-4 md:py-2',
       lineClassName: 'text-center',
-      positionClass: { top: 'top-[10%]', middle: 'top-[47%] -translate-y-1/2', bottom: 'bottom-[14%]' },
-      maxWidth: 'min(86vw, 900px)'
+      positionClass: { top: 'top-[11%]', middle: 'top-[46%] -translate-y-1/2', bottom: 'bottom-[15%]' },
+      maxWidth: 'min(60vw, 500px)'
     },
-    typography: { fontFamily: 'Inter, Helvetica Neue, Arial, sans-serif', fontWeight: 600, fontSize: 'clamp(24px, 3.1vw, 48px)', letterSpacing: '0.042em', lineHeight: 1.32 },
-    style: { baseColor: '#F8FBFF', highlightedColor: '#FFFFFF', stroke: '1.5px rgba(0,0,0,0.78)', textShadow: '0 5px 18px rgba(0,0,0,0.58)', glowFilter: 'drop-shadow(0 0 12px rgba(177,208,255,.22))' },
-    animation: { lineInitial: { opacity: 0, y: 10 }, lineAnimate: { opacity: 1, y: 0 }, lineTransition: { duration: 0.42, ease: 'easeInOut' }, wordActiveScale: 1.04 },
-    splitText: splitCinematic,
+    typography: { fontFamily: 'Montserrat, Anton, Arial Black, sans-serif', fontWeight: 900, fontSize: 'clamp(24px, 2.9vw, 44px)', letterSpacing: '0.02em', lineHeight: 1.2 },
+    style: { baseColor: '#F2F5FA', highlightedColor: '#FFD028', stroke: '1.3px rgba(0,0,0,0.76)', textShadow: '0 4px 12px rgba(0,0,0,0.5)', glowFilter: 'drop-shadow(0 0 3px rgba(255,208,40,.14))' },
+    animation: { lineInitial: { opacity: 0, y: 8, scale: 0.96 }, lineAnimate: { opacity: 1, y: 0, scale: 1 }, lineTransition: { duration: 0.24, ease: 'easeInOut' }, wordActiveScale: 1.1 },
+    splitText: (text) => splitMicroChunks(text, [3]),
     wordTokens: (line, heroWord) => baseTokens(line, heroWord)
   },
   hormozi: null as unknown as CaptionTheme,
