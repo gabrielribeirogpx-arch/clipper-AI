@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { InspectorPanel } from '@/components/InspectorPanel';
 import { TimelineTracks } from '@/components/TimelineTracks';
 import { VideoPreview } from '@/components/VideoPreview';
+import { ClipResultsPanel } from '@/components/ClipResultsPanel';
 import { useTimelineStore } from '@/store/timelineStore';
 import { useMounted } from '@/hooks/useMounted';
 import { useEffect } from 'react';
@@ -104,6 +105,7 @@ export default function Home() {
               <TimelineTracks />
             </div>
             <div className="space-y-10">
+              <ClipResultsPanel />
               <InspectorPanel />
               <RenderQueuePanel />
             </div>

@@ -70,6 +70,17 @@ def _build_upload_response(transcription, file_id: str, filepath: str):
                 "label": f"Clip {index + 1}",
                 "start": hook["start"],
                 "end": hook["end"],
+                "duration": round(hook["end"] - hook["start"], 2),
+                "clip_path": f"/media/{os.path.basename(hook['clip_path'])}",
+                "preview_video": f"/media/{os.path.basename(hook['preview_clip'])}",
+                "export_video": f"/media/{os.path.basename(hook['export_clip'])}",
+                "viral_score": hook["viral_score"],
+                "hook_score": hook.get("hook_score", hook["viral_score"]),
+                "retention_score": hook["retention_score"],
+                "emotion_score": hook["emotional_score"],
+                "title": hook.get("title_suggestion", ""),
+                "caption": hook.get("caption_suggestion", ""),
+                "description": hook.get("description_suggestion", ""),
             }
             for index, hook in enumerate(hooks)
         ],
@@ -97,12 +108,17 @@ def _build_upload_response(transcription, file_id: str, filepath: str):
         "duration": duration,
         "clips": [
             {
+                "clip_path": f"/media/{os.path.basename(hook['clip_path'])}",
                 "viral_score": hook["viral_score"],
+                "hook_score": hook.get("hook_score", hook["viral_score"]),
                 "title_suggestion": hook.get("title_suggestion", ""),
+                "caption_suggestion": hook.get("caption_suggestion", ""),
+                "description_suggestion": hook.get("description_suggestion", ""),
                 "clip_start": hook["start"],
                 "clip_end": hook["end"],
                 "emotional_score": hook["emotional_score"],
                 "retention_score": hook["retention_score"],
+                "duration": round(hook["end"] - hook["start"], 2),
                 "preview_clip": hook["preview_clip"],
                 "export_clip": hook["export_clip"],
             }
