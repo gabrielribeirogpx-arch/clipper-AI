@@ -138,7 +138,6 @@ class SubtitleRenderer:
             return clips
 
         safe = self._safe_area(video_w, video_h)
-        max_caption_w = int(video_w * self.config.max_caption_width_ratio)
         style = self._resolve_style(preset)
         font_name = self.resolve_font()
         caption_center_y = self._caption_center_y(safe, video_h, caption_position)
@@ -160,36 +159,9 @@ class SubtitleRenderer:
             chunks.append(current)
 
         for chunk in chunks:
-            chunk_start = float(chunk[0]["start"])
-            chunk_end = max(float(chunk[-1]["end"]), chunk_start + self.config.min_chunk_duration)
-            chunk_duration = chunk_end - chunk_start
-
             base_size = self._dynamic_font_size(video_w, video_h, len(chunk), caption_position, float(style["preset_factor"]))
             base_size = max(52, min(112, base_size))
-            line_height_px = int(base_size * self.config.cinematic_line_height_ratio)
-
-            chunk_text = " ".join(str(item["word"]) for item in chunk)
             y = caption_center_y
-            inactive = (
-                TextClip(
-                    txt=chunk_text,
-                    fontsize=int(base_size * 0.88),
-                    font=font_name,
-                    color="#F8F8F8",
-                    stroke_color="#111111",
-                    stroke_width=max(4, int(base_size * 0.10)),
-                    align="center",
-                    kerning=int(style["line_kerning"]),
-                    method="caption",
-                    size=(max_caption_w, None),
-                    interline=max(8, int(line_height_px - base_size))
-                )
-                .set_opacity(0.94)
-                .set_position(("center", y))
-                .set_start(chunk_start)
-                .set_end(chunk_end)
-            )
-            clips.append(inactive)
 
             for word_data in chunk:
                 word = str(word_data["word"])
