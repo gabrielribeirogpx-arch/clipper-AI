@@ -43,7 +43,6 @@ async def upload_video(file: UploadFile = File(...)):
             }
             for index, hook in enumerate(hooks)
         ],
-        "subtitles": transcription["timeline"]["subtitles"],
         "hooks": [
             {
                 "id": f"hook-{index}",
