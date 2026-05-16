@@ -73,15 +73,19 @@ def process_video(
 
 
         generated_clips.append({
+            "clip_path": processed_clip_path,
             "preview_clip": preview_clip_path,
             "export_clip": export_clip_path,
             "start": hook["start"],
             "end": hook["end"],
             "text": hook["text"],
             "viral_score": hook["viral_score"],
+            "hook_score": hook.get("hook_score", hook["viral_score"]),
             "emotional_score": hook["emotional_score"],
             "retention_score": hook["retention_score"],
             "title_suggestion": hook.get("title", hook["text"][:70]),
+            "caption_suggestion": hook.get("caption", "This moment changes everything..."),
+            "description_suggestion": hook.get("description", hook["text"]),
             "broll_timeline": segment_timeline,
         })
 

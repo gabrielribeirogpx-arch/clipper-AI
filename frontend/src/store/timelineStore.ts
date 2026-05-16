@@ -30,6 +30,24 @@ export type RenderJob = {
   progress: number;
 };
 
+export type GeneratedClip = {
+  id: string;
+  label: string;
+  start: number;
+  end: number;
+  duration: number;
+  clip_path: string;
+  preview_video: string;
+  export_video: string;
+  viral_score: number;
+  hook_score: number;
+  retention_score: number;
+  emotion_score: number;
+  title: string;
+  caption: string;
+  description: string;
+};
+
 type RenderMode = 'preview' | 'export';
 
 type TimelineState = {
@@ -44,7 +62,10 @@ type TimelineState = {
   selectedBlockId: string | null;
   tracks: Record<TrackType, ClipBlock[]>;
   renderQueue: RenderJob[];
+  generatedClips: GeneratedClip[];
+  selectedClipId: string | null;
   hydrateFromBackend: () => Promise<void>;
+  selectClip: (clipId: string) => void;
   setCurrentTime: (time: number) => void;
   setPlaying: (playing: boolean) => void;
   setZoom: (zoom: number) => void;
@@ -81,9 +102,23 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
     { id: 'job-3', clipName: 'Clip 03', state: 'completed', progress: 100 },
     { id: 'job-4', clipName: 'Clip 04', state: 'failed', progress: 18 }
   ],
+  generatedClips: [],
+  selectedClipId: null,
   setCurrentTime: (currentTime) => set({ currentTime: clampTime(currentTime, get().duration) }),
   setPlaying: (isPlaying) => set({ isPlaying }),
   setZoom: (zoom) => set({ zoom: Math.min(3, Math.max(0.5, zoom)) }),
+  selectClip: (clipId) =>
+    set((state) => {
+      const clip = state.generatedClips.find((item) => item.id === clipId);
+      if (!clip) return {};
+      const nextVideoUrl = state.renderMode === 'export' ? clip.export_video : clip.preview_video;
+      return {
+        selectedClipId: clipId,
+        videoUrl: `http://localhost:8000${nextVideoUrl}`,
+        duration: clip.duration,
+        currentTime: clip.start,
+      };
+    }),
   selectBlock: (selectedBlockId) => set({ selectedBlockId }),
   updateBlock: (track, id, patch) =>
     set((state) => ({
@@ -122,12 +157,22 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
     const previewVideoUrl = data.previewVideoUrl ? `http://localhost:8000${data.previewVideoUrl}` : null;
     const exportVideoUrl = data.exportVideoUrl ? `http://localhost:8000${data.exportVideoUrl}` : null;
     const renderMode: RenderMode = data.renderMode === 'export' ? 'export' : 'preview';
+    const generatedClips: GeneratedClip[] = (data.clips ?? [])
+      .map((clip: GeneratedClip) => ({ ...clip }))
+      .sort((a: GeneratedClip, b: GeneratedClip) => b.viral_score - a.viral_score);
+    const selectedClipId = generatedClips[0]?.id ?? null;
+    const selectedClip = generatedClips[0];
     set({
       renderMode,
       previewVideoUrl,
       exportVideoUrl,
-      videoUrl: renderMode === 'export' ? exportVideoUrl : previewVideoUrl,
-      duration: data.duration ?? 0,
+      videoUrl: selectedClip
+        ? `http://localhost:8000${renderMode === 'export' ? selectedClip.export_video : selectedClip.preview_video}`
+        : renderMode === 'export' ? exportVideoUrl : previewVideoUrl,
+      duration: selectedClip?.duration ?? data.duration ?? 0,
+      currentTime: selectedClip?.start ?? 0,
+      generatedClips,
+      selectedClipId,
       tracks: {
         broll: mapTrack(data.broll, 'broll'),
         hooks: mapTrack(data.hooks, 'hooks'),

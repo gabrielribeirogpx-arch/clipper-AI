@@ -4,7 +4,8 @@ import { useMemo } from 'react';
 import { TrackType, useTimelineStore } from '@/store/timelineStore';
 
 export function InspectorPanel() {
-  const { tracks, selectedBlockId, updateBlock } = useTimelineStore();
+  const { tracks, selectedBlockId, updateBlock, generatedClips, selectedClipId } = useTimelineStore();
+  const selectedClip = generatedClips.find((clip) => clip.id === selectedClipId);
 
   const selected = useMemo(() => {
     for (const track of Object.keys(tracks) as TrackType[]) {
@@ -34,6 +35,14 @@ export function InspectorPanel() {
         <input type="number" step="0.1" value={selected.block.start} onChange={(e) => updateBlock(selected.track, selected.block.id, { start: Number(e.target.value) })} className="rounded-xl border border-white/12 bg-[#070d1b] p-3 text-sm text-slate-100 outline-none transition focus:border-cyan-300/50" />
         <input type="number" step="0.1" value={selected.block.end} onChange={(e) => updateBlock(selected.track, selected.block.id, { end: Number(e.target.value) })} className="rounded-xl border border-white/12 bg-[#070d1b] p-3 text-sm text-slate-100 outline-none transition focus:border-cyan-300/50" />
       </div>
+      {selectedClip && (
+        <div className="mt-4 space-y-3 rounded-2xl border border-white/10 bg-[#0b1224]/80 p-4 text-sm text-slate-200">
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-400">AI Metadata</p>
+          <p><span className="text-slate-400">Title:</span> {selectedClip.title}</p>
+          <p><span className="text-slate-400">Caption:</span> {selectedClip.caption}</p>
+          <p><span className="text-slate-400">Description:</span> {selectedClip.description}</p>
+        </div>
+      )}
     </div>
   );
 }
