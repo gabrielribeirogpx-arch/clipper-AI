@@ -10,7 +10,7 @@ from moviepy.editor import TextClip
 
 @dataclass(frozen=True)
 class SubtitleStyleConfig:
-    font_candidates: Sequence[str] = ("Montserrat-ExtraBold", "Anton", "Impact", "Arial Black")
+    font_candidates: Sequence[str] = ("Anton", "Montserrat-ExtraBold", "Impact", "Arial Black")
     emphasis_keywords: frozenset[str] = frozenset({
         "atencao", "atenção", "urgente", "segredo", "dinheiro", "nunca",
         "impossivel", "impossível", "choque", "milionario", "milionário",
@@ -58,11 +58,11 @@ class SubtitleRenderer:
         return {"left": side, "right": video_w - side, "top": top, "bottom": video_h - bottom}
 
     def _dynamic_font_size(self, video_w: int, video_h: int, words_count: int, caption_position: Literal["top", "middle", "bottom"], preset_factor: float) -> int:
-        base = min(video_w * 0.082, video_h * 0.125)
+        base = min(video_w * 0.112, video_h * 0.158)
         words_penalty = 1.0 - min(0.22, max(0, words_count - 1) * 0.035)
         position_factor = {"top": 0.94, "middle": 1.0, "bottom": 0.96}.get(caption_position, 1.0)
         size = int(base * words_penalty * position_factor * preset_factor)
-        return max(48, min(148, size))
+        return max(72, min(186, size))
 
     def _build_caption_lines(self, words: List[str]) -> List[List[str]]:
         cleaned = [w for w in words if w and w.strip()]
@@ -160,7 +160,7 @@ class SubtitleRenderer:
 
         for chunk in chunks:
             base_size = self._dynamic_font_size(video_w, video_h, len(chunk), caption_position, float(style["preset_factor"]))
-            base_size = max(52, min(112, base_size))
+            base_size = max(84, min(172, base_size))
             y = caption_center_y
 
             for word_data in chunk:
@@ -169,7 +169,7 @@ class SubtitleRenderer:
                 word_end = float(word_data["end"])
 
                 emphasis = self._is_emphasis_word(word)
-                active_size = int(base_size * (1.26 if emphasis else 1.16))
+                active_size = int(base_size * (1.34 if emphasis else 1.24))
                 fill_color = "#FFE600"
 
                 active = (
@@ -179,7 +179,7 @@ class SubtitleRenderer:
                         font=font_name,
                         color=fill_color,
                         stroke_color="#000000",
-                        stroke_width=max(6, int(active_size * 0.12)),
+                        stroke_width=max(10, int(active_size * 0.17)),
                         kerning=int(style["line_kerning"]),
                         method="label"
                     )
@@ -187,7 +187,7 @@ class SubtitleRenderer:
                     .set_position(("center", y))
                     .set_start(word_start)
                     .set_end(word_end)
-                    .resize(lambda t: 1.0 + 0.10 * self._soft_bounce(t / max(0.001, word_end - word_start)))
+                    .resize(lambda t: 1.0 + 0.14 * self._soft_bounce(t / max(0.001, word_end - word_start)))
                 )
                 clips.append(active)
 
