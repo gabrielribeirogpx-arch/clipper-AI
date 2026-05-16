@@ -5,13 +5,11 @@ import { motion } from 'framer-motion';
 import { shouldSyncProgress } from '@/lib/playbackEngine';
 import { useMounted } from '@/hooks/useMounted';
 import { useTimelineStore } from '@/store/timelineStore';
-import { resolveTheme } from '@/caption_themes';
 
 const DEFAULT_VIDEO_URL = 'http://127.0.0.1:8000/media/raw_clip_0.mp4';
-const CAPTION_LEAD_SECONDS = 0.2;
 
 export function VideoPreview() {
-  const { currentTime, setCurrentTime, isPlaying, setPlaying, duration, videoUrl, tracks } = useTimelineStore();
+  const { currentTime, setCurrentTime, isPlaying, setPlaying, duration, videoUrl } = useTimelineStore();
   const mounted = useMounted();
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -57,22 +55,6 @@ export function VideoPreview() {
     console.log(resolvedVideoUrl);
   }, [resolvedVideoUrl]);
 
-  const visualTime = Math.max(0, currentTime + CAPTION_LEAD_SECONDS);
-  const activeSubtitle = tracks.subtitles.find((block) => visualTime >= block.start && visualTime <= block.end);
-  const preset = activeSubtitle?.style?.captionPreset ?? 'cinematic';
-  const position = activeSubtitle?.style?.captionPosition ?? 'bottom';
-  const theme = resolveTheme(preset);
-  const lines = theme.splitText(activeSubtitle?.text ?? '');
-  const subtitleDuration = Math.max((activeSubtitle?.end ?? 0) - (activeSubtitle?.start ?? 0), 0.01);
-  const subtitleProgress = activeSubtitle ? Math.min(Math.max((visualTime - activeSubtitle.start) / subtitleDuration, 0), 0.999) : 0;
-  const activeLineIndex = lines.length > 0 ? Math.floor(subtitleProgress * lines.length) : 0;
-  const activeLine = lines[activeLineIndex] ?? '';
-  const activeLineWords = activeLine.split(/\s+/).filter(Boolean);
-  const lineProgress = lines.length > 0 ? (subtitleProgress * lines.length) - activeLineIndex : 0;
-  const activeWordIndex = activeLineWords.length > 1
-    ? Math.min(Math.floor(Math.max(lineProgress, 0) * activeLineWords.length), activeLineWords.length - 1)
-    : 0;
-
   if (!mounted) return <div className="h-[760px] rounded-[2rem] border border-white/10 bg-white/5" />;
 
   return (
@@ -109,47 +91,6 @@ export function VideoPreview() {
                   }}
                   onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
                 />
-                {activeSubtitle?.text && (
-                  <div className={`${theme.layout.containerClassName} ${theme.layout.positionClass[position]}`}>
-                    <div className={theme.layout.innerClassName} style={{ maxWidth: theme.layout.maxWidth, filter: theme.style.glowFilter }}>
-                      <motion.div
-                          key={`${activeLine}-${activeLineIndex}`}
-                          initial={theme.animation.lineInitial}
-                          animate={theme.animation.lineAnimate}
-                          transition={theme.animation.lineTransition}
-                          className={theme.layout.lineClassName}
-                          style={{
-                            fontFamily: theme.typography.fontFamily,
-                            fontSize: theme.typography.fontSize,
-                            fontWeight: theme.typography.fontWeight,
-                            lineHeight: theme.typography.lineHeight,
-                            letterSpacing: theme.typography.letterSpacing,
-                            textTransform: theme.typography.textTransform,
-                            textShadow: theme.style.textShadow,
-                          }}
-                        >
-                          {theme.wordTokens(activeLine, activeWordIndex).map((token, tokenIdx) => (
-                            <span
-                              key={`${activeLine}-${token.text}-${tokenIdx}`}
-                              style={{
-                                color: token.isHighlighted ? theme.style.highlightedColor : theme.style.baseColor,
-                                WebkitTextStroke: theme.style.stroke,
-                                background: token.isHighlighted ? theme.style.activeBackgroundBox : theme.style.backgroundBox,
-                                borderRadius: '0.2em',
-                                padding: token.isHighlighted || theme.style.backgroundBox ? '0.02em 0.16em' : undefined,
-                                marginRight: '0.14em',
-                                display: 'inline-block',
-                                transform: token.isHighlighted ? `scale(${theme.animation.wordActiveScale})` : 'scale(1)',
-                                transition: 'transform 80ms linear, color 80ms linear',
-                              }}
-                            >
-                              {token.text}
-                            </span>
-                          ))}
-                      </motion.div>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
