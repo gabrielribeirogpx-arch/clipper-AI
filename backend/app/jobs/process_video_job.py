@@ -43,7 +43,7 @@ def process_video(video_path):
         ])
 
         preview_clip_path = apply_broll_overlay(
-            raw_clip_path,
+            subtitled_clip_path,
             segment_timeline,
             f"clip_{index}_preview.mp4"
         )
