@@ -10,7 +10,7 @@ from moviepy.editor import TextClip
 
 @dataclass(frozen=True)
 class SubtitleStyleConfig:
-    font_candidates: Sequence[str] = ("Montserrat-ExtraBold", "Montserrat-Bold", "Arial-Bold")
+    font_candidates: Sequence[str] = ("Montserrat-ExtraBold", "Anton", "Impact", "Arial Black")
     emphasis_keywords: frozenset[str] = frozenset({
         "atencao", "atenção", "urgente", "segredo", "dinheiro", "nunca",
         "impossivel", "impossível", "choque", "milionario", "milionário",
@@ -22,10 +22,10 @@ class SubtitleStyleConfig:
     min_safe_side_px: int = 48
     min_safe_top_px: int = 44
     min_safe_bottom_px: int = 112
-    max_caption_width_ratio: float = 0.70
+    max_caption_width_ratio: float = 0.78
     max_words_per_line: int = 3
     max_lines_per_caption: int = 2
-    cinematic_line_height_ratio: float = 1.22
+    cinematic_line_height_ratio: float = 1.34
     min_chunk_duration: float = 0.72
     max_chunk_duration: float = 2.8
 
@@ -49,7 +49,7 @@ class SubtitleRenderer:
                 return candidate
             except Exception:
                 continue
-        return "Arial-Bold"
+        return "Arial Black"
 
     def _safe_area(self, video_w: int, video_h: int) -> Dict[str, int]:
         side = max(int(video_w * self.config.safe_side_ratio), self.config.min_safe_side_px)
@@ -58,11 +58,11 @@ class SubtitleRenderer:
         return {"left": side, "right": video_w - side, "top": top, "bottom": video_h - bottom}
 
     def _dynamic_font_size(self, video_w: int, video_h: int, words_count: int, caption_position: Literal["top", "middle", "bottom"], preset_factor: float) -> int:
-        base = min(video_w * 0.063, video_h * 0.105)
+        base = min(video_w * 0.082, video_h * 0.125)
         words_penalty = 1.0 - min(0.22, max(0, words_count - 1) * 0.035)
         position_factor = {"top": 0.94, "middle": 1.0, "bottom": 0.96}.get(caption_position, 1.0)
         size = int(base * words_penalty * position_factor * preset_factor)
-        return max(34, min(104, size))
+        return max(48, min(148, size))
 
     def _build_caption_lines(self, words: List[str]) -> List[List[str]]:
         cleaned = [w for w in words if w and w.strip()]
@@ -101,11 +101,11 @@ class SubtitleRenderer:
         if preset in self._style_cache:
             return self._style_cache[preset]
         styles = {
-            "cinematic": {"line_kerning": -1, "shadow_opacity": 0.32, "glow_opacity": 0.18, "preset_factor": 1.0},
-            "tiktok": {"line_kerning": 0, "shadow_opacity": 0.28, "glow_opacity": 0.14, "preset_factor": 0.92},
-            "hormozi": {"line_kerning": -1, "shadow_opacity": 0.34, "glow_opacity": 0.18, "preset_factor": 0.98},
-            "minimal": {"line_kerning": 0, "shadow_opacity": 0.24, "glow_opacity": 0.10, "preset_factor": 0.88},
-            "neon": {"line_kerning": 0, "shadow_opacity": 0.30, "glow_opacity": 0.22, "preset_factor": 0.94},
+            "cinematic": {"line_kerning": -1, "shadow_opacity": 0.38, "glow_opacity": 0.24, "preset_factor": 1.08},
+            "tiktok": {"line_kerning": 0, "shadow_opacity": 0.36, "glow_opacity": 0.22, "preset_factor": 1.10},
+            "hormozi": {"line_kerning": -1, "shadow_opacity": 0.40, "glow_opacity": 0.25, "preset_factor": 1.14},
+            "minimal": {"line_kerning": 0, "shadow_opacity": 0.30, "glow_opacity": 0.16, "preset_factor": 0.96},
+            "neon": {"line_kerning": 0, "shadow_opacity": 0.38, "glow_opacity": 0.30, "preset_factor": 1.06},
         }
         self._style_cache[preset] = styles.get(preset, styles["cinematic"])
         return self._style_cache[preset]
@@ -165,8 +165,31 @@ class SubtitleRenderer:
             chunk_duration = chunk_end - chunk_start
 
             base_size = self._dynamic_font_size(video_w, video_h, len(chunk), caption_position, float(style["preset_factor"]))
-            base_size = max(32, min(74, base_size))
+            base_size = max(52, min(112, base_size))
             line_height_px = int(base_size * self.config.cinematic_line_height_ratio)
+
+            chunk_text = " ".join(str(item["word"]) for item in chunk)
+            y = caption_center_y
+            inactive = (
+                TextClip(
+                    txt=chunk_text,
+                    fontsize=int(base_size * 0.88),
+                    font=font_name,
+                    color="#F8F8F8",
+                    stroke_color="#111111",
+                    stroke_width=max(4, int(base_size * 0.10)),
+                    align="center",
+                    kerning=int(style["line_kerning"]),
+                    method="caption",
+                    size=(max_caption_w, None),
+                    interline=max(8, int(line_height_px - base_size))
+                )
+                .set_opacity(0.94)
+                .set_position(("center", y))
+                .set_start(chunk_start)
+                .set_end(chunk_end)
+            )
+            clips.append(inactive)
 
             for word_data in chunk:
                 word = str(word_data["word"])
@@ -174,16 +197,17 @@ class SubtitleRenderer:
                 word_end = float(word_data["end"])
 
                 emphasis = self._is_emphasis_word(word)
-                fill_color = "#FFD24A" if emphasis else "#FFFFFF"
-
-                y = caption_center_y
+                active_size = int(base_size * (1.26 if emphasis else 1.16))
+                fill_color = "#FFE600"
 
                 active = (
                     TextClip(
                         txt=word,
-                        fontsize=base_size,
+                        fontsize=active_size,
                         font=font_name,
                         color=fill_color,
+                        stroke_color="#000000",
+                        stroke_width=max(6, int(active_size * 0.12)),
                         kerning=int(style["line_kerning"]),
                         method="label"
                     )
@@ -191,6 +215,7 @@ class SubtitleRenderer:
                     .set_position(("center", y))
                     .set_start(word_start)
                     .set_end(word_end)
+                    .resize(lambda t: 1.0 + 0.10 * self._soft_bounce(t / max(0.001, word_end - word_start)))
                 )
                 clips.append(active)
 
