@@ -81,6 +81,7 @@ def _build_upload_response(transcription, file_id: str, filepath: str):
                 "title": hook.get("title_suggestion", ""),
                 "caption": hook.get("caption_suggestion", ""),
                 "description": hook.get("description_suggestion", ""),
+                "hashtags": hook.get("hashtags", []),
             }
             for index, hook in enumerate(hooks)
         ],
@@ -114,6 +115,7 @@ def _build_upload_response(transcription, file_id: str, filepath: str):
                 "title_suggestion": hook.get("title_suggestion", ""),
                 "caption_suggestion": hook.get("caption_suggestion", ""),
                 "description_suggestion": hook.get("description_suggestion", ""),
+                "hashtags": hook.get("hashtags", []),
                 "clip_start": hook["start"],
                 "clip_end": hook["end"],
                 "emotional_score": hook["emotional_score"],
