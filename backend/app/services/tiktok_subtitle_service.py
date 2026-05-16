@@ -159,7 +159,7 @@ def _probe_streams(label: str, media_path: str) -> str:
     return combined_output
 
 
-def create_tiktok_subtitles(video_path, segments, output_path):
+def create_tiktok_subtitles(video_path, segments, output_path, speaker_segments=None):
     """Render premium subtitles and export video.
 
     API intentionally unchanged.
@@ -167,18 +167,15 @@ def create_tiktok_subtitles(video_path, segments, output_path):
     base_clip = VideoFileClip(video_path)
 
     reframer = ReframingService()
-    reframed_video = reframer.apply(base_clip)
-
-    words = _collect_words(segments)
-    renderer = SubtitleRenderer()
     caption_position = "bottom"
     preset = "cinematic"
     debug_layout = False
-    if segments and isinstance(segments[0], dict):
-        caption_position = str(segments[0].get("caption_position", "bottom"))
-        preset = str(segments[0].get("caption_preset", "cinematic"))
-        debug_layout = bool(segments[0].get("caption_debug", False))
+    reframed_video = reframer.apply(base_clip, speaker_segments=speaker_segments, debug=debug_layout)
 
+    words = _collect_words(segments)
+    if segments and isinstance(segments[0], dict):
+        segments[0]["camera_keyframes"] = reframer.camera_keyframes
+    renderer = SubtitleRenderer()
     cinematic_video = _apply_cinematic_camera_motion(reframed_video, words, debug=debug_layout)
     word_layers = renderer.build_word_layers(
         words=words,
