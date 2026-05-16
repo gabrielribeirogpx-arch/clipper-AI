@@ -39,19 +39,36 @@ export function VideoPreview() {
   }, [resolvedVideoUrl, mounted]);
 
   useEffect(() => {
+    if (!mounted || !videoRef.current || !isPlaying) return;
+    let frameId = 0;
+    const syncFrame = () => {
+      const video = videoRef.current;
+      if (!video) return;
+      setCurrentTime(video.currentTime);
+      frameId = requestAnimationFrame(syncFrame);
+    };
+    frameId = requestAnimationFrame(syncFrame);
+    return () => cancelAnimationFrame(frameId);
+  }, [isPlaying, mounted, setCurrentTime]);
+
+  useEffect(() => {
     console.log(resolvedVideoUrl);
   }, [resolvedVideoUrl]);
 
-  const activeSubtitle = tracks.subtitles.find((block) => currentTime >= block.start && currentTime <= block.end) ?? tracks.subtitles[0];
+  const activeSubtitle = tracks.subtitles.find((block) => currentTime >= block.start && currentTime <= block.end);
   const preset = activeSubtitle?.style?.captionPreset ?? 'cinematic';
   const position = activeSubtitle?.style?.captionPosition ?? 'bottom';
-  const heroWord = activeSubtitle?.text?.split(/\s+/).find((word) => word.length > 4) ?? '';
   const theme = resolveTheme(preset);
   const lines = theme.splitText(activeSubtitle?.text ?? '');
   const subtitleDuration = Math.max((activeSubtitle?.end ?? 0) - (activeSubtitle?.start ?? 0), 0.01);
   const subtitleProgress = activeSubtitle ? Math.min(Math.max((currentTime - activeSubtitle.start) / subtitleDuration, 0), 0.999) : 0;
   const activeLineIndex = lines.length > 0 ? Math.floor(subtitleProgress * lines.length) : 0;
   const activeLine = lines[activeLineIndex] ?? '';
+  const activeLineWords = activeLine.split(/\s+/).filter(Boolean);
+  const lineProgress = lines.length > 0 ? (subtitleProgress * lines.length) - activeLineIndex : 0;
+  const activeWordIndex = activeLineWords.length > 1
+    ? Math.min(Math.floor(Math.max(lineProgress, 0) * activeLineWords.length), activeLineWords.length - 1)
+    : 0;
 
   if (!mounted) return <div className="h-[760px] rounded-[2rem] border border-white/10 bg-white/5" />;
 
@@ -108,7 +125,7 @@ export function VideoPreview() {
                             textShadow: theme.style.textShadow,
                           }}
                         >
-                          {theme.wordTokens(activeLine, heroWord).map((token, tokenIdx) => (
+                          {theme.wordTokens(activeLine, activeWordIndex).map((token, tokenIdx) => (
                             <span
                               key={`${activeLine}-${token.text}-${tokenIdx}`}
                               style={{
