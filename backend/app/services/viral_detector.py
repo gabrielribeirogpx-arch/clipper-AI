@@ -53,42 +53,106 @@ def rank_hooks(hooks: List[Dict], max_results: int = 5) -> List[Dict]:
     return ranked[:max_results]
 
 
-def detect_and_rank_hooks(segments: List[Dict], min_duration: int = 30, max_duration: int = 90) -> List[Dict]:
+def _normalize_score(score: float) -> float:
+    return max(0.0, min(1.0, score / 100.0))
+
+
+def _overlap_ratio(a_start: float, a_end: float, b_start: float, b_end: float) -> float:
+    intersection = max(0.0, min(a_end, b_end) - max(a_start, b_start))
+    shortest = max(min(a_end - a_start, b_end - b_start), 0.01)
+    return intersection / shortest
+
+
+def detect_and_rank_hooks(
+    segments: List[Dict],
+    min_duration: int = 30,
+    max_duration: int = 90,
+    max_clips: int = 25,
+    min_score: float = 0.45,
+    overlap_tolerance: float = 0.6,
+) -> List[Dict]:
     hooks = []
+    rejected = []
     baseline_wps = _average_wps(segments)
-    last_end = 0.0
+
+    if not segments:
+        return []
 
     for i, segment in enumerate(segments):
         duration = segment["end"] - segment["start"]
-        if duration < 3:
-            continue
-        if segment["start"] < last_end:
+        if duration < 1.5:
             continue
 
         start = max(segment["start"] - 1.5, 0)
-        dynamic_window = max(min_duration, min(max_duration, int(duration * 4)))
-        end = min(start + dynamic_window, segments[-1]["end"])
-
-        window_segments = [
-            seg for seg in segments
-            if seg["start"] < end and seg["end"] > start
+        window_candidates = [
+            max(min_duration, min(max_duration, int(duration * factor)))
+            for factor in (2.5, 3.5, 5.0)
         ]
 
-        if not window_segments:
+        for dynamic_window in window_candidates:
+            end = min(start + dynamic_window, segments[-1]["end"])
+
+            window_segments = [
+                seg for seg in segments
+                if seg["start"] < end and seg["end"] > start
+            ]
+
+            if not window_segments:
+                rejected.append({"reason": "empty_window", "start": round(start, 2), "end": round(end, 2)})
+                continue
+
+            score_data = compute_viral_score(window_segments, baseline_wps)
+            normalized_score = _normalize_score(score_data["viral_score"])
+            if normalized_score < min_score:
+                rejected.append({
+                    "reason": "below_min_score",
+                    "start": round(start, 2),
+                    "end": round(end, 2),
+                    "score": round(normalized_score, 3),
+                })
+                continue
+
+            hook = {
+                "start": round(start, 2),
+                "end": round(end, 2),
+                "text": " ".join(seg.get("text", "").strip() for seg in window_segments).strip(),
+                "source_segment_index": i,
+                "title": (segment.get("text", "").strip()[:58] + "...") if len(segment.get("text", "").strip()) > 58 else segment.get("text", "").strip(),
+                "normalized_score": round(normalized_score, 3),
+                **score_data,
+            }
+
+            hooks.append(hook)
+
+    ranked = rank_hooks(hooks, max_results=max(max_clips * 4, 50))
+    accepted = []
+
+    for candidate in ranked:
+        has_excessive_overlap = any(
+            _overlap_ratio(candidate["start"], candidate["end"], selected["start"], selected["end"]) > overlap_tolerance
+            for selected in accepted
+        )
+        if has_excessive_overlap:
+            rejected.append({
+                "reason": "overlap_rejection",
+                "start": candidate["start"],
+                "end": candidate["end"],
+                "score": candidate["normalized_score"],
+            })
             continue
 
-        score_data = compute_viral_score(window_segments, baseline_wps)
+        accepted.append(candidate)
+        if len(accepted) >= max_clips:
+            break
 
-        hook = {
-            "start": round(start, 2),
-            "end": round(end, 2),
-            "text": " ".join(seg.get("text", "").strip() for seg in window_segments).strip(),
-            "source_segment_index": i,
-            "title": (segment.get("text", "").strip()[:58] + "...") if len(segment.get("text", "").strip()) > 58 else segment.get("text", "").strip(),
-            **score_data,
-        }
+    print(
+        f"[viral_detector] candidates={len(hooks)} accepted={len(accepted)} rejected={len(rejected)} "
+        f"min_score={min_score} overlap_tolerance={overlap_tolerance} max_clips={max_clips}"
+    )
+    for idx, clip in enumerate(accepted[:10]):
+        print(
+            f"[viral_detector] accepted[{idx}] start={clip['start']} end={clip['end']} "
+            f"score={clip['viral_score']} normalized={clip['normalized_score']}"
+        )
 
-        hooks.append(hook)
-        last_end = end
-
-    return rank_hooks(hooks)
+    return accepted

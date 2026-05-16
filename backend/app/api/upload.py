@@ -40,6 +40,9 @@ async def ingest_youtube(payload: YoutubeIngestRequest):
         filepath,
         min_clip_length=payload.min_clip_length,
         max_clip_length=payload.max_clip_length,
+        max_clips=payload.max_clips,
+        min_score=payload.min_score,
+        overlap_tolerance=payload.overlap_tolerance,
     )
 
     return _build_upload_response(transcription, file_id, filepath)

@@ -5,18 +5,36 @@ from app.services.vertical_render_service import render_vertical_clip
 from app.services.broll_engine import BRollEngine
 
 
-def process_video(video_path, min_clip_length: int = 30, max_clip_length: int = 90):
+def process_video(
+    video_path,
+    min_clip_length: int = 30,
+    max_clip_length: int = 90,
+    max_clips: int = 25,
+    min_score: float = 0.45,
+    overlap_tolerance: float = 0.6,
+):
 
     transcription = transcribe_video(video_path)
 
-    hooks = detect_hooks(transcription, min_duration=min_clip_length, max_duration=max_clip_length)
+    hooks = detect_hooks(
+        transcription,
+        min_duration=min_clip_length,
+        max_duration=max_clip_length,
+        max_clips=max_clips,
+        min_score=min_score,
+        overlap_tolerance=overlap_tolerance,
+    )
     broll_engine = BRollEngine()
 
     generated_clips = []
     timeline_broll = []
     timeline_cuts = []
 
-    print("\nHOOKS RANKEADOS:\n")
+    print(
+        f"\nHOOKS RANKEADOS: total={len(hooks)} "
+        f"min_clip_length={min_clip_length} max_clip_length={max_clip_length} "
+        f"max_clips={max_clips} min_score={min_score} overlap_tolerance={overlap_tolerance}\n"
+    )
 
     for index, hook in enumerate(hooks):
 
