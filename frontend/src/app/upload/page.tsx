@@ -3,7 +3,7 @@
 import { ChangeEvent, DragEvent, MouseEvent, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ingestYouTubeVideo, uploadVideo } from '@/lib/api';
+import { createIngestStream, getIngestStatus, ingestYouTubeJob, uploadVideo } from '@/lib/api';
 import { useUploadStore } from '@/store/uploadStore';
 import { useTimelineStore } from '@/store/timelineStore';
 
@@ -153,8 +153,9 @@ export default function UploadPage() {
     setError(null);
     resetForNewAnalysis();
     store.setUploadStatus('processing');
-    console.log('[STARTING YOUTUBE INGEST REQUEST]');
-    const result = await ingestYouTubeVideo({
+    store.setUploadProgress(5);
+
+    const job = await ingestYouTubeJob({
       youtube_url: youtubeUrl.trim(),
       analysis_name: analysisName.trim() || undefined,
       start_time: toHhMmSs(startSeconds),
@@ -162,15 +163,40 @@ export default function UploadPage() {
       min_clip_length: 30,
       max_clip_length: 90,
     });
-    for (const stage of PROCESS_STAGES) {
-      store.setProcessingStage(stage);
-      await new Promise((r) => setTimeout(r, 450));
-    }
-    store.setUploadResult(result.project_id, result.timeline);
-    await hydrateFromBackend();
-    store.setUploadStatus('success');
-    setRecentUploads((prev) => [youtubeUrl, ...prev].slice(0, 4));
-    if ((result.clips?.length ?? 0) > 0) setTimeout(() => router.push('/editor'), 600);
+
+    await new Promise<void>((resolve, reject) => {
+      const stream = createIngestStream(job.job_id);
+      stream.addEventListener('progress', (event: MessageEvent) => {
+        const payload = JSON.parse(event.data) as { status: string; progress: number; step: string; error?: { message?: string } };
+        store.setUploadProgress(payload.progress ?? 0);
+        store.setProcessingStage(payload.step || 'Processing...');
+
+        if (payload.status === 'completed') {
+          stream.close();
+          void (async () => {
+            const result = await getIngestStatus(job.job_id);
+            store.setUploadProgress(100);
+            store.setUploadStatus('success');
+            setRecentUploads((prev) => [youtubeUrl, ...prev].slice(0, 4));
+            if ((result.clips?.length ?? 0) > 0) {
+              await hydrateFromBackend();
+              setTimeout(() => router.push('/editor'), 600);
+            }
+            resolve();
+          })().catch(reject);
+        }
+
+        if (payload.status === 'failed') {
+          stream.close();
+          reject(new Error(payload.error?.message || 'YouTube ingest failed'));
+        }
+      });
+
+      stream.onerror = () => {
+        stream.close();
+        reject(new Error('SSE connection failed'));
+      };
+    });
   };
 
   const handleAnalyzeYoutube = (event: MouseEvent<HTMLButtonElement>) => {

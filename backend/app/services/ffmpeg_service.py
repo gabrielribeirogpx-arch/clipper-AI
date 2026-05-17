@@ -36,7 +36,7 @@ PREVIEW_SETTINGS = {
 }
 
 os.makedirs(CLIPS_DIR, exist_ok=True)
-FFMPEG_TIMEOUT_SECONDS = int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "1200"))
+FFMPEG_TIMEOUT_SECONDS = int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "7200"))
 
 
 def _probe_bitrate(media_path: str) -> str:

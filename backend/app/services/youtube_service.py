@@ -18,7 +18,7 @@ UPLOAD_DIR = "app/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 logger = logging.getLogger(__name__)
 YOUTUBE_FORMAT_SELECTOR = "137+140/248+251/bestvideo+bestaudio/best"
-YT_DLP_TIMEOUT_SECONDS = int(os.getenv("YT_DLP_TIMEOUT_SECONDS", "900"))
+YT_DLP_TIMEOUT_SECONDS = int(os.getenv("YT_DLP_TIMEOUT_SECONDS", "7200"))
 
 @dataclass
 class YouTubeDownloadError(Exception):

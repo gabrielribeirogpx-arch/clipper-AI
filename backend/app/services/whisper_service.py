@@ -6,8 +6,8 @@ import whisperx
 
 device = "cuda"
 CAPTION_PRE_ROLL_SECONDS = 0.25
-WHISPERX_TIMEOUT_SECONDS = int(os.getenv("WHISPERX_TIMEOUT_SECONDS", "1800"))
-PYANNOTE_TIMEOUT_SECONDS = int(os.getenv("PYANNOTE_TIMEOUT_SECONDS", "900"))
+WHISPERX_TIMEOUT_SECONDS = int(os.getenv("WHISPERX_TIMEOUT_SECONDS", "7200"))
+PYANNOTE_TIMEOUT_SECONDS = int(os.getenv("PYANNOTE_TIMEOUT_SECONDS", "7200"))
 
 model = whisperx.load_model(
     "base",
