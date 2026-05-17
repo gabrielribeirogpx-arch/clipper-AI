@@ -18,6 +18,7 @@ UPLOAD_DIR = "app/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 logger = logging.getLogger(__name__)
 PLAYER_CLIENT_CANDIDATES = ["web", "android", "tv", "ios"]
+YOUTUBE_FORMAT_SELECTOR = "137+140/248+251/bestvideo+bestaudio/b"
 
 @dataclass
 class YouTubeDownloadError(Exception):
@@ -103,10 +104,13 @@ def _list_formats_for_client(base_command: list[str], youtube_url: str, client: 
         "-F",
         youtube_url,
     ]
-    logger.info("[YOUTUBE AVAILABLE FORMATS] listing", extra={"client": client, "command": format_command})
+    logger.info("[REAL YT-DLP COMMAND]", extra={"purpose": "formats_list", "client": client, "command": format_command})
     result = subprocess.run(format_command, check=False, capture_output=True, text=True)
     output = (result.stdout or "") + "\n" + (result.stderr or "")
-    logger.info("[YOUTUBE AVAILABLE FORMATS]", extra={"client": client, "formats": output.strip(), "returncode": result.returncode})
+    logger.info(
+        "[YOUTUBE ALL AVAILABLE FORMATS]",
+        extra={"client": client, "formats": output.strip(), "returncode": result.returncode},
+    )
     max_height = _extract_max_height(output) if result.returncode == 0 else 0
     return max_height, client
 
@@ -118,7 +122,6 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
         "-m",
         "yt_dlp",
         "--no-playlist",
-        "--no-warnings",
         "--retries",
         "5",
         "--fragment-retries",
@@ -133,8 +136,9 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
 
     command = [
         *base_command,
+        "--verbose",
         "-f",
-        "bv*+ba/b",
+        YOUTUBE_FORMAT_SELECTOR,
         "-S",
         "res:1080,fps",
         "--merge-output-format",
@@ -155,10 +159,9 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
         delete=False
     )
 
-    shutil.copy2(cookies_file_path, temp_cookie_file.name)
-
-    cookies_runtime_path = temp_cookie_file.name
     if os.path.isfile(cookies_file_path):
+        shutil.copy2(cookies_file_path, temp_cookie_file.name)
+        cookies_runtime_path = temp_cookie_file.name
         base_command.extend(["--cookies", cookies_runtime_path])
         command.extend(["--cookies", cookies_runtime_path])
     else:
@@ -192,7 +195,7 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
 
     command.append(youtube_url)
     logger.info("[YOUTUBE DOWNLOAD START] Iniciando download do YouTube", extra={"url": youtube_url})
-    logger.info("[YT-DLP COMMAND]", extra={"command": command})
+    logger.info("[REAL YT-DLP COMMAND]", extra={"purpose": "download", "selected_client": best_client, "command": command})
     try:
         result = subprocess.run(
             command, 
