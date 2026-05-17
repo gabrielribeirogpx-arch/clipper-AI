@@ -4,9 +4,13 @@ import re
 import time
 
 from fastapi import APIRouter, UploadFile, File, Form, Request, HTTPException
+from fastapi.responses import StreamingResponse
+import asyncio
+import json
 from app.jobs.process_video_job import process_video
 from app.data.timeline_state import set_timeline_state
 from app.services.youtube_service import download_youtube_video, YouTubeDownloadError
+from app.data.ingest_jobs import create_job, get_job, register_listener, unregister_listener, update_job
 import os
 import uuid
 import shutil
@@ -42,6 +46,50 @@ def _to_media_url(path: str) -> str:
     rel_path = Path(path).as_posix().replace("app/clips/", "", 1)
     return f"/media/{rel_path}"
 
+
+async def process_youtube_ingest_job(job_id: str, body: dict, output_dir: str) -> None:
+    try:
+        update_job(job_id, status="downloading", progress=10, step="Downloading YouTube video")
+        filepath = await asyncio.to_thread(
+            download_youtube_video,
+            body["youtube_url"],
+            body.get("start_time"),
+            body.get("end_time"),
+        )
+
+        update_job(job_id, status="transcribing", progress=35, step="Transcribing audio")
+        update_job(job_id, status="detecting", progress=55, step="Detecting best clips")
+        update_job(job_id, status="rendering", progress=75, step="Rendering clips and metadata")
+
+        transcription = await asyncio.to_thread(
+            process_video,
+            filepath,
+            output_dir,
+            int(body.get("min_clip_length", 30)),
+            int(body.get("max_clip_length", 90)),
+            25,
+            0.45,
+            0.6,
+            lambda msg: print(msg),
+        )
+
+        response_payload = _build_upload_response(transcription, str(uuid.uuid4()), filepath)
+        update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            step="Completed",
+            clips=response_payload.get("clips", []),
+            result=response_payload,
+        )
+        print(f"[JOB COMPLETED] job_id={job_id}")
+    except YouTubeDownloadError as error:
+        update_job(job_id, status="failed", progress=100, step="Failed", error={"category": error.category, "message": error.message})
+        print(f"[JOB FAILED] job_id={job_id} category={error.category} message={error.message}")
+    except Exception as error:
+        update_job(job_id, status="failed", progress=100, step="Failed", error={"category": "unknown", "message": str(error)})
+        print(f"[JOB FAILED] job_id={job_id} error={error}")
+
 @router.post("/upload")
 async def upload_video(
     file: UploadFile = File(...),
@@ -67,17 +115,7 @@ async def upload_video(
 
 @router.post("/ingest/youtube")
 async def ingest_youtube(request: Request):
-    print("[INGEST ENDPOINT ENTERED]")
-    ingest_start = time.perf_counter()
-    print("[STEP 1 - INGEST START]")
-
-    try:
-        body = await request.json()
-        print("[RAW REQUEST BODY]", body)
-    except Exception as error:
-        print("[INGEST BODY PARSE ERROR]", repr(error))
-        raise
-
+    body = await request.json()
     youtube_url = (body.get("youtube_url") or "").strip()
     if not youtube_url:
         raise HTTPException(status_code=400, detail="youtube_url is required")
@@ -85,31 +123,43 @@ async def ingest_youtube(request: Request):
     analysis_folder = _resolve_analysis_folder(body.get("analysis_name"), body.get("output_folder"))
     output_dir = os.path.join(CLIPS_DIR, analysis_folder)
     os.makedirs(output_dir, exist_ok=True)
-    print(f"[ANALYSIS FOLDER CREATED] {output_dir}")
-    print(f"[STEP 2 - VALIDATION DONE] elapsed={time.perf_counter() - ingest_start:.2f}s")
 
-    print("[STEP 3 - YT-DLP START]")
-    yt_start = time.perf_counter()
-    try:
-        filepath = download_youtube_video(
-            youtube_url,
-            start_time=body.get("start_time"),
-            end_time=body.get("end_time"),
-        )
-    except YouTubeDownloadError as error:
-        raise HTTPException(status_code=400, detail={"category": error.category, "message": error.message}) from error
-    print(f"[STEP 4 - YT-DLP FINISH] elapsed={time.perf_counter() - yt_start:.2f}s total={time.perf_counter() - ingest_start:.2f}s")
+    analysis_id = analysis_folder
+    job_id = str(uuid.uuid4())
+    body["youtube_url"] = youtube_url
+    create_job(job_id, analysis_id)
+    asyncio.create_task(process_youtube_ingest_job(job_id, body, output_dir))
+    return {"success": True, "job_id": job_id, "analysis_id": analysis_id, "status": "queued"}
 
-    transcription = process_video(
-        filepath,
-        output_dir=output_dir,
-        min_clip_length=int(body.get("min_clip_length", 30)),
-        max_clip_length=int(body.get("max_clip_length", 90)),
-        step_logger=lambda msg: print(msg),
-    )
 
-    print(f"[STEP 11 - RESPONSE RETURN] total={time.perf_counter() - ingest_start:.2f}s")
-    return _build_upload_response(transcription, str(uuid.uuid4()), filepath)
+@router.get("/ingest/status/{job_id}")
+async def ingest_status(job_id: str):
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    return {k: job.get(k) for k in ["status", "progress", "step", "analysis_id", "clips", "error"]}
+
+
+@router.get("/ingest/stream/{job_id}")
+async def ingest_stream(job_id: str):
+    if not get_job(job_id):
+        raise HTTPException(status_code=404, detail="job not found")
+
+    async def event_generator():
+        queue = register_listener(job_id)
+        print(f"[JOB SSE CONNECTED] job_id={job_id}")
+        try:
+            while True:
+                payload = await queue.get()
+                data = {k: payload.get(k) for k in ["status", "progress", "step", "analysis_id", "clips", "error"]}
+                yield f"event: progress\ndata: {json.dumps(data)}\n\n"
+                if payload.get("status") in {"completed", "failed"}:
+                    break
+        finally:
+            unregister_listener(job_id, queue)
+            print(f"[JOB SSE DISCONNECTED] job_id={job_id}")
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 def _build_upload_response(transcription, file_id: str, filepath: str):
