@@ -112,6 +112,7 @@ export default function UploadPage() {
   const [recentUploads, setRecentUploads] = useState<string[]>([]);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [analysisName, setAnalysisName] = useState('');
+  const renderMode = useUploadStore((state) => state.renderMode);
   const [startSeconds, setStartSeconds] = useState(0);
   const [endSeconds, setEndSeconds] = useState(MAX_YOUTUBE_DURATION_SECONDS);
   const fileRef = useRef<File | null>(null);
@@ -131,7 +132,7 @@ export default function UploadPage() {
     resetForNewAnalysis();
     store.setUploadedVideo({ name: file.name, size: file.size, type: file.type, previewUrl: URL.createObjectURL(file) });
     store.setUploadStatus('uploading');
-    const result = await uploadVideo(file, analysisName, store.setUploadProgress).catch((e) => {
+    const result = await uploadVideo(file, analysisName, store.setUploadProgress, renderMode).catch((e) => {
       store.setUploadStatus('error');
       throw e;
     });
@@ -141,7 +142,7 @@ export default function UploadPage() {
     await hydrateFromBackend();
     store.setUploadStatus('success');
     setRecentUploads((prev) => [file.name, ...prev].slice(0, 4));
-    if ((result.clips?.length ?? 0) > 0) setTimeout(() => router.push('/editor'), 600);
+    if ((result.clips?.length ?? 0) > 0) setTimeout(() => router.push(renderMode === 'dual_region' ? `/region-setup/${store.analysisId ?? result.analysis_id}` : '/editor'), 600);
   };
 
   const finalizeJob = async (jobId: string) => {
@@ -153,7 +154,7 @@ export default function UploadPage() {
     console.log('[FRONTEND JOB FINISHED]', { jobId });
     if ((result.clips?.length ?? 0) > 0) {
       await hydrateFromBackend();
-      setTimeout(() => router.push('/editor'), 600);
+      setTimeout(() => router.push(renderMode === 'dual_region' ? `/region-setup/${store.analysisId ?? result.analysis_id}` : '/editor'), 600);
     }
   };
 
@@ -208,6 +209,7 @@ export default function UploadPage() {
       end_time: toHhMmSs(endSeconds),
       min_clip_length: 30,
       max_clip_length: 90,
+      render_mode: renderMode,
     });
 
     store.setActiveJob(job.job_id, job.analysis_id);
@@ -276,6 +278,11 @@ export default function UploadPage() {
 
         <div className="mt-8 grid gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
           <input value={analysisName} onChange={(e) => setAnalysisName(e.target.value)} placeholder="Nome da análise (opcional)" className="rounded-lg bg-slate-900 px-3 py-2 text-sm" />
+          <div className="flex gap-2 text-sm text-slate-200">
+            <button type="button" onClick={() => store.setRenderMode('ai_tracking')} className={`rounded-lg px-3 py-2 ${renderMode === 'ai_tracking' ? 'bg-cyan-400 text-black' : 'bg-slate-800'}`}>AI Tracking</button>
+            <button type="button" onClick={() => store.setRenderMode('dual_region')} className={`rounded-lg px-3 py-2 ${renderMode === 'dual_region' ? 'bg-cyan-400 text-black' : 'bg-slate-800'}`}>Dual Region</button>
+          </div>
+
           <input value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)} placeholder="https://youtube.com/live/..." className="rounded-lg bg-slate-900 px-3 py-2 text-sm" />
           <YouTubeRangeSelector duration={MAX_YOUTUBE_DURATION_SECONDS} start={startSeconds} end={endSeconds} onStart={setStartSeconds} onEnd={setEndSeconds} />
           <button type="button" onClick={handleAnalyzeYoutube} className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold transition hover:bg-violet-400">

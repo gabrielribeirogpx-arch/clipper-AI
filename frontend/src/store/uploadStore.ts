@@ -13,6 +13,8 @@ type UploadedVideo = {
   previewUrl?: string;
 };
 
+type RenderMode = 'ai_tracking' | 'dual_region';
+
 type UploadState = {
   uploadProgress: number;
   uploadStatus: UploadStatus;
@@ -25,6 +27,8 @@ type UploadState = {
   currentStep: string;
   status: string;
   clips: Array<Record<string, unknown>>;
+  renderMode: RenderMode;
+  setRenderMode: (mode: RenderMode) => void;
   setUploadProgress: (progress: number) => void;
   setUploadStatus: (status: UploadStatus) => void;
   setProcessingStage: (stage: string) => void;
@@ -48,6 +52,7 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
   currentStep: 'Waiting for upload...',
   status: 'idle',
   clips: [],
+  renderMode: 'ai_tracking',
   setUploadProgress: (uploadProgress) => set({ uploadProgress }),
   setUploadStatus: (uploadStatus) => set({ uploadStatus }),
   setProcessingStage: (processingStage) => set({ processingStage }),
@@ -64,6 +69,7 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
     status: status ?? state.status,
     clips: clips ?? state.clips,
   })),
+  setRenderMode: (renderMode) => set({ renderMode }),
   clearActiveJob: () => set({ activeJobId: null }),
   reset: () =>
     set({
@@ -78,6 +84,7 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
       currentStep: 'Waiting for upload...',
       status: 'idle',
       clips: [],
+  renderMode: 'ai_tracking',
     }),
 }), { name: 'clipper-upload-state', partialize: (state) => ({
   uploadProgress: state.uploadProgress,
@@ -90,4 +97,5 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
   currentStep: state.currentStep,
   status: state.status,
   clips: state.clips,
+  renderMode: state.renderMode,
 }) }));
