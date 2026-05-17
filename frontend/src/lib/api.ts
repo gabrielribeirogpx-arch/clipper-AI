@@ -72,3 +72,19 @@ export async function ingestYouTubeVideo(payload: YouTubeIngestRequest): Promise
   if (!response.ok) throw new Error('YouTube ingestion failed');
   return response.json() as Promise<UploadResponse>;
 }
+
+export type ExportResponse = {
+  success: boolean;
+  export_path: string;
+  download_url: string;
+};
+
+export async function exportClip(clipId: string): Promise<ExportResponse> {
+  const response = await fetch(`${API_BASE}/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clip_id: clipId }),
+  });
+  if (!response.ok) throw new Error('Export failed');
+  return response.json() as Promise<ExportResponse>;
+}

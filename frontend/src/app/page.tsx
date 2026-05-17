@@ -6,6 +6,7 @@ import { TimelineTracks } from '@/components/TimelineTracks';
 import { VideoPreview } from '@/components/VideoPreview';
 import { ClipResultsPanel } from '@/components/ClipResultsPanel';
 import { useTimelineStore } from '@/store/timelineStore';
+import { exportClip } from '@/lib/api';
 import { useMounted } from '@/hooks/useMounted';
 import { useEffect } from 'react';
 
@@ -44,6 +45,7 @@ function RenderQueuePanel() {
 export default function Home() {
   const mounted = useMounted();
   const hydrateFromBackend = useTimelineStore((state) => state.hydrateFromBackend);
+  const selectedClipId = useTimelineStore((state) => state.selectedClipId);
 
   useEffect(() => {
     void hydrateFromBackend();
@@ -52,27 +54,28 @@ export default function Home() {
   if (!mounted) return <main className="min-h-screen bg-[#05070f]" />;
 
   const handleExport = async () => {
+    if (!selectedClipId) return;
+
     try {
-      console.log("EXPORT START")
+      console.log('[EXPORT START]', selectedClipId);
+      const data = await exportClip(selectedClipId);
+      console.log('[EXPORT SUCCESS]', data);
 
-      const response = await fetch("http://localhost:8000/export", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          clip_id: "clip_01"
-      }),
-    })
+      if (data.success && data.download_url) {
+        const downloadUrl = `http://localhost:8000${data.download_url}`;
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = downloadUrl.split('/').pop() ?? 'clip.mp4';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
 
-      const data = await response.json()
-
-      console.log("EXPORT RESPONSE:", data)
-
-  }   catch (err) {
-      console.error("EXPORT ERROR:", err)
-  }
-}
+      await hydrateFromBackend();
+    } catch (err) {
+      console.error('[EXPORT ERROR]', err);
+    }
+  };
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#05070f] text-slate-100">

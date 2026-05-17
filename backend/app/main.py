@@ -7,11 +7,13 @@ from fastapi.responses import StreamingResponse
 
 from app.api.upload import router as upload_router
 from app.api.timeline import router as timeline_router
+from app.api.export import router as export_router
 
 app = FastAPI()
 
 BASE_DIR = Path(__file__).resolve().parent
 CLIPS_DIR = BASE_DIR / "clips"
+EXPORTS_DIR = BASE_DIR / "exports"
 CHUNK_SIZE = 1024 * 1024
 
 
@@ -38,6 +40,7 @@ app.add_middleware(
 
 app.include_router(upload_router)
 app.include_router(timeline_router)
+app.include_router(export_router)
 
 
 # =========================================
@@ -58,9 +61,16 @@ def _iter_file(path: Path, start: int, end: int) -> Iterator[bytes]:
 
 @app.get("/media/{file_path:path}")
 async def stream_media(request: Request, file_path: str, range: str | None = Header(default=None)):
-    media_path = (CLIPS_DIR / file_path).resolve()
+    requested_path = Path(file_path)
+    if requested_path.parts and requested_path.parts[0] == "exports":
+        media_root = EXPORTS_DIR
+        media_path = (media_root / Path(*requested_path.parts[1:])).resolve()
+    else:
+        media_root = CLIPS_DIR
+        media_path = (media_root / requested_path).resolve()
+
     try:
-        media_path.relative_to(CLIPS_DIR.resolve())
+        media_path.relative_to(media_root.resolve())
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid media path") from error
 
