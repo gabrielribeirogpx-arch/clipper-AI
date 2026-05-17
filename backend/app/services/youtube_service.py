@@ -96,8 +96,12 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
         "10",
         "--concurrent-fragments",
         "4",
+        "--js-runtimes",
+        "node",
+        "--remote-components",
+        "ejs:github",
         "--extractor-args",
-        "youtube:player_client=web,android",
+        "youtube:player_client=web",
         "-f",
         "mp4/bestvideo+bestaudio/best",
         "-o",
@@ -106,26 +110,29 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
 
     cookies_file_path = os.path.abspath(COOKIES_FILE)
     if os.path.isfile(cookies_file_path):
-        logger.info("YouTube cookies file found", extra={"cookies_file": cookies_file_path})
-        logger.info("Authenticated yt-dlp mode enabled", extra={"cookies_file": cookies_file_path})
         command.extend(["--cookies", cookies_file_path])
     else:
-        logger.info("YouTube cookies file missing", extra={"cookies_file": cookies_file_path})
+        logger.error("[YOUTUBE DOWNLOAD ERROR] cookies.txt não encontrado", extra={"cookies_file": cookies_file_path})
+        raise YouTubeDownloadError(
+            message="Arquivo de cookies não encontrado em backend/cookies.txt. Gere/atualize o arquivo e tente novamente.",
+            category="missing_cookies",
+        )
 
     ffmpeg_location = _resolve_ffmpeg_location()
     if ffmpeg_location:
         command.extend(["--ffmpeg-location", ffmpeg_location])
 
     node_path = _resolve_node_path()
-    if node_path:
-        command.extend(["--extractor-args", f"youtube:player_js_runtime={node_path}"])
+    if not node_path:
+        logger.warning("Node.js não encontrado no PATH/venv; yt-dlp pode falhar em alguns vídeos.")
 
     section = _format_download_section(start_time, end_time)
     if section:
         command.extend(["--download-sections", section])
 
     command.append(youtube_url)
-    logger.info("Executing yt-dlp command", extra={"command": command})
+    logger.info("[YOUTUBE DOWNLOAD START] Iniciando download do YouTube", extra={"url": youtube_url})
+    logger.info("[YT-DLP COMMAND]", extra={"command": command})
     try:
         result = subprocess.run(command, check=False, capture_output=True, text=True)
     except Exception as exc:  # pragma: no cover - defensive runtime guard
@@ -134,15 +141,14 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
             message=f"Failed to execute yt-dlp: {exc}",
             category="execution_error",
         ) from exc
-    print("YT-DLP STDOUT:", result.stdout)
-    print("YT-DLP STDERR:", result.stderr)
-    print("YT-DLP RETURN CODE:", result.returncode)
+    logger.info("[YT-DLP STDOUT]", extra={"stdout": result.stdout})
+    logger.info("[YT-DLP STDERR]", extra={"stderr": result.stderr})
 
     if result.returncode != 0:
         category, message = _classify_ytdlp_error(result.stderr or "", result.stdout or "")
         raw_error = (result.stderr or result.stdout or message or "yt-dlp command failed").strip()
         logger.error(
-            "yt-dlp command failed",
+            "[YOUTUBE DOWNLOAD ERROR] yt-dlp command failed",
             extra={
                 "command": command,
                 "stdout": result.stdout,
@@ -154,7 +160,7 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
         raise YouTubeDownloadError(message=raw_error, category=category)
 
     logger.info(
-        "yt-dlp command finished",
+        "[YOUTUBE DOWNLOAD SUCCESS] yt-dlp command finished",
         extra={
             "command": command,
             "stdout": result.stdout,
