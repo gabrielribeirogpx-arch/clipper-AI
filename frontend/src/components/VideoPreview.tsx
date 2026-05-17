@@ -6,14 +6,13 @@ import { shouldSyncProgress } from '@/lib/playbackEngine';
 import { useMounted } from '@/hooks/useMounted';
 import { useTimelineStore } from '@/store/timelineStore';
 
-const DEFAULT_VIDEO_URL = 'http://127.0.0.1:8000/media/raw_clip_0.mp4';
 
 export function VideoPreview() {
   const { currentTime, setCurrentTime, isPlaying, setPlaying, duration, videoUrl } = useTimelineStore();
   const mounted = useMounted();
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const resolvedVideoUrl = videoUrl && videoUrl.trim().length > 0 ? videoUrl : DEFAULT_VIDEO_URL;
+  const resolvedVideoUrl = videoUrl && videoUrl.trim().length > 0 ? videoUrl : null;
 
   useEffect(() => {
     if (!mounted || !videoRef.current) return;
@@ -70,7 +69,7 @@ export function VideoPreview() {
               <div className="pointer-events-none absolute inset-0 z-20 bg-[linear-gradient(118deg,rgba(255,255,255,0.18)_0%,transparent_30%,transparent_70%,rgba(255,255,255,0.08)_100%)]" />
               <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,.22),transparent_38%)]" />
               <div className="aspect-video">
-                <video
+                {resolvedVideoUrl ? (<video
                   key={resolvedVideoUrl}
                   ref={videoRef}
                   src={resolvedVideoUrl}
@@ -90,7 +89,7 @@ export function VideoPreview() {
                     console.log('VIDEO READY');
                   }}
                   onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
-                />
+                />) : (<div className="flex h-full items-center justify-center text-slate-300">Nenhum clip real disponível ainda.</div>)}
               </div>
             </div>
           </div>

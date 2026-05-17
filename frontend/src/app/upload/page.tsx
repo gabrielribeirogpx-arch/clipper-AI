@@ -145,7 +145,7 @@ export default function UploadPage() {
     await hydrateFromBackend();
     store.setUploadStatus('success');
     setRecentUploads((prev) => [file.name, ...prev].slice(0, 4));
-    setTimeout(() => router.push('/editor'), 600);
+    if ((result.clips?.length ?? 0) > 0) setTimeout(() => router.push('/editor'), 600);
   };
 
   const processYoutube = async () => {
@@ -170,7 +170,7 @@ export default function UploadPage() {
     await hydrateFromBackend();
     store.setUploadStatus('success');
     setRecentUploads((prev) => [youtubeUrl, ...prev].slice(0, 4));
-    setTimeout(() => router.push('/editor'), 600);
+    if ((result.clips?.length ?? 0) > 0) setTimeout(() => router.push('/editor'), 600);
   };
 
   const handleAnalyzeYoutube = (event: MouseEvent<HTMLButtonElement>) => {

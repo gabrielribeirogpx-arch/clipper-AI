@@ -1,4 +1,5 @@
 import os
+import time
 
 from app.services.whisper_service import transcribe_video
 from app.services.hook_detector import detect_hooks
@@ -17,13 +18,22 @@ def process_video(
     max_clips: int = 25,
     min_score: float = 0.45,
     overlap_tolerance: float = 0.6,
+    step_logger=None,
 ):
 
     os.makedirs(output_dir, exist_ok=True)
     print(f"[CLIP OUTPUT PATH] {output_dir}")
 
-    transcription = transcribe_video(video_path)
 
+    log = step_logger or (lambda _msg: None)
+
+    log("[STEP 5 - TRANSCRIPTION START]")
+    t_start = time.perf_counter()
+    transcription = transcribe_video(video_path)
+    log(f"[STEP 6 - TRANSCRIPTION FINISH] elapsed={time.perf_counter() - t_start:.2f}s")
+
+    log("[STEP 7 - CLIP DETECTION START]")
+    d_start = time.perf_counter()
     hooks = detect_hooks(
         transcription,
         min_duration=min_clip_length,
@@ -32,7 +42,11 @@ def process_video(
         min_score=min_score,
         overlap_tolerance=overlap_tolerance,
     )
+    log(f"[STEP 8 - CLIP DETECTION FINISH] elapsed={time.perf_counter() - d_start:.2f}s")
     broll_engine = BRollEngine()
+
+    log("[STEP 9 - RENDER START]")
+    r_start = time.perf_counter()
 
     generated_clips = []
     timeline_broll = []
@@ -115,6 +129,8 @@ def process_video(
                 "start": float(broll_segment.get("start", 0)),
                 "end": float(broll_segment.get("end", broll_segment.get("start", 0) + 0.5)),
             })
+
+    log(f"[STEP 10 - RENDER FINISH] elapsed={time.perf_counter() - r_start:.2f}s")
 
     full_text = " ".join(
         [segment["text"] for segment in transcription["segments"]]

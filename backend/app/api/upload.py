@@ -1,10 +1,12 @@
 from datetime import datetime
 from pathlib import Path
 import re
+import time
 
-from fastapi import APIRouter, UploadFile, File, Form, Request
+from fastapi import APIRouter, UploadFile, File, Form, Request, HTTPException
 from app.jobs.process_video_job import process_video
 from app.data.timeline_state import set_timeline_state
+from app.services.youtube_service import download_youtube_video, YouTubeDownloadError
 import os
 import uuid
 import shutil
@@ -66,17 +68,48 @@ async def upload_video(
 @router.post("/ingest/youtube")
 async def ingest_youtube(request: Request):
     print("[INGEST ENDPOINT ENTERED]")
+    ingest_start = time.perf_counter()
+    print("[STEP 1 - INGEST START]")
 
     try:
         body = await request.json()
         print("[RAW REQUEST BODY]", body)
-        return {
-            "ok": True,
-            "body": body,
-        }
     except Exception as error:
         print("[INGEST BODY PARSE ERROR]", repr(error))
         raise
+
+    youtube_url = (body.get("youtube_url") or "").strip()
+    if not youtube_url:
+        raise HTTPException(status_code=400, detail="youtube_url is required")
+
+    analysis_folder = _resolve_analysis_folder(body.get("analysis_name"), body.get("output_folder"))
+    output_dir = os.path.join(CLIPS_DIR, analysis_folder)
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"[ANALYSIS FOLDER CREATED] {output_dir}")
+    print(f"[STEP 2 - VALIDATION DONE] elapsed={time.perf_counter() - ingest_start:.2f}s")
+
+    print("[STEP 3 - YT-DLP START]")
+    yt_start = time.perf_counter()
+    try:
+        filepath = download_youtube_video(
+            youtube_url,
+            start_time=body.get("start_time"),
+            end_time=body.get("end_time"),
+        )
+    except YouTubeDownloadError as error:
+        raise HTTPException(status_code=400, detail={"category": error.category, "message": error.message}) from error
+    print(f"[STEP 4 - YT-DLP FINISH] elapsed={time.perf_counter() - yt_start:.2f}s total={time.perf_counter() - ingest_start:.2f}s")
+
+    transcription = process_video(
+        filepath,
+        output_dir=output_dir,
+        min_clip_length=int(body.get("min_clip_length", 30)),
+        max_clip_length=int(body.get("max_clip_length", 90)),
+        step_logger=lambda msg: print(msg),
+    )
+
+    print(f"[STEP 11 - RESPONSE RETURN] total={time.perf_counter() - ingest_start:.2f}s")
+    return _build_upload_response(transcription, str(uuid.uuid4()), filepath)
 
 
 def _build_upload_response(transcription, file_id: str, filepath: str):

@@ -36,6 +36,7 @@ PREVIEW_SETTINGS = {
 }
 
 os.makedirs(CLIPS_DIR, exist_ok=True)
+FFMPEG_TIMEOUT_SECONDS = int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "1200"))
 
 
 def _probe_bitrate(media_path: str) -> str:
@@ -99,7 +100,11 @@ def cut_clip(input_file, start, end, output_name, output_dir: str = CLIPS_DIR):
 
     _log_real_ffmpeg_command(command, input_file, output_path, {"crf": str(EXPORT_CRF), "preset": EXPORT_PRESET}, "cut")
     print(f"[FFMPEG START] profile=cut command={' '.join(command)}")
-    proc = subprocess.run(command, capture_output=True, text=True, check=False)
+    try:
+        proc = subprocess.run(command, capture_output=True, text=True, check=False, timeout=FFMPEG_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        print(f"[FFMPEG TIMEOUT] profile=cut timeout={FFMPEG_TIMEOUT_SECONDS}s output={output_path}")
+        return output_path
     if proc.returncode != 0:
         print(f"[FFMPEG ERROR] profile=cut output={output_path} stderr={proc.stderr}")
     else:
@@ -185,7 +190,11 @@ def apply_broll_overlay(
 
     _log_real_ffmpeg_command(command, clip_path, output_path, settings, quality_profile)
     print(f"[FFMPEG START] profile={quality_profile} command={' '.join(command)}")
-    proc = subprocess.run(command, capture_output=True, text=True, check=False)
+    try:
+        proc = subprocess.run(command, capture_output=True, text=True, check=False, timeout=FFMPEG_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        print(f"[FFMPEG TIMEOUT] profile=cut timeout={FFMPEG_TIMEOUT_SECONDS}s output={output_path}")
+        return output_path
     if proc.returncode != 0:
         print(f"[FFMPEG ERROR] profile={quality_profile} output={output_path} stderr={proc.stderr}")
     else:
