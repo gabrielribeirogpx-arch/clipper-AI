@@ -204,6 +204,7 @@ def _build_upload_response(transcription, file_id: str, filepath: str):
                 "end": hook["end"],
                 "duration": round(hook["end"] - hook["start"], 2),
                 "clip_path": _to_media_url(hook["clip_path"]),
+                "raw_clip_path": _to_media_url(hook.get("raw_clip_path", hook["clip_path"])),
                 "final_video": _to_media_url(hook["final_clip"]),
                 "viral_score": hook["viral_score"],
                 "hook_score": hook.get("hook_score", hook["viral_score"]),

@@ -15,6 +15,8 @@ timeline_state: dict[str, Any] = {
     "broll": [],
     "cuts": [],
     "renderQueue": [],
+    "render_mode": "ai_tracking",
+    "dual_regions": None,
 }
 
 

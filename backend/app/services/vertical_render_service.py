@@ -151,3 +151,39 @@ def render_vertical_clip(video_path: str, segments: List[Dict], output_path: str
             print(f"[WARN] could not delete proxy: {tracking_source}")
 
     return output_path
+
+
+def render_dual_region_clip(video_path: str, output_path: str, dual_regions: Dict) -> str:
+    print("[DUAL REGION ENABLED]")
+    region_a = dual_regions.get("regionA", {})
+    region_b = dual_regions.get("regionB", {})
+    print(f"[REGION A] {region_a}")
+    print(f"[REGION B] {region_b}")
+    print("[DUAL REGION RENDER START]")
+
+    def _box(region: Dict) -> tuple[int, int, int, int]:
+        return (
+            int(region.get("width", 0)),
+            int(region.get("height", 0)),
+            int(region.get("x", 0)),
+            int(region.get("y", 0)),
+        )
+
+    aw, ah, ax, ay = _box(region_a)
+    bw, bh, bx, by = _box(region_b)
+    filtergraph = (
+        f"[0:v]crop={aw}:{ah}:{ax}:{ay},scale=1080:960[top];"
+        f"[0:v]crop={bw}:{bh}:{bx}:{by},scale=1080:960[bottom];"
+        f"[top][bottom]vstack=inputs=2,format=yuv420p[v]"
+    )
+    cmd = [
+        "ffmpeg", "-y", "-i", video_path, "-filter_complex", filtergraph, "-map", "[v]", "-map", "0:a?",
+        "-c:v", EXPORT_VIDEO_CODEC, "-crf", str(EXPORT_CRF), "-preset", EXPORT_PRESET, "-pix_fmt", EXPORT_PIXEL_FORMAT,
+        "-c:a", EXPORT_AUDIO_CODEC, "-b:a", EXPORT_AUDIO_BITRATE, "-movflags", EXPORT_MOVFLAGS, output_path
+    ]
+    print(f"[DUAL REGION FFMPEG COMMAND] {' '.join(shlex.quote(part) for part in cmd)}")
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError(f"Dual region render failed: {proc.stderr}")
+    print("[DUAL REGION RENDER SUCCESS]")
+    return output_path

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from app.services.vertical_render_service import render_dual_region_clip
 
 from app.data.timeline_state import get_timeline_state, set_timeline_state
 
@@ -23,6 +24,8 @@ def export_clip(payload: dict):
         raise HTTPException(status_code=404, detail="Clip not found")
 
     source_media = clip.get("final_video") or clip.get("export_video") or clip.get("preview_video") or clip.get("clip_path")
+    render_mode = state.get("render_mode", "ai_tracking")
+    dual_regions = state.get("dual_regions")
     if not source_media:
         raise HTTPException(status_code=400, detail="Clip has no source media")
 
@@ -37,6 +40,12 @@ def export_clip(payload: dict):
         raise HTTPException(status_code=404, detail="Source media not found")
 
     export_media_path = Path("/media") / rel_source
+    render_source_path = source_path
+    if render_mode == "dual_region":
+        raw_media = clip.get("raw_clip_path") or clip.get("clip_path")
+        raw_rel = Path(str(raw_media).replace("/media/", "", 1))
+        render_source_path = (CLIPS_ROOT / raw_rel).resolve()
+        render_dual_region_clip(str(render_source_path), str(source_path), dual_regions or {})
     print(f"[PREVIEW SOURCE] clip_id={clip_id} source={source_path}")
     print(f"[EXPORT SOURCE] clip_id={clip_id} source={source_path}")
     print(f"[FINAL CLIP SOURCE] clip_id={clip_id} source={source_path}")

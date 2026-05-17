@@ -95,6 +95,7 @@ def process_video(
         ai_metadata = generate_clip_metadata(hook.get("text", ""))
 
         generated_clips.append({
+            "raw_clip_path": raw_clip_path,
             "clip_path": processed_clip_path,
             "final_clip": final_clip_path,
             "start": hook["start"],

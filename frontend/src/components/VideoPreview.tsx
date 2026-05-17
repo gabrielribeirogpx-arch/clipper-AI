@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { shouldSyncProgress } from '@/lib/playbackEngine';
 import { useMounted } from '@/hooks/useMounted';
@@ -8,7 +8,8 @@ import { useTimelineStore } from '@/store/timelineStore';
 
 
 export function VideoPreview() {
-  const { currentTime, setCurrentTime, isPlaying, setPlaying, duration, videoUrl } = useTimelineStore();
+  const { currentTime, setCurrentTime, isPlaying, setPlaying, duration, videoUrl, clipRenderMode, setClipRenderMode, dualRegions, setDualRegions } = useTimelineStore();
+  const [dragging, setDragging] = useState<'regionA' | 'regionB' | null>(null);
   const mounted = useMounted();
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -64,11 +65,15 @@ export function VideoPreview() {
 
       <div className="relative mx-auto w-full max-w-[1080px]">
         <div className="rounded-[2.3rem] border border-white/20 bg-gradient-to-b from-[#1f2937] to-[#040507] p-4 shadow-[0_0_90px_rgba(34,211,238,.3),0_0_130px_rgba(168,85,247,.22),0_50px_120px_rgba(0,0,0,.7)]">
+          <div className="mb-3 flex gap-2">
+            <button className={`rounded-lg px-3 py-1 text-sm ${clipRenderMode === 'ai_tracking' ? 'bg-cyan-400 text-black' : 'bg-white/10'}`} onClick={() => setClipRenderMode('ai_tracking')}>AI Tracking</button>
+            <button className={`rounded-lg px-3 py-1 text-sm ${clipRenderMode === 'dual_region' ? 'bg-cyan-400 text-black' : 'bg-white/10'}`} onClick={() => setClipRenderMode('dual_region')}>Dual Region</button>
+          </div>
           <div className="rounded-[1.9rem] border border-white/15 bg-black/95 p-2.5">
             <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-black">
               <div className="pointer-events-none absolute inset-0 z-20 bg-[linear-gradient(118deg,rgba(255,255,255,0.18)_0%,transparent_30%,transparent_70%,rgba(255,255,255,0.08)_100%)]" />
               <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,.22),transparent_38%)]" />
-              <div className="aspect-video">
+              <div className="aspect-video relative">
                 {resolvedVideoUrl ? (<video
                   key={resolvedVideoUrl}
                   ref={videoRef}
@@ -90,10 +95,35 @@ export function VideoPreview() {
                   }}
                   onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
                 />) : (<div className="flex h-full items-center justify-center text-slate-300">Nenhum clip real disponível ainda.</div>)}
+                {clipRenderMode === 'dual_region' && (
+                  <div
+                    className="absolute inset-0 z-30"
+                    onMouseMove={(e) => {
+                      if (!dragging) return;
+                      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                      const x = ((e.clientX - rect.left) / rect.width) * 1920;
+                      const y = ((e.clientY - rect.top) / rect.height) * 1080;
+                      const region = dualRegions[dragging];
+                      setDualRegions({ ...dualRegions, [dragging]: { ...region, x: Math.max(0, Math.min(1920 - region.width, x - region.width / 2)), y: Math.max(0, Math.min(1080 - region.height, y - region.height / 2)) } });
+                    }}
+                    onMouseUp={() => setDragging(null)}
+                  >
+                    {(['regionA', 'regionB'] as const).map((key) => {
+                      const r = dualRegions[key];
+                      return <div key={key} onMouseDown={() => setDragging(key)} className={`absolute border-2 ${key === 'regionA' ? 'border-cyan-300 bg-cyan-300/20' : 'border-violet-300 bg-violet-300/20'}`} style={{ left: `${(r.x / 1920) * 100}%`, top: `${(r.y / 1080) * 100}%`, width: `${(r.width / 1920) * 100}%`, height: `${(r.height / 1080) * 100}%` }} />;
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
+        {clipRenderMode === 'dual_region' && <div className="mt-3 flex gap-2 text-xs">
+          <button className="rounded bg-white/10 px-2 py-1" onClick={() => setDualRegions({ regionA: { x: 120, y: 80, width: 1680, height: 460 }, regionB: { x: 120, y: 540, width: 1680, height: 460 } })}>Podcast Split</button>
+          <button className="rounded bg-white/10 px-2 py-1" onClick={() => setDualRegions({ regionA: { x: 0, y: 0, width: 700, height: 500 }, regionB: { x: 640, y: 0, width: 1280, height: 720 } })}>Facecam + Gameplay</button>
+          <button className="rounded bg-white/10 px-2 py-1" onClick={() => setDualRegions({ regionA: { x: 0, y: 0, width: 960, height: 540 }, regionB: { x: 960, y: 0, width: 960, height: 540 } })}>Debate</button>
+          <button className="rounded bg-white/10 px-2 py-1" onClick={() => setDualRegions({ regionA: { x: 120, y: 120, width: 1680, height: 420 }, regionB: { x: 120, y: 580, width: 1680, height: 420 } })}>Reaction</button>
+        </div>}
 
         <div className="mt-7 flex items-center gap-5 rounded-[1.3rem] border border-white/10 bg-[#0a1122]/76 px-5 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,.1)] backdrop-blur-xl">
           <button onClick={() => setPlaying(!isPlaying)} className="rounded-xl bg-gradient-to-r from-cyan-300 to-violet-400 px-7 py-3 text-sm font-bold text-slate-950 shadow-[0_0_28px_rgba(34,211,238,.4)]">{isPlaying ? 'Pause' : 'Play'}</button>

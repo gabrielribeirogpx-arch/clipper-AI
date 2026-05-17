@@ -21,6 +21,10 @@ def update_timeline(payload: TimelineUpdateRequest):
     current_state["broll"] = [item.model_dump() for item in payload.broll]
     current_state["hooks"] = [item.model_dump() for item in payload.hooks]
     current_state["cuts"] = [item.model_dump() for item in payload.cuts]
+    if payload.render_mode:
+        current_state["render_mode"] = payload.render_mode
+    if payload.dual_regions:
+        current_state["dual_regions"] = payload.dual_regions.model_dump()
     set_timeline_state(current_state)
 
     return {"status": "updated"}

@@ -47,9 +47,13 @@ export type GeneratedClip = {
   caption: string;
   description: string;
   hashtags?: string[];
+  raw_clip_path?: string;
 };
 
 type RenderMode = 'preview' | 'export';
+export type ClipRenderMode = 'ai_tracking' | 'dual_region';
+export type RegionBox = { x: number; y: number; width: number; height: number };
+export type DualRegions = { regionA: RegionBox; regionB: RegionBox };
 
 type TimelineState = {
   analysisId: string | null;
@@ -66,6 +70,8 @@ type TimelineState = {
   renderQueue: RenderJob[];
   generatedClips: GeneratedClip[];
   selectedClipId: string | null;
+  clipRenderMode: ClipRenderMode;
+  dualRegions: DualRegions;
   resetForNewAnalysis: () => void;
   hydrateFromBackend: () => Promise<void>;
   selectClip: (clipId: string) => void;
@@ -75,6 +81,8 @@ type TimelineState = {
   selectBlock: (id: string | null) => void;
   updateBlock: (track: TrackType, id: string, patch: Partial<ClipBlock>) => void;
   moveBlock: (track: TrackType, id: string, start: number, end: number) => void;
+  setClipRenderMode: (mode: ClipRenderMode) => void;
+  setDualRegions: (regions: DualRegions) => void;
 };
 
 const clampTime = (value: number, duration: number) => Math.min(Math.max(value, 0), duration);
@@ -108,6 +116,11 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
   ],
   generatedClips: [],
   selectedClipId: null,
+  clipRenderMode: 'ai_tracking',
+  dualRegions: {
+    regionA: { x: 120, y: 80, width: 1680, height: 460 },
+    regionB: { x: 120, y: 540, width: 1680, height: 460 },
+  },
   resetForNewAnalysis: () =>
     set({
       analysisId: null,
@@ -164,6 +177,8 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
         broll: nextTracks.broll,
         hooks: nextTracks.hooks,
         cuts: nextTracks.cuts,
+        render_mode: state.clipRenderMode,
+        dual_regions: state.dualRegions,
       };
       void fetch('http://localhost:8000/timeline/update', {
         method: 'PUT',
@@ -172,6 +187,16 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       });
 
       return { tracks: nextTracks };
+    }),
+  setClipRenderMode: (clipRenderMode) =>
+    set((state) => {
+      void fetch('http://localhost:8000/timeline/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: clipRenderMode, dual_regions: state.dualRegions }) });
+      return { clipRenderMode };
+    }),
+  setDualRegions: (dualRegions) =>
+    set((state) => {
+      void fetch('http://localhost:8000/timeline/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: state.clipRenderMode, dual_regions: dualRegions }) });
+      return { dualRegions };
     }),
   hydrateFromBackend: async () => {
     const data = await getRenderState();
@@ -186,6 +211,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     const selectedClipId = generatedClips[0]?.id ?? null;
     const selectedClip = generatedClips[0];
     const backendAnalysisId: string | null = data.analysisId ?? null;
+    const clipRenderMode: ClipRenderMode = data.render_mode === 'dual_region' ? 'dual_region' : 'ai_tracking';
     const currentAnalysisId = get().analysisId;
     const analysisChanged = currentAnalysisId !== backendAnalysisId;
 
@@ -212,6 +238,8 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       selectedBlockId: null,
       generatedClips,
       selectedClipId,
+      clipRenderMode,
+      dualRegions: data.dual_regions ?? get().dualRegions,
       tracks: {
         broll: mapTrack(data.broll, 'broll'),
         hooks: mapTrack(data.hooks, 'hooks'),
@@ -236,5 +264,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     renderQueue: state.renderQueue,
     generatedClips: state.generatedClips,
     selectedClipId: state.selectedClipId,
+    clipRenderMode: state.clipRenderMode,
+    dualRegions: state.dualRegions,
   }),
 }));
