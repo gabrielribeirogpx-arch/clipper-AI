@@ -33,3 +33,10 @@ Thumbs.db
 
 # Cache
 .cache/
+
+*.mp4
+backend/downloads/
+backend/app/clips/
+
+cookies.txt
+backend/cookies.txt
