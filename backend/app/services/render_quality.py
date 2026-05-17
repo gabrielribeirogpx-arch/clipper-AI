@@ -1,0 +1,9 @@
+EXPORT_CRF = 18
+EXPORT_PRESET = "medium"
+EXPORT_AUDIO_BITRATE = "192k"
+
+EXPORT_VIDEO_CODEC = "libx264"
+EXPORT_AUDIO_CODEC = "aac"
+EXPORT_PIXEL_FORMAT = "yuv420p"
+EXPORT_MOVFLAGS = "+faststart"
+VERTICAL_PREMIUM_FILTER = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"
