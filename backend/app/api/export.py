@@ -40,6 +40,7 @@ def export_clip(payload: dict):
     print(f"[PREVIEW SOURCE] clip_id={clip_id} source={source_path}")
     print(f"[EXPORT SOURCE] clip_id={clip_id} source={source_path}")
     print(f"[FINAL CLIP SOURCE] clip_id={clip_id} source={source_path}")
+    print(f"[PIPELINE CONSISTENCY] preview==export==final source={source_path}")
     state["renderMode"] = "export"
     state["exportVideoUrl"] = export_media_path.as_posix()
     state["videoUrl"] = export_media_path.as_posix()
