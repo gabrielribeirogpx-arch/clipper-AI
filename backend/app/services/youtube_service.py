@@ -1,7 +1,6 @@
 import logging
 import os
 import re
-import json
 
 COOKIES_PATH = os.getenv(
     "YTDLP_COOKIES_PATH",
@@ -18,8 +17,7 @@ from dataclasses import dataclass
 UPLOAD_DIR = "app/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 logger = logging.getLogger(__name__)
-PLAYER_CLIENT_CANDIDATES = ["android", "tv", "ios", "web"]
-YOUTUBE_FORMAT_SELECTOR = "137+140/248+251/bestvideo+bestaudio/b"
+YOUTUBE_FORMAT_SELECTOR = "137+140/248+251/bestvideo+bestaudio/best"
 
 @dataclass
 class YouTubeDownloadError(Exception):
@@ -92,68 +90,6 @@ def _resolve_ffmpeg_location() -> str | None:
     return shutil.which("ffmpeg")
 
 
-def _extract_best_video_format(formats_json: str) -> tuple[int, str | None, int | None]:
-    try:
-        payload = json.loads(formats_json)
-    except json.JSONDecodeError:
-        return 0, None, None
-
-    formats = payload.get("formats") or []
-    best_height = 0
-    best_format_id: str | None = None
-    best_tbr: int | None = None
-    best_score = (-1, -1, -1)
-
-    for fmt in formats:
-        height = int(fmt.get("height") or 0)
-        width = int(fmt.get("width") or 0)
-        tbr = int(fmt.get("tbr") or 0)
-        vcodec = str(fmt.get("vcodec") or "none")
-        format_id = fmt.get("format_id")
-        has_url = bool(fmt.get("url"))
-        if not has_url or not format_id:
-            continue
-        if vcodec == "none":
-            continue
-        score = (height, width, tbr)
-        if score > best_score:
-            best_score = score
-            best_height = height
-            best_format_id = str(format_id)
-            best_tbr = tbr
-
-    return best_height, best_format_id, best_tbr
-
-
-def _list_formats_for_client(base_command: list[str], youtube_url: str, client: str) -> tuple[int, str, str | None, int | None]:
-    format_command = [
-        *base_command,
-        "--extractor-args",
-        f"youtube:player_client={client}",
-        "-J",
-        youtube_url,
-    ]
-    logger.info("[REAL YT-DLP COMMAND]", extra={"purpose": "formats_list", "client": client, "command": format_command})
-    result = subprocess.run(format_command, check=False, capture_output=True, text=True)
-    output = result.stdout or ""
-    max_height = 0
-    best_format_id: str | None = None
-    best_tbr: int | None = None
-    if result.returncode == 0:
-        max_height, best_format_id, best_tbr = _extract_best_video_format(output)
-    logger.info(
-        "[YOUTUBE CLIENT FORMAT SUMMARY]",
-        extra={
-            "client": client,
-            "returncode": result.returncode,
-            "best_height": max_height,
-            "best_format_id": best_format_id,
-            "best_tbr": best_tbr,
-            "stderr": (result.stderr or "").strip(),
-        },
-    )
-    return max_height, client, best_format_id, best_tbr
-
 
 def download_youtube_video(youtube_url: str, start_time: str | None = None, end_time: str | None = None) -> str:
     output_template = os.path.join(UPLOAD_DIR, f"yt_{uuid.uuid4()}_%(id)s.%(ext)s")
@@ -185,6 +121,14 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
         "mp4",
         "--print",
         "before_dl:[YOUTUBE SELECTED FORMAT] id=%(format_id)s ext=%(ext)s note=%(format_note)s vcodec=%(vcodec)s acodec=%(acodec)s",
+        "--print",
+        "before_dl:[REAL FINAL FORMAT] %(format_id)s",
+        "--print",
+        "before_dl:[REAL FINAL RESOLUTION] %(resolution)s",
+        "--print",
+        "before_dl:[REAL FINAL VCODEC] %(vcodec)s",
+        "--print",
+        "before_dl:[REAL FINAL ACODEC] %(acodec)s",
         "--print",
         "before_dl:[FINAL DOWNLOAD FORMAT] id=%(format_id)s res=%(resolution)s tbr=%(tbr)s",
         "--print",
@@ -226,27 +170,9 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
     if section:
         command.extend(["--download-sections", section])
 
-    client_results: list[tuple[int, str, str | None, int | None]] = []
-    for client in PLAYER_CLIENT_CANDIDATES:
-        max_height, checked_client, best_format_id, best_tbr = _list_formats_for_client(base_command, youtube_url, client)
-        client_results.append((max_height, checked_client, best_format_id, best_tbr))
-
-    best_height, best_client, client_format_id, client_tbr = max(client_results, key=lambda item: (item[0], item[3] or 0))
-    logger.info(
-        "[FINAL SELECTED YOUTUBE CLIENT]",
-        extra={
-            "results": client_results,
-            "selected_client": best_client,
-            "selected_max_height": best_height,
-            "selected_client_best_format_id": client_format_id,
-            "selected_client_best_tbr": client_tbr,
-        },
-    )
-    command.extend(["--extractor-args", f"youtube:player_client={best_client}"])
-
     command.append(youtube_url)
     logger.info("[YOUTUBE DOWNLOAD START] Iniciando download do YouTube", extra={"url": youtube_url})
-    logger.info("[REAL YT-DLP COMMAND]", extra={"purpose": "download", "selected_client": best_client, "command": command})
+    logger.info("[REAL YT-DLP COMMAND]", extra={"purpose": "download", "command": command})
     try:
         result = subprocess.run(
             command, 
@@ -267,6 +193,14 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
         ) from exc
     logger.info("[YT-DLP STDOUT]", extra={"stdout": result.stdout})
     logger.info("[YT-DLP STDERR]", extra={"stderr": result.stderr})
+
+    final_format_match = re.search(r"\[REAL FINAL FORMAT\]\s*([^\n\r]+)", result.stdout or "")
+    final_format_value = (final_format_match.group(1).strip() if final_format_match else "")
+    used_fallback_18 = final_format_value == "18"
+    logger.info(
+        "[FORMAT 18 FALLBACK STATUS]",
+        extra={"used_fallback_18": used_fallback_18, "real_final_format": final_format_value or None},
+    )
 
     if result.returncode != 0:
         category, message = _classify_ytdlp_error(result.stderr or "", result.stdout or "")
