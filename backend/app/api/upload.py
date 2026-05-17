@@ -149,6 +149,7 @@ def _build_upload_response(transcription, file_id: str, filepath: str):
 
     return {
         "success": True,
+        "analysis_id": analysis_id,
         "video_url": _to_media_url(first_final_clip),
         "preview_video_url": _to_media_url(first_final_clip),
         "export_video_url": _to_media_url(first_final_clip),
