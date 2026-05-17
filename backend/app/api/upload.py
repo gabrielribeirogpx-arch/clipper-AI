@@ -10,7 +10,7 @@ import json
 from app.jobs.process_video_job import process_video
 from app.data.timeline_state import set_timeline_state
 from app.services.youtube_service import download_youtube_video, YouTubeDownloadError
-from app.data.ingest_jobs import create_job, get_job, register_listener, unregister_listener, update_job
+from app.data.ingest_jobs import cleanup_jobs, create_job, get_job, register_listener, unregister_listener, update_job
 import os
 import uuid
 import shutil
@@ -134,10 +134,21 @@ async def ingest_youtube(request: Request):
 
 @router.get("/ingest/status/{job_id}")
 async def ingest_status(job_id: str):
+    print(f"[FRONTEND REQUESTED JOB STATE] job_id={job_id}")
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="job not found")
     return {k: job.get(k) for k in ["status", "progress", "step", "analysis_id", "clips", "error"]}
+
+
+@router.get("/ingest/job/{job_id}")
+async def ingest_job_state(job_id: str):
+    print(f"[FRONTEND REQUESTED JOB STATE] job_id={job_id}")
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    print(f"[JOB RESTORED] job_id={job_id}")
+    return {"job_id": job_id, **{k: job.get(k) for k in ["status", "progress", "step", "analysis_id", "clips", "finished", "error"]}}
 
 
 @router.get("/ingest/stream/{job_id}")
@@ -147,7 +158,7 @@ async def ingest_stream(job_id: str):
 
     async def event_generator():
         queue = register_listener(job_id)
-        print(f"[JOB SSE CONNECTED] job_id={job_id}")
+        print(f"[SSE CLIENT CONNECTED] job_id={job_id}")
         try:
             while True:
                 payload = await queue.get()
@@ -157,9 +168,18 @@ async def ingest_stream(job_id: str):
                     break
         finally:
             unregister_listener(job_id, queue)
-            print(f"[JOB SSE DISCONNECTED] job_id={job_id}")
+            print(f"[SSE CLIENT DISCONNECTED] job_id={job_id}")
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.on_event("startup")
+async def start_ingest_cleanup_task() -> None:
+    async def _cleanup_loop():
+        while True:
+            cleanup_jobs()
+            await asyncio.sleep(300)
+    asyncio.create_task(_cleanup_loop())
 
 
 def _build_upload_response(transcription, file_id: str, filepath: str):
