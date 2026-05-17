@@ -93,6 +93,7 @@ export async function exportClip(clipId: string): Promise<ExportResponse> {
 
 export type IngestJobResponse = { success: boolean; job_id: string; analysis_id: string; status: string };
 export type IngestStatus = { status: string; progress: number; step: string; analysis_id: string; clips: Array<Record<string, unknown>>; error: unknown };
+export type IngestJobState = IngestStatus & { job_id: string; finished: boolean };
 
 export async function ingestYouTubeJob(payload: YouTubeIngestRequest): Promise<IngestJobResponse> {
   const response = await fetch(`${API_BASE}/ingest/youtube`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -108,4 +109,10 @@ export async function getIngestStatus(jobId: string): Promise<IngestStatus> {
 
 export function createIngestStream(jobId: string): EventSource {
   return new EventSource(`${API_BASE}/ingest/stream/${jobId}`);
+}
+
+export async function getIngestJobState(jobId: string): Promise<IngestJobState> {
+  const response = await fetch(`${API_BASE}/ingest/job/${jobId}`);
+  if (!response.ok) throw new Error('Failed to fetch ingest job state');
+  return response.json() as Promise<IngestJobState>;
 }
