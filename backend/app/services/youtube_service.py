@@ -1,8 +1,6 @@
 import logging
 import os
 
-import os
-
 COOKIES_PATH = os.getenv(
     "YTDLP_COOKIES_PATH",
     "C:/temp/cookies.txt"
@@ -111,7 +109,15 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
         "--extractor-args",
         "youtube:player_client=web",
         "-f",
-        "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
+        "bestvideo+bestaudio/best",
+        "--merge-output-format",
+        "mp4",
+        "--print",
+        "before_dl:[YOUTUBE FORMAT SELECTED] id=%(format_id)s ext=%(ext)s note=%(format_note)s",
+        "--print",
+        "before_dl:[YOUTUBE VIDEO QUALITY] id=%(requested_formats.0.format_id)s res=%(requested_formats.0.resolution)s codec=%(requested_formats.0.vcodec)s fps=%(requested_formats.0.fps)s abr=%(requested_formats.0.tbr)s",
+        "--print",
+        "before_dl:[YOUTUBE AUDIO QUALITY] id=%(requested_formats.1.format_id)s abr=%(requested_formats.1.abr)s codec=%(requested_formats.1.acodec)s",
         "-o",
         output_template,
     ]
@@ -203,4 +209,30 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
             message="Failed to locate downloaded YouTube video file.",
             category="missing_output",
         )
-    return os.path.join(UPLOAD_DIR, matches[0])
+    output_file = os.path.join(UPLOAD_DIR, matches[0])
+
+    if ffmpeg_location:
+        ffprobe_location = os.path.join(os.path.dirname(ffmpeg_location), "ffprobe")
+        if os.name == "nt":
+            ffprobe_location = f"{ffprobe_location}.exe"
+        if not os.path.isfile(ffprobe_location):
+            ffprobe_location = shutil.which("ffprobe")
+
+        if ffprobe_location:
+            probe_cmd = [
+                ffprobe_location,
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=codec_type,width,height,codec_name,avg_frame_rate,bit_rate:format=bit_rate",
+                "-of",
+                "default=noprint_wrappers=1",
+                output_file,
+            ]
+            probe_result = subprocess.run(probe_cmd, check=False, capture_output=True, text=True)
+            if probe_result.returncode == 0:
+                logger.info("[YOUTUBE SOURCE PROBE]", extra={"metadata": probe_result.stdout})
+            else:
+                logger.warning("[YOUTUBE SOURCE PROBE FAILED]", extra={"stderr": probe_result.stderr})
+
+    return output_file
