@@ -1,6 +1,17 @@
 from pydantic import BaseModel
 from typing import List, Optional
 
+class RegionBox(BaseModel):
+    x: float
+    y: float
+    width: float
+    height: float
+
+
+class DualRegions(BaseModel):
+    regionA: RegionBox
+    regionB: RegionBox
+
 
 class TimelineBlock(BaseModel):
     id: str
@@ -23,3 +34,5 @@ class TimelineUpdateRequest(BaseModel):
     broll: List[TimelineBlock]
     hooks: List[TimelineBlock]
     cuts: List[TimelineBlock]
+    render_mode: Optional[str] = None
+    dual_regions: Optional[DualRegions] = None
