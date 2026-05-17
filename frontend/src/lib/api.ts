@@ -8,6 +8,8 @@ export type UploadResponse = {
   clips?: Array<Record<string, unknown>>;
 };
 
+export type RenderMode = "ai_tracking" | "dual_region";
+
 export type YouTubeIngestRequest = {
   youtube_url: string;
   analysis_name?: string;
@@ -16,6 +18,7 @@ export type YouTubeIngestRequest = {
   end_time?: string;
   min_clip_length?: number;
   max_clip_length?: number;
+  render_mode?: RenderMode;
 };
 
 const API_BASE = 'http://localhost:8000';
@@ -24,11 +27,13 @@ export function uploadVideo(
   file: File,
   analysisName?: string,
   onProgress?: (progress: number) => void,
+  renderMode: RenderMode = "ai_tracking",
 ): Promise<UploadResponse> {
   return new Promise((resolve, reject) => {
     const formData = new FormData();
     formData.append('file', file);
     if (analysisName?.trim()) formData.append('analysis_name', analysisName.trim());
+    formData.append('render_mode', renderMode);
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${API_BASE}/upload`);

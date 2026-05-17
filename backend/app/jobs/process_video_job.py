@@ -4,7 +4,7 @@ import time
 from app.services.whisper_service import transcribe_video
 from app.services.hook_detector import detect_hooks
 from app.services.ffmpeg_service import cut_clip, apply_broll_overlay
-from app.services.vertical_render_service import render_vertical_clip
+from app.services.vertical_render_service import render_vertical_clip, render_dual_region_clip
 from app.services.broll_engine import BRollEngine
 from app.services.social_metadata_service import generate_social_metadata
 from app.services.ai_local_service import generate_clip_metadata
@@ -13,6 +13,8 @@ from app.services.ai_local_service import generate_clip_metadata
 def process_video(
     video_path,
     output_dir: str = "app/clips",
+    render_mode: str = "ai_tracking",
+    dual_region_config: dict | None = None,
     min_clip_length: int = 30,
     max_clip_length: int = 90,
     max_clips: int = 25,
@@ -70,12 +72,14 @@ def process_video(
             output_dir=output_dir,
         )
 
-        processed_clip_path = render_vertical_clip(
-            raw_clip_path,
-            transcription["segments"],
-            os.path.join(output_dir, f"clip_{index}.mp4"),
-            speaker_segments=transcription.get("speaker_segments", []),
-        )
+        processed_clip_path = raw_clip_path
+        if render_mode == "ai_tracking":
+            processed_clip_path = render_vertical_clip(
+                raw_clip_path,
+                transcription["segments"],
+                os.path.join(output_dir, f"clip_{index}.mp4"),
+                speaker_segments=transcription.get("speaker_segments", []),
+            )
 
         segment_timeline = broll_engine.build_timeline([
             segment for segment in transcription["segments"]
@@ -89,6 +93,11 @@ def process_video(
             output_dir=output_dir,
             quality_profile="export",
         )
+
+        if render_mode == "dual_region" and dual_region_config:
+            print("[DUAL REGION FINAL RENDER START]")
+            render_dual_region_clip(raw_clip_path, final_clip_path, dual_region_config)
+            print("[DUAL REGION FINAL RENDER SUCCESS]")
 
 
         metadata = generate_social_metadata(hook.get("text", ""), hook.get("viral_score", 0))

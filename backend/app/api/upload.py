@@ -61,19 +61,22 @@ async def process_youtube_ingest_job(job_id: str, body: dict, output_dir: str) -
         update_job(job_id, status="detecting", progress=55, step="Detecting best clips")
         update_job(job_id, status="rendering", progress=75, step="Rendering clips and metadata")
 
+        render_mode = body.get("render_mode", "ai_tracking")
         transcription = await asyncio.to_thread(
             process_video,
             filepath,
-            output_dir,
-            int(body.get("min_clip_length", 30)),
-            int(body.get("max_clip_length", 90)),
-            25,
-            0.45,
-            0.6,
-            lambda msg: print(msg),
+            output_dir=output_dir,
+            render_mode=render_mode,
+            dual_region_config=body.get("dual_region_config"),
+            min_clip_length=int(body.get("min_clip_length", 30)),
+            max_clip_length=int(body.get("max_clip_length", 90)),
+            max_clips=25,
+            min_score=0.45,
+            overlap_tolerance=0.6,
+            step_logger=lambda msg: print(msg),
         )
 
-        response_payload = _build_upload_response(transcription, str(uuid.uuid4()), filepath)
+        response_payload = _build_upload_response(transcription, str(uuid.uuid4()), filepath, render_mode=render_mode)
         update_job(
             job_id,
             status="completed",
@@ -95,6 +98,7 @@ async def upload_video(
     file: UploadFile = File(...),
     analysis_name: str | None = Form(default=None),
     output_folder: str | None = Form(default=None),
+    render_mode: str = Form(default="ai_tracking"),
 ):
 
     file_id = str(uuid.uuid4())
@@ -109,8 +113,8 @@ async def upload_video(
     os.makedirs(output_dir, exist_ok=True)
     print(f"[ANALYSIS FOLDER CREATED] {output_dir}")
 
-    transcription = process_video(filepath, output_dir=output_dir)
-    return _build_upload_response(transcription, file_id, filepath)
+    transcription = process_video(filepath, output_dir=output_dir, render_mode=render_mode)
+    return _build_upload_response(transcription, file_id, filepath, render_mode=render_mode)
 
 
 @router.post("/ingest/youtube")
@@ -182,7 +186,7 @@ async def start_ingest_cleanup_task() -> None:
     asyncio.create_task(_cleanup_loop())
 
 
-def _build_upload_response(transcription, file_id: str, filepath: str):
+def _build_upload_response(transcription, file_id: str, filepath: str, render_mode: str = "ai_tracking"):
 
     hooks = transcription["hooks"]
     duration = max([hook["end"] for hook in hooks], default=0.0)
@@ -237,6 +241,7 @@ def _build_upload_response(transcription, file_id: str, filepath: str):
 
     return {
         "success": True,
+        "render_mode": render_mode,
         "analysis_id": analysis_id,
         "video_url": _to_media_url(first_final_clip),
         "preview_video_url": _to_media_url(first_final_clip),
