@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ingestYouTubeVideo, uploadVideo } from '@/lib/api';
 import { useUploadStore } from '@/store/uploadStore';
+import { useTimelineStore } from '@/store/timelineStore';
 
 const PROCESS_STAGES = ['Analyzing speech...', 'Detecting viral hooks...', 'Creating cinematic cuts...', 'Applying reframing...', 'Creating AI timeline...'];
 const MAX_SIZE = 1024 * 1024 * 1024;
@@ -117,6 +118,8 @@ export default function UploadPage() {
   const fileRef = useRef<File | null>(null);
   const router = useRouter();
   const store = useUploadStore();
+  const resetForNewAnalysis = useTimelineStore((state) => state.resetForNewAnalysis);
+  const hydrateFromBackend = useTimelineStore((state) => state.hydrateFromBackend);
 
   const sizeLabel = useMemo(() => (store.uploadedVideo ? `${(store.uploadedVideo.size / (1024 * 1024)).toFixed(1)} MB` : null), [store.uploadedVideo]);
   const validateFile = (file: File) => (['video/mp4', 'video/quicktime'].includes(file.type) ? (file.size > MAX_SIZE ? 'Arquivo maior que 1GB.' : null) : 'Somente MP4 ou MOV.');
@@ -126,6 +129,7 @@ export default function UploadPage() {
     const validation = validateFile(file);
     if (validation) return setError(validation);
     setError(null);
+    resetForNewAnalysis();
     store.setUploadedVideo({ name: file.name, size: file.size, type: file.type, previewUrl: URL.createObjectURL(file) });
     store.setUploadStatus('uploading');
     const result = await uploadVideo(file, analysisName, store.setUploadProgress).catch((e) => {
@@ -138,6 +142,7 @@ export default function UploadPage() {
       await new Promise((r) => setTimeout(r, 450));
     }
     store.setUploadResult(result.project_id, result.timeline);
+    await hydrateFromBackend();
     store.setUploadStatus('success');
     setRecentUploads((prev) => [file.name, ...prev].slice(0, 4));
     setTimeout(() => router.push('/editor'), 600);
@@ -146,6 +151,7 @@ export default function UploadPage() {
   const processYoutube = async () => {
     if (!youtubeUrl.trim()) return setError('YouTube URL is required.');
     setError(null);
+    resetForNewAnalysis();
     store.setUploadStatus('processing');
     const result = await ingestYouTubeVideo({
       youtube_url: youtubeUrl.trim(),
@@ -160,6 +166,7 @@ export default function UploadPage() {
       await new Promise((r) => setTimeout(r, 450));
     }
     store.setUploadResult(result.project_id, result.timeline);
+    await hydrateFromBackend();
     store.setUploadStatus('success');
     setRecentUploads((prev) => [youtubeUrl, ...prev].slice(0, 4));
     setTimeout(() => router.push('/editor'), 600);

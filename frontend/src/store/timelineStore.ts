@@ -52,6 +52,7 @@ export type GeneratedClip = {
 type RenderMode = 'preview' | 'export';
 
 type TimelineState = {
+  analysisId: string | null;
   renderMode: RenderMode;
   videoUrl: string | null;
   previewVideoUrl: string | null;
@@ -65,6 +66,7 @@ type TimelineState = {
   renderQueue: RenderJob[];
   generatedClips: GeneratedClip[];
   selectedClipId: string | null;
+  resetForNewAnalysis: () => void;
   hydrateFromBackend: () => Promise<void>;
   selectClip: (clipId: string) => void;
   setCurrentTime: (time: number) => void;
@@ -87,6 +89,7 @@ const tracksSeed: Record<TrackType, ClipBlock[]> = {
 };
 
 export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
+  analysisId: null,
   renderMode: 'preview',
   videoUrl: null,
   previewVideoUrl: null,
@@ -105,6 +108,25 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
   ],
   generatedClips: [],
   selectedClipId: null,
+  resetForNewAnalysis: () =>
+    set({
+      analysisId: null,
+      videoUrl: null,
+      previewVideoUrl: null,
+      exportVideoUrl: null,
+      duration: 0,
+      currentTime: 0,
+      isPlaying: false,
+      selectedBlockId: null,
+      generatedClips: [],
+      selectedClipId: null,
+      tracks: {
+        broll: [],
+        hooks: [],
+        cuts: [],
+        effects: [],
+      },
+    }),
   setCurrentTime: (currentTime) => set({ currentTime: clampTime(currentTime, get().duration) }),
   setPlaying: (isPlaying) => set({ isPlaying }),
   setZoom: (zoom) => set({ zoom: Math.min(3, Math.max(0.5, zoom)) }),
@@ -163,7 +185,21 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       .sort((a: GeneratedClip, b: GeneratedClip) => b.viral_score - a.viral_score);
     const selectedClipId = generatedClips[0]?.id ?? null;
     const selectedClip = generatedClips[0];
+    const backendAnalysisId: string | null = data.analysisId ?? null;
+    const currentAnalysisId = get().analysisId;
+    const analysisChanged = currentAnalysisId !== backendAnalysisId;
+
+    console.log('[BACKEND ANALYSIS_ID]', backendAnalysisId);
+    console.log('[FRONTEND ACTIVE ANALYSIS_ID]', currentAnalysisId);
+    if (analysisChanged) {
+      console.log('[ANALYSIS CHANGED - CLEARING PREVIOUS STATE]', {
+        from: currentAnalysisId,
+        to: backendAnalysisId,
+      });
+    }
+    console.log('[CURRENT CLIP SOURCE]', selectedClip?.final_video ?? data.previewVideoUrl ?? null);
     set({
+      analysisId: backendAnalysisId,
       renderMode,
       previewVideoUrl,
       exportVideoUrl,
@@ -172,6 +208,8 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
         : renderMode === 'export' ? exportVideoUrl : previewVideoUrl,
       duration: selectedClip?.duration ?? data.duration ?? 0,
       currentTime: selectedClip?.start ?? 0,
+      isPlaying: false,
+      selectedBlockId: null,
       generatedClips,
       selectedClipId,
       tracks: {
@@ -181,10 +219,12 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
         effects: [],
       }
     });
+    console.log('[FRONTEND ACTIVE ANALYSIS_ID]', backendAnalysisId);
   }
 }), {
   name: 'clipper-timeline-state',
   partialize: (state) => ({
+    analysisId: state.analysisId,
     renderMode: state.renderMode,
     videoUrl: state.videoUrl,
     previewVideoUrl: state.previewVideoUrl,

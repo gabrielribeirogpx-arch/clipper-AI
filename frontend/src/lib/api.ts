@@ -3,6 +3,7 @@ export type UploadResponse = {
   video_url: string;
   timeline: Record<string, unknown>;
   project_id: string;
+  analysis_id?: string;
   duration: number;
   clips?: Array<Record<string, unknown>>;
 };
