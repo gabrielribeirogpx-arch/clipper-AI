@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 import tempfile
 from typing import Dict, List
@@ -45,6 +46,23 @@ def _probe_dimensions(media_path: str) -> tuple[int, int]:
     return int(w), int(h)
 
 
+def _probe_bitrate(media_path: str) -> str:
+    probe_cmd = [
+        "ffprobe", "-v", "error", "-select_streams", "v:0",
+        "-show_entries", "format=bit_rate", "-of", "default=noprint_wrappers=1:nokey=1", media_path,
+    ]
+    proc = subprocess.run(probe_cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        return f"probe_error:{proc.stderr.strip()}"
+    return (proc.stdout or "").strip() or "unknown"
+
+
+def _log_file_stats(label: str, media_path: str) -> None:
+    if os.path.exists(media_path):
+        print(f"[{label} SIZE BYTES] {os.path.getsize(media_path)}")
+        print(f"[{label} BITRATE] {_probe_bitrate(media_path)}")
+
+
 def _create_proxy_if_needed(video_path: str) -> tuple[str, bool]:
     width, _ = _probe_dimensions(video_path)
     if width <= MAX_TRACKING_WIDTH:
@@ -57,6 +75,12 @@ def _create_proxy_if_needed(video_path: str) -> tuple[str, bool]:
         "ffmpeg", "-y", "-i", video_path, "-vf", "scale=1920:-2",
         "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p", "-an", proxy_path,
     ]
+    print(f"[REAL FFMPEG COMMAND] {' '.join(shlex.quote(part) for part in cmd)}")
+    print(f"[REAL INPUT FILE] {video_path}")
+    print(f"[REAL OUTPUT FILE] {proxy_path}")
+    print("[REAL CRF] 18")
+    print("[REAL PRESET] medium")
+    _log_file_stats("REAL INPUT", video_path)
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if proc.returncode != 0:
         raise RuntimeError(f"Failed to create proxy video.\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
@@ -66,6 +90,8 @@ def _create_proxy_if_needed(video_path: str) -> tuple[str, bool]:
 def render_vertical_clip(video_path: str, segments: List[Dict], output_path: str, speaker_segments=None) -> str:
     """Render a vertical clip with camera reframing and original audio, without subtitles."""
     tracking_source, proxy_created = _create_proxy_if_needed(video_path)
+    if proxy_created:
+        _log_file_stats("REAL OUTPUT", tracking_source)
     tracking_clip = VideoFileClip(tracking_source)
 
     sample_fps = 4.0 if SAFE_CPU_RENDER else 6.0
@@ -77,6 +103,13 @@ def render_vertical_clip(video_path: str, segments: List[Dict], output_path: str
 
     print("[RENDER QUALITY PROFILE] profile=vertical_export")
     print("[FFMPEG START] profile=vertical_export output={}".format(output_path))
+    print(f"[REAL PIPELINE] profile=vertical_export")
+    print(f"[REAL INPUT FILE] {video_path}")
+    print(f"[REAL OUTPUT FILE] {output_path}")
+    print(f"[REAL CRF] {FINAL_EXPORT_SETTINGS['crf']}")
+    print(f"[REAL PRESET] {FINAL_EXPORT_SETTINGS['preset']}")
+    print("[REAL FFMPEG COMMAND] moviepy.write_videofile(codec={codec},preset={preset},fps=30,ffmpeg_params={params})".format(codec=FINAL_EXPORT_SETTINGS['codec'], preset=FINAL_EXPORT_SETTINGS['preset'], params=['-crf', str(FINAL_EXPORT_SETTINGS['crf']), '-vf', VERTICAL_PREMIUM_FILTER, '-pix_fmt', FINAL_EXPORT_SETTINGS['pix_fmt'], '-b:a', FINAL_EXPORT_SETTINGS['audio_bitrate'], '-movflags', FINAL_EXPORT_SETTINGS['movflags']]))
+    _log_file_stats("REAL INPUT", video_path)
     try:
         final_video.write_videofile(
             output_path,
@@ -108,6 +141,7 @@ def render_vertical_clip(video_path: str, segments: List[Dict], output_path: str
     if (final_w, final_h) != TARGET_RENDER_SIZE:
         raise RuntimeError(f"Rendered video has invalid size {final_w}x{final_h}; expected 1080x1920")
     print(f"[FINAL RESOLUTION] {final_w}x{final_h}")
+    _log_file_stats("REAL OUTPUT", output_path)
 
     if proxy_created and tracking_source != video_path and os.path.exists(tracking_source):
         tracking_clip.close()
