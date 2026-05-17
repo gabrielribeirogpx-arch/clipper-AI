@@ -11,10 +11,12 @@ type ActiveDrag = {
   pointerId: number;
   key: RegionKey;
   type: 'move' | 'resize';
+  handle?: ResizeHandle;
   startX: number;
   startY: number;
   origin: RegionBox;
 };
+type ResizeHandle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
 const VIDEO_W = 1920;
 const VIDEO_H = 1080;
@@ -28,6 +30,7 @@ export default function RegionSetupPage() {
   const { videoUrl, dualRegions, setDualRegions, generatedClips, analysisId, clipRenderMode } = useTimelineStore();
   const playerRef = useRef<HTMLDivElement | null>(null);
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<RegionKey>('regionA');
   const [showGrid, setShowGrid] = useState(true);
 
   const presets = {
@@ -37,12 +40,17 @@ export default function RegionSetupPage() {
     reaction: { regionA: { x: 120, y: 120, width: 1020, height: 860 }, regionB: { x: 1140, y: 170, width: 660, height: 760 } },
   } as const;
 
-  const startDrag = (e: React.PointerEvent, key: RegionKey, type: 'move' | 'resize') => {
+  const startDrag = (e: React.PointerEvent, key: RegionKey, type: 'move' | 'resize', handle?: ResizeHandle) => {
     if (clipRenderMode !== 'dual_region') return;
     e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    console.log('[DUAL REGION POINTER DOWN]', { key, type, x: e.clientX, y: e.clientY });
-    setActiveDrag({ pointerId: e.pointerId, key, type, startX: e.clientX, startY: e.clientY, origin: dualRegions[key] });
+    setSelectedRegion(key);
+    if (type === 'move') {
+      console.log('[DUAL REGION DRAG START]', { key, x: e.clientX, y: e.clientY });
+    } else {
+      console.log('[DUAL REGION RESIZE START]', { key, handle, x: e.clientX, y: e.clientY });
+    }
+    setActiveDrag({ pointerId: e.pointerId, key, type, handle, startX: e.clientX, startY: e.clientY, origin: dualRegions[key] });
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -60,15 +68,43 @@ export default function RegionSetupPage() {
     if (activeDrag.type === 'move') {
       current.x = clamp(activeDrag.origin.x + dx, 0, VIDEO_W - activeDrag.origin.width);
       current.y = clamp(activeDrag.origin.y + dy, 0, VIDEO_H - activeDrag.origin.height);
-      console.log('[DUAL REGION DRAG ACTIVE]', activeDrag.key, current);
+      console.log('[DUAL REGION DRAG MOVE]', activeDrag.key, current);
     } else {
-      current.width = clamp(activeDrag.origin.width + dx, MIN_REGION_W, VIDEO_W - activeDrag.origin.x);
-      current.height = clamp(activeDrag.origin.height + dy, MIN_REGION_H, VIDEO_H - activeDrag.origin.y);
-      console.log('[DUAL REGION RESIZE ACTIVE]', activeDrag.key, current);
+      let nextX = activeDrag.origin.x;
+      let nextY = activeDrag.origin.y;
+      let nextW = activeDrag.origin.width;
+      let nextH = activeDrag.origin.height;
+      const handle = activeDrag.handle ?? 'se';
+
+      if (handle.includes('e')) nextW = activeDrag.origin.width + dx;
+      if (handle.includes('s')) nextH = activeDrag.origin.height + dy;
+      if (handle.includes('w')) {
+        nextW = activeDrag.origin.width - dx;
+        nextX = activeDrag.origin.x + dx;
+      }
+      if (handle.includes('n')) {
+        nextH = activeDrag.origin.height - dy;
+        nextY = activeDrag.origin.y + dy;
+      }
+
+      const maxWidthByX = VIDEO_W - nextX;
+      const maxHeightByY = VIDEO_H - nextY;
+      nextW = clamp(nextW, MIN_REGION_W, maxWidthByX);
+      nextH = clamp(nextH, MIN_REGION_H, maxHeightByY);
+
+      nextX = clamp(nextX, 0, VIDEO_W - MIN_REGION_W);
+      nextY = clamp(nextY, 0, VIDEO_H - MIN_REGION_H);
+      nextW = clamp(nextW, MIN_REGION_W, VIDEO_W - nextX);
+      nextH = clamp(nextH, MIN_REGION_H, VIDEO_H - nextY);
+
+      current.x = nextX;
+      current.y = nextY;
+      current.width = nextW;
+      current.height = nextH;
+      console.log('[DUAL REGION RESIZE MOVE]', activeDrag.key, { handle, ...current });
     }
 
     setDualRegions(next);
-    console.log('[DUAL REGION PREVIEW UPDATED]', next);
   };
 
   const endDrag = (e: React.PointerEvent) => {
@@ -77,7 +113,11 @@ export default function RegionSetupPage() {
     if (target?.hasPointerCapture?.(e.pointerId)) {
       target.releasePointerCapture(e.pointerId);
     }
-    console.log('[DUAL REGION POINTER UP]', { key: activeDrag.key, type: activeDrag.type });
+    if (activeDrag.type === 'move') {
+      console.log('[DUAL REGION DRAG END]', { key: activeDrag.key, region: dualRegions[activeDrag.key] });
+    } else {
+      console.log('[DUAL REGION RESIZE END]', { key: activeDrag.key, handle: activeDrag.handle, region: dualRegions[activeDrag.key] });
+    }
     setActiveDrag(null);
   };
 
@@ -121,7 +161,7 @@ export default function RegionSetupPage() {
                 key={key}
                 layout
                 transition={{ type: 'spring', stiffness: 400, damping: 35 }}
-                className={`absolute cursor-move rounded-xl border-2 transition-[box-shadow,transform] duration-150 ease-out touch-none ${containerStyles[key]} ${activeDrag?.key === key ? 'ring-2 ring-white/70 shadow-[0_0_0_1px_rgba(255,255,255,0.45),0_0_30px_rgba(255,255,255,0.35)]' : ''}`}
+                className={`absolute cursor-move rounded-xl border-2 transition-[box-shadow,transform] duration-100 ease-out touch-none ${containerStyles[key]} ${selectedRegion === key || activeDrag?.key === key ? 'ring-2 ring-white/70 shadow-[0_0_0_1px_rgba(255,255,255,0.45),0_0_30px_rgba(255,255,255,0.35)]' : 'hover:shadow-[0_0_18px_rgba(255,255,255,0.2)]'}`}
                 style={{
                   left: toPercent(region.x, VIDEO_W),
                   top: toPercent(region.y, VIDEO_H),
@@ -133,15 +173,27 @@ export default function RegionSetupPage() {
                 <div className='absolute left-2 top-2 rounded-md bg-black/65 px-2 py-1 text-xs font-semibold tracking-wider'>
                   {key === 'regionA' ? 'REGIÃO A' : 'REGIÃO B'}
                 </div>
-                <button
-                  type='button'
-                  aria-label={`Resize ${key}`}
-                  className='absolute bottom-1 right-1 h-5 w-5 cursor-se-resize rounded-sm border border-cyan-200/90 bg-cyan-300/45 shadow-[0_0_14px_rgba(34,211,238,0.95)] transition-colors hover:bg-cyan-200/70'
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    startDrag(e, key, 'resize');
-                  }}
-                />
+                {([
+                  { h: 'n', cls: 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-n-resize w-5 h-2' },
+                  { h: 's', cls: 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 cursor-s-resize w-5 h-2' },
+                  { h: 'e', cls: 'right-0 top-1/2 translate-x-1/2 -translate-y-1/2 cursor-e-resize w-2 h-5' },
+                  { h: 'w', cls: 'left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-w-resize w-2 h-5' },
+                  { h: 'ne', cls: 'right-0 top-0 translate-x-1/2 -translate-y-1/2 cursor-ne-resize w-3 h-3' },
+                  { h: 'nw', cls: 'left-0 top-0 -translate-x-1/2 -translate-y-1/2 cursor-nw-resize w-3 h-3' },
+                  { h: 'se', cls: 'right-0 bottom-0 translate-x-1/2 translate-y-1/2 cursor-se-resize w-3 h-3' },
+                  { h: 'sw', cls: 'left-0 bottom-0 -translate-x-1/2 translate-y-1/2 cursor-sw-resize w-3 h-3' },
+                ] as { h: ResizeHandle; cls: string }[]).map(({ h, cls }) => (
+                  <button
+                    key={`${key}-${h}`}
+                    type='button'
+                    aria-label={`Resize ${key} ${h}`}
+                    className={`absolute rounded-md border border-white/80 bg-white/85 shadow-[0_0_12px_rgba(255,255,255,0.9)] ${cls}`}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      startDrag(e, key, 'resize', h);
+                    }}
+                  />
+                ))}
               </motion.div>
             );
           })}
