@@ -2,11 +2,9 @@ from datetime import datetime
 from pathlib import Path
 import re
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+from fastapi import APIRouter, UploadFile, File, Form, Request
 from app.jobs.process_video_job import process_video
 from app.data.timeline_state import set_timeline_state
-from app.schemas.upload import YoutubeIngestRequest
-from app.services.youtube_service import YouTubeDownloadError, download_youtube_video
 import os
 import uuid
 import shutil
@@ -66,33 +64,19 @@ async def upload_video(
 
 
 @router.post("/ingest/youtube")
-async def ingest_youtube(payload: YoutubeIngestRequest):
-    file_id = str(uuid.uuid4())
+async def ingest_youtube(request: Request):
+    print("[INGEST ENDPOINT ENTERED]")
+
     try:
-        filepath = download_youtube_video(
-            payload.youtube_url,
-            start_time=payload.start_time,
-            end_time=payload.end_time,
-        )
-    except YouTubeDownloadError as error:
-        raise HTTPException(status_code=400, detail={"error": error.message}) from error
-
-    analysis_folder = _resolve_analysis_folder(payload.analysis_name, payload.output_folder)
-    output_dir = os.path.join(CLIPS_DIR, analysis_folder)
-    os.makedirs(output_dir, exist_ok=True)
-    print(f"[ANALYSIS FOLDER CREATED] {output_dir}")
-
-    transcription = process_video(
-        filepath,
-        output_dir=output_dir,
-        min_clip_length=payload.min_clip_length,
-        max_clip_length=payload.max_clip_length,
-        max_clips=payload.max_clips,
-        min_score=payload.min_score,
-        overlap_tolerance=payload.overlap_tolerance,
-    )
-
-    return _build_upload_response(transcription, file_id, filepath)
+        body = await request.json()
+        print("[RAW REQUEST BODY]", body)
+        return {
+            "ok": True,
+            "body": body,
+        }
+    except Exception as error:
+        print("[INGEST BODY PARSE ERROR]", repr(error))
+        raise
 
 
 def _build_upload_response(transcription, file_id: str, filepath: str):
