@@ -1,6 +1,6 @@
 'use client';
 
-import { ChangeEvent, DragEvent, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, DragEvent, MouseEvent, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ingestYouTubeVideo, uploadVideo } from '@/lib/api';
@@ -153,6 +153,7 @@ export default function UploadPage() {
     setError(null);
     resetForNewAnalysis();
     store.setUploadStatus('processing');
+    console.log('[STARTING YOUTUBE INGEST REQUEST]');
     const result = await ingestYouTubeVideo({
       youtube_url: youtubeUrl.trim(),
       analysis_name: analysisName.trim() || undefined,
@@ -170,6 +171,12 @@ export default function UploadPage() {
     store.setUploadStatus('success');
     setRecentUploads((prev) => [youtubeUrl, ...prev].slice(0, 4));
     setTimeout(() => router.push('/editor'), 600);
+  };
+
+  const handleAnalyzeYoutube = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    console.log('[ANALYZE BUTTON CLICKED]');
+    void processYoutube().catch((e) => setError(e.message));
   };
 
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
@@ -216,7 +223,7 @@ export default function UploadPage() {
           <input value={analysisName} onChange={(e) => setAnalysisName(e.target.value)} placeholder="Nome da análise (opcional)" className="rounded-lg bg-slate-900 px-3 py-2 text-sm" />
           <input value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)} placeholder="https://youtube.com/live/..." className="rounded-lg bg-slate-900 px-3 py-2 text-sm" />
           <YouTubeRangeSelector duration={MAX_YOUTUBE_DURATION_SECONDS} start={startSeconds} end={endSeconds} onStart={setStartSeconds} onEnd={setEndSeconds} />
-          <button onClick={() => void processYoutube().catch((e) => setError(e.message))} className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold transition hover:bg-violet-400">
+          <button type="button" onClick={handleAnalyzeYoutube} className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold transition hover:bg-violet-400">
             Analyze YouTube livestream
           </button>
         </div>
