@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 
 COOKIES_PATH = os.getenv(
     "YTDLP_COOKIES_PATH",
@@ -16,6 +17,7 @@ from dataclasses import dataclass
 UPLOAD_DIR = "app/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 logger = logging.getLogger(__name__)
+PLAYER_CLIENT_CANDIDATES = ["web", "android", "tv", "ios"]
 
 @dataclass
 class YouTubeDownloadError(Exception):
@@ -88,9 +90,30 @@ def _resolve_ffmpeg_location() -> str | None:
     return shutil.which("ffmpeg")
 
 
+def _extract_max_height(formats_output: str) -> int:
+    heights = [int(m.group(1)) for m in re.finditer(r"\b(\d{3,4})p\b", formats_output)]
+    return max(heights) if heights else 0
+
+
+def _list_formats_for_client(base_command: list[str], youtube_url: str, client: str) -> tuple[int, str]:
+    format_command = [
+        *base_command,
+        "--extractor-args",
+        f"youtube:player_client={client}",
+        "-F",
+        youtube_url,
+    ]
+    logger.info("[YOUTUBE AVAILABLE FORMATS] listing", extra={"client": client, "command": format_command})
+    result = subprocess.run(format_command, check=False, capture_output=True, text=True)
+    output = (result.stdout or "") + "\n" + (result.stderr or "")
+    logger.info("[YOUTUBE AVAILABLE FORMATS]", extra={"client": client, "formats": output.strip(), "returncode": result.returncode})
+    max_height = _extract_max_height(output) if result.returncode == 0 else 0
+    return max_height, client
+
+
 def download_youtube_video(youtube_url: str, start_time: str | None = None, end_time: str | None = None) -> str:
     output_template = os.path.join(UPLOAD_DIR, f"yt_{uuid.uuid4()}_%(id)s.%(ext)s")
-    command = [
+    base_command = [
         sys.executable,
         "-m",
         "yt_dlp",
@@ -106,14 +129,18 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
         "node",
         "--remote-components",
         "ejs:github",
-        "--extractor-args",
-        "youtube:player_client=web",
+    ]
+
+    command = [
+        *base_command,
         "-f",
-        "bestvideo+bestaudio/best",
+        "bv*+ba/b",
+        "-S",
+        "res:1080,fps",
         "--merge-output-format",
         "mp4",
         "--print",
-        "before_dl:[YOUTUBE FORMAT SELECTED] id=%(format_id)s ext=%(ext)s note=%(format_note)s",
+        "before_dl:[YOUTUBE SELECTED FORMAT] id=%(format_id)s ext=%(ext)s note=%(format_note)s vcodec=%(vcodec)s acodec=%(acodec)s",
         "--print",
         "before_dl:[YOUTUBE VIDEO QUALITY] id=%(requested_formats.0.format_id)s res=%(requested_formats.0.resolution)s codec=%(requested_formats.0.vcodec)s fps=%(requested_formats.0.fps)s abr=%(requested_formats.0.tbr)s",
         "--print",
@@ -132,6 +159,7 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
 
     cookies_runtime_path = temp_cookie_file.name
     if os.path.isfile(cookies_file_path):
+        base_command.extend(["--cookies", cookies_runtime_path])
         command.extend(["--cookies", cookies_runtime_path])
     else:
         logger.error("[YOUTUBE DOWNLOAD ERROR] cookies.txt não encontrado", extra={"cookies_file": cookies_file_path})
@@ -143,6 +171,7 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
     ffmpeg_location = _resolve_ffmpeg_location()
     if ffmpeg_location:
         command.extend(["--ffmpeg-location", ffmpeg_location])
+        base_command.extend(["--ffmpeg-location", ffmpeg_location])
 
     node_path = _resolve_node_path()
     if not node_path:
@@ -151,6 +180,15 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
     section = _format_download_section(start_time, end_time)
     if section:
         command.extend(["--download-sections", section])
+
+    client_results: list[tuple[int, str]] = []
+    for client in PLAYER_CLIENT_CANDIDATES:
+        max_height, checked_client = _list_formats_for_client(base_command, youtube_url, client)
+        client_results.append((max_height, checked_client))
+
+    best_height, best_client = max(client_results, key=lambda item: item[0])
+    logger.info("[YOUTUBE CLIENT DECISION]", extra={"results": client_results, "selected_client": best_client, "selected_max_height": best_height})
+    command.extend(["--extractor-args", f"youtube:player_client={best_client}"])
 
     command.append(youtube_url)
     logger.info("[YOUTUBE DOWNLOAD START] Iniciando download do YouTube", extra={"url": youtube_url})
@@ -232,6 +270,13 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
             probe_result = subprocess.run(probe_cmd, check=False, capture_output=True, text=True)
             if probe_result.returncode == 0:
                 logger.info("[YOUTUBE SOURCE PROBE]", extra={"metadata": probe_result.stdout})
+                final_width_match = re.search(r"width=(\d+)", probe_result.stdout)
+                final_height_match = re.search(r"height=(\d+)", probe_result.stdout)
+                final_bitrate_match = re.search(r"^bit_rate=(\d+)$", probe_result.stdout, re.MULTILINE)
+                if final_width_match and final_height_match:
+                    logger.info("[YOUTUBE FINAL RESOLUTION]", extra={"resolution": f"{final_width_match.group(1)}x{final_height_match.group(1)}"})
+                if final_bitrate_match:
+                    logger.info("[YOUTUBE FINAL_BITRATE]", extra={"bitrate": final_bitrate_match.group(1)})
             else:
                 logger.warning("[YOUTUBE SOURCE PROBE FAILED]", extra={"stderr": probe_result.stderr})
 
