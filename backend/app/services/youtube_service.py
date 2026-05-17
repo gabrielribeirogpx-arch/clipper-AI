@@ -18,6 +18,7 @@ UPLOAD_DIR = "app/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 logger = logging.getLogger(__name__)
 YOUTUBE_FORMAT_SELECTOR = "137+140/248+251/bestvideo+bestaudio/best"
+YT_DLP_TIMEOUT_SECONDS = int(os.getenv("YT_DLP_TIMEOUT_SECONDS", "900"))
 
 @dataclass
 class YouTubeDownloadError(Exception):
@@ -178,13 +179,16 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
             command, 
             check=False, 
             capture_output=True, 
-            text=True
-            
+            text=True,
+            timeout=YT_DLP_TIMEOUT_SECONDS
         )
 
         print("YT-DLP STDOUT:", result.stdout)
         print("YT-DLP STDERR:", result.stderr)
         print("YT-DLP RETURN CODE:", result.returncode)
+    except subprocess.TimeoutExpired as exc:
+        logger.error("[YOUTUBE DOWNLOAD TIMEOUT]", extra={"timeout_seconds": YT_DLP_TIMEOUT_SECONDS})
+        raise YouTubeDownloadError(message=f"yt-dlp timed out after {YT_DLP_TIMEOUT_SECONDS}s", category="timeout") from exc
     except Exception as exc:  # pragma: no cover - defensive runtime guard
         logger.exception("yt-dlp execution crashed", extra={"command": command})
         raise YouTubeDownloadError(

@@ -1,8 +1,13 @@
+import os
+import concurrent.futures
+
 import whisperx
 
 
 device = "cuda"
 CAPTION_PRE_ROLL_SECONDS = 0.25
+WHISPERX_TIMEOUT_SECONDS = int(os.getenv("WHISPERX_TIMEOUT_SECONDS", "1800"))
+PYANNOTE_TIMEOUT_SECONDS = int(os.getenv("PYANNOTE_TIMEOUT_SECONDS", "900"))
 
 model = whisperx.load_model(
     "base",
@@ -14,7 +19,8 @@ model = whisperx.load_model(
 def _run_diarization(audio, aligned_result):
     try:
         diarize_model = whisperx.DiarizationPipeline(use_auth_token=None, device=device)
-        diarization = diarize_model(audio)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            diarization = executor.submit(diarize_model, audio).result(timeout=PYANNOTE_TIMEOUT_SECONDS)
         aligned_result["speaker_segments"] = [
             {
                 "speaker": str(item.get("speaker", "SPEAKER_00")),
@@ -23,6 +29,9 @@ def _run_diarization(audio, aligned_result):
             }
             for item in diarization.to_dict("records")
         ]
+    except concurrent.futures.TimeoutError:
+        print(f"[PYANNOTE TIMEOUT] timeout={PYANNOTE_TIMEOUT_SECONDS}s")
+        aligned_result["speaker_segments"] = []
     except Exception:
         aligned_result["speaker_segments"] = []
     return aligned_result
@@ -31,7 +40,8 @@ def _run_diarization(audio, aligned_result):
 def transcribe_video(video_path, diarize: bool = True):
     audio = whisperx.load_audio(video_path)
 
-    result = model.transcribe(audio)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        result = executor.submit(model.transcribe, audio).result(timeout=WHISPERX_TIMEOUT_SECONDS)
 
     model_a, metadata = whisperx.load_align_model(
         language_code=result["language"],
