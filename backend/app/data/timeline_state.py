@@ -5,6 +5,7 @@ from typing import Any
 
 timeline_state: dict[str, Any] = {
     "renderMode": "preview",
+    "analysisId": None,
     "videoUrl": None,
     "previewVideoUrl": None,
     "exportVideoUrl": None,
@@ -13,6 +14,7 @@ timeline_state: dict[str, Any] = {
     "hooks": [],
     "broll": [],
     "cuts": [],
+    "renderQueue": [],
 }
 
 

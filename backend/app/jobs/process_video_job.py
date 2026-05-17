@@ -68,18 +68,10 @@ def process_video(
             if hook["start"] <= segment.get("start", 0) <= hook["end"]
         ])
 
-        preview_clip_path = apply_broll_overlay(
+        final_clip_path = apply_broll_overlay(
             processed_clip_path,
             segment_timeline,
-            f"clip_{index}_preview.mp4",
-            output_dir=output_dir,
-            quality_profile="preview",
-        )
-
-        export_clip_path = apply_broll_overlay(
-            processed_clip_path,
-            segment_timeline,
-            f"clip_{index}_export.mp4",
+            f"clip_{index}_final.mp4",
             output_dir=output_dir,
             quality_profile="export",
         )
@@ -90,8 +82,7 @@ def process_video(
 
         generated_clips.append({
             "clip_path": processed_clip_path,
-            "preview_clip": preview_clip_path,
-            "export_clip": export_clip_path,
+            "final_clip": final_clip_path,
             "start": hook["start"],
             "end": hook["end"],
             "text": hook["text"],

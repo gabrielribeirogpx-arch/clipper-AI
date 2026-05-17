@@ -99,14 +99,15 @@ def _build_upload_response(transcription, file_id: str, filepath: str):
 
     hooks = transcription["hooks"]
     duration = max([hook["end"] for hook in hooks], default=0.0)
-    first_preview_clip = hooks[0]["preview_clip"] if hooks else filepath
-    first_export_clip = hooks[0]["export_clip"] if hooks else filepath
+    first_final_clip = hooks[0]["final_clip"] if hooks else filepath
+    analysis_id = Path(hooks[0]["final_clip"]).parent.name if hooks else "default"
 
     set_timeline_state({
         "renderMode": "preview",
-        "videoUrl": _to_media_url(first_preview_clip),
-        "previewVideoUrl": _to_media_url(first_preview_clip),
-        "exportVideoUrl": _to_media_url(first_export_clip),
+        "analysisId": analysis_id,
+        "videoUrl": _to_media_url(first_final_clip),
+        "previewVideoUrl": _to_media_url(first_final_clip),
+        "exportVideoUrl": _to_media_url(first_final_clip),
         "duration": duration,
         "clips": [
             {
@@ -116,8 +117,7 @@ def _build_upload_response(transcription, file_id: str, filepath: str):
                 "end": hook["end"],
                 "duration": round(hook["end"] - hook["start"], 2),
                 "clip_path": _to_media_url(hook["clip_path"]),
-                "preview_video": _to_media_url(hook["preview_clip"]),
-                "export_video": _to_media_url(hook["export_clip"]),
+                "final_video": _to_media_url(hook["final_clip"]),
                 "viral_score": hook["viral_score"],
                 "hook_score": hook.get("hook_score", hook["viral_score"]),
                 "retention_score": hook["retention_score"],
@@ -149,9 +149,9 @@ def _build_upload_response(transcription, file_id: str, filepath: str):
 
     return {
         "success": True,
-        "video_url": _to_media_url(first_preview_clip),
-        "preview_video_url": _to_media_url(first_preview_clip),
-        "export_video_url": _to_media_url(first_export_clip),
+        "video_url": _to_media_url(first_final_clip),
+        "preview_video_url": _to_media_url(first_final_clip),
+        "export_video_url": _to_media_url(first_final_clip),
         "timeline": transcription["timeline"],
         "project_id": file_id,
         "duration": duration,
@@ -173,8 +173,7 @@ def _build_upload_response(transcription, file_id: str, filepath: str):
                 "emotional_score": hook["emotional_score"],
                 "retention_score": hook["retention_score"],
                 "duration": round(hook["end"] - hook["start"], 2),
-                "preview_clip": hook["preview_clip"],
-                "export_clip": hook["export_clip"],
+                "final_clip": hook["final_clip"],
             }
             for hook in hooks
         ],

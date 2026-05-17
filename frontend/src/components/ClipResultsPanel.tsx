@@ -18,7 +18,7 @@ function ClipCard({ clip }: { clip: GeneratedClip }) {
       onClick={() => selectClip(clip.id)}
       className={`w-full rounded-2xl border p-4 text-left transition ${selected ? 'border-cyan-300/60 bg-cyan-500/10' : 'border-white/10 bg-[#0a1122]/80 hover:border-white/30'}`}
     >
-      <video src={`http://localhost:8000${clip.preview_video}`} muted className="mb-3 aspect-video w-full rounded-xl border border-white/10 object-cover" />
+      <video src={`http://localhost:8000${clip.final_video}`} muted className="mb-3 aspect-video w-full rounded-xl border border-white/10 object-cover" />
       <div className="mb-2 flex items-center justify-between">
         <p className="text-sm font-semibold text-white">{clip.label}</p>
         <span className="text-xs text-cyan-200">{rankBadge(clip.viral_score)}</span>

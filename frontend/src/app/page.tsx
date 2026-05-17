@@ -63,12 +63,14 @@ export default function Home() {
 
       if (data.success && data.download_url) {
         const downloadUrl = `http://localhost:8000${data.download_url}`;
+        console.log('[DOWNLOAD START]', downloadUrl);
         const link = document.createElement('a');
         link.href = downloadUrl;
         link.download = downloadUrl.split('/').pop() ?? 'clip.mp4';
         document.body.appendChild(link);
         link.click();
         link.remove();
+        console.log('[DOWNLOAD SUCCESS]', downloadUrl);
       }
 
       await hydrateFromBackend();

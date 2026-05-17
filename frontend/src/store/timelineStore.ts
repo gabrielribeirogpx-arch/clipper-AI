@@ -1,6 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { getRenderState } from '@/lib/api';
 
 export type TrackType = 'broll' | 'hooks' | 'cuts' | 'effects';
@@ -37,8 +38,7 @@ export type GeneratedClip = {
   end: number;
   duration: number;
   clip_path: string;
-  preview_video: string;
-  export_video: string;
+  final_video: string;
   viral_score: number;
   hook_score: number;
   retention_score: number;
@@ -86,7 +86,7 @@ const tracksSeed: Record<TrackType, ClipBlock[]> = {
   effects: [{ id: 'fx-1', track: 'effects', label: 'Glow', start: 1.4, end: 2.2 }]
 };
 
-export const useTimelineStore = create<TimelineState>((set, get) => ({
+export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
   renderMode: 'preview',
   videoUrl: null,
   previewVideoUrl: null,
@@ -112,7 +112,7 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
     set((state) => {
       const clip = state.generatedClips.find((item) => item.id === clipId);
       if (!clip) return {};
-      const nextVideoUrl = state.renderMode === 'export' ? clip.export_video : clip.preview_video;
+      const nextVideoUrl = clip.final_video;
       return {
         selectedClipId: clipId,
         videoUrl: `http://localhost:8000${nextVideoUrl}`,
@@ -168,7 +168,7 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
       previewVideoUrl,
       exportVideoUrl,
       videoUrl: selectedClip
-        ? `http://localhost:8000${renderMode === 'export' ? selectedClip.export_video : selectedClip.preview_video}`
+        ? `http://localhost:8000${selectedClip.final_video}`
         : renderMode === 'export' ? exportVideoUrl : previewVideoUrl,
       duration: selectedClip?.duration ?? data.duration ?? 0,
       currentTime: selectedClip?.start ?? 0,
@@ -182,4 +182,19 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
       }
     });
   }
+}), {
+  name: 'clipper-timeline-state',
+  partialize: (state) => ({
+    renderMode: state.renderMode,
+    videoUrl: state.videoUrl,
+    previewVideoUrl: state.previewVideoUrl,
+    exportVideoUrl: state.exportVideoUrl,
+    duration: state.duration,
+    currentTime: state.currentTime,
+    zoom: state.zoom,
+    tracks: state.tracks,
+    renderQueue: state.renderQueue,
+    generatedClips: state.generatedClips,
+    selectedClipId: state.selectedClipId,
+  }),
 }));
