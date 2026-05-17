@@ -51,6 +51,29 @@ export default function Home() {
 
   if (!mounted) return <main className="min-h-screen bg-[#05070f]" />;
 
+  const handleExport = async () => {
+    try {
+      console.log("EXPORT START")
+
+      const response = await fetch("http://localhost:8000/export", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          clip_id: "clip_01"
+      }),
+    })
+
+      const data = await response.json()
+
+      console.log("EXPORT RESPONSE:", data)
+
+  }   catch (err) {
+      console.error("EXPORT ERROR:", err)
+  }
+}
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#05070f] text-slate-100">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_8%_10%,rgba(56,189,248,0.24),transparent_34%),radial-gradient(circle_at_90%_12%,rgba(168,85,247,.3),transparent_36%),radial-gradient(circle_at_52%_92%,rgba(34,211,238,.12),transparent_48%),linear-gradient(180deg,#05070f_0%,#070b15_48%,#05070f_100%)]" />
@@ -94,8 +117,15 @@ export default function Home() {
             <div className="flex items-center gap-3.5">
               <span className="rounded-xl border border-violet-400/30 bg-violet-500/15 px-4 py-2 text-sm text-violet-100">◍ AI Online</span>
               <span className="rounded-xl border border-cyan-300/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100">◔ 78% usage</span>
-              <button className="rounded-xl border border-cyan-300/35 bg-cyan-400/15 px-6 py-3 text-sm font-semibold text-cyan-100">Render</button>
-              <button className="rounded-xl bg-gradient-to-r from-cyan-300 to-violet-500 px-6 py-3 text-sm font-bold text-slate-950 shadow-[0_0_34px_rgba(34,211,238,.35)]">↗ Export</button>
+              <button
+                onClick={handleExport}
+                className="rounded-xl border border-cyan-300/35 bg-cyan-400/15 px-6 py-3 text-sm font-semibold text-cyan-100">Render</button>
+              <button
+                onClick={handleExport}
+                className="rounded-xl bg-gradient-to-r from-cyan-300 to-violet-500 px-6 py-3 text-sm font-bold text-slate-950 shadow-[0_0_34px_rgba(34,211,238,.35)]"
+              >
+                ↗ Export
+              </button>
             </div>
           </header>
 

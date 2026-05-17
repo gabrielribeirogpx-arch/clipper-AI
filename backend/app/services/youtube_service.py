@@ -1,15 +1,23 @@
 import logging
 import os
+
+import os
+
+COOKIES_PATH = os.getenv(
+    "YTDLP_COOKIES_PATH",
+    "C:/temp/cookies.txt"
+)
+
 import shutil
 import subprocess
 import sys
 import uuid
+import tempfile
 from dataclasses import dataclass
 
 UPLOAD_DIR = "app/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 logger = logging.getLogger(__name__)
-COOKIES_FILE = "backend/cookies.txt"
 
 @dataclass
 class YouTubeDownloadError(Exception):
@@ -103,18 +111,26 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
         "--extractor-args",
         "youtube:player_client=web",
         "-f",
-        "mp4/bestvideo+bestaudio/best",
+        "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
         "-o",
         output_template,
     ]
 
-    cookies_file_path = os.path.abspath(COOKIES_FILE)
+    cookies_file_path = os.path.abspath(COOKIES_PATH)
+    temp_cookie_file = tempfile.NamedTemporaryFile(
+        suffix=".txt",
+        delete=False
+    )
+
+    shutil.copy2(cookies_file_path, temp_cookie_file.name)
+
+    cookies_runtime_path = temp_cookie_file.name
     if os.path.isfile(cookies_file_path):
-        command.extend(["--cookies", cookies_file_path])
+        command.extend(["--cookies", cookies_runtime_path])
     else:
         logger.error("[YOUTUBE DOWNLOAD ERROR] cookies.txt não encontrado", extra={"cookies_file": cookies_file_path})
         raise YouTubeDownloadError(
-            message="Arquivo de cookies não encontrado em backend/cookies.txt. Gere/atualize o arquivo e tente novamente.",
+            message="Arquivo de cookies não encontrado em C:/cookies.txt. Gere/atualize o arquivo e tente novamente.",
             category="missing_cookies",
         )
 
@@ -134,7 +150,17 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
     logger.info("[YOUTUBE DOWNLOAD START] Iniciando download do YouTube", extra={"url": youtube_url})
     logger.info("[YT-DLP COMMAND]", extra={"command": command})
     try:
-        result = subprocess.run(command, check=False, capture_output=True, text=True)
+        result = subprocess.run(
+            command, 
+            check=False, 
+            capture_output=True, 
+            text=True
+            
+        )
+
+        print("YT-DLP STDOUT:", result.stdout)
+        print("YT-DLP STDERR:", result.stderr)
+        print("YT-DLP RETURN CODE:", result.returncode)
     except Exception as exc:  # pragma: no cover - defensive runtime guard
         logger.exception("yt-dlp execution crashed", extra={"command": command})
         raise YouTubeDownloadError(
