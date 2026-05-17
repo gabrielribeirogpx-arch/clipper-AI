@@ -8,19 +8,28 @@ from typing import Dict, List
 from moviepy.editor import VideoFileClip
 
 from app.services.reframing_service import ReframingService
+from app.services.render_quality import (
+    EXPORT_AUDIO_BITRATE,
+    EXPORT_AUDIO_CODEC,
+    EXPORT_CRF,
+    EXPORT_MOVFLAGS,
+    EXPORT_PIXEL_FORMAT,
+    EXPORT_PRESET,
+    EXPORT_VIDEO_CODEC,
+    VERTICAL_PREMIUM_FILTER,
+)
 
 SAFE_CPU_RENDER = os.getenv("SAFE_CPU_RENDER", "false").strip().lower() in {"1", "true", "yes", "on"}
 MAX_TRACKING_WIDTH = 1920
 TARGET_RENDER_SIZE = (1080, 1920)
 FINAL_EXPORT_SETTINGS = {
-    "codec": "libx264",
-    "preset": "slow",
-    "crf": 18,
-    "bitrate": "8M",
-    "maxrate": "12M",
-    "bufsize": "16M",
-    "audio_codec": "aac",
-    "audio_bitrate": "192k",
+    "codec": EXPORT_VIDEO_CODEC,
+    "preset": EXPORT_PRESET,
+    "crf": EXPORT_CRF,
+    "audio_codec": EXPORT_AUDIO_CODEC,
+    "audio_bitrate": EXPORT_AUDIO_BITRATE,
+    "pix_fmt": EXPORT_PIXEL_FORMAT,
+    "movflags": EXPORT_MOVFLAGS,
 }
 
 
@@ -46,7 +55,7 @@ def _create_proxy_if_needed(video_path: str) -> tuple[str, bool]:
     proxy_path = proxy_file.name
     cmd = [
         "ffmpeg", "-y", "-i", video_path, "-vf", "scale=1920:-2",
-        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-an", proxy_path,
+        "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p", "-an", proxy_path,
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if proc.returncode != 0:
@@ -66,28 +75,32 @@ def render_vertical_clip(video_path: str, segments: List[Dict], output_path: str
     reframed_video = reframer.apply(VideoFileClip(video_path).without_audio())
     final_video = reframed_video.set_audio(VideoFileClip(video_path).audio)
 
-    final_video.write_videofile(
-        output_path,
-        codec=FINAL_EXPORT_SETTINGS["codec"],
-        audio_codec=FINAL_EXPORT_SETTINGS["audio_codec"],
-        fps=30,
-        preset=FINAL_EXPORT_SETTINGS["preset"],
-        bitrate=FINAL_EXPORT_SETTINGS["bitrate"],
-        ffmpeg_params=[
-            "-crf", str(FINAL_EXPORT_SETTINGS["crf"]),
-            "-maxrate", FINAL_EXPORT_SETTINGS["maxrate"],
-            "-bufsize", FINAL_EXPORT_SETTINGS["bufsize"],
-            "-b:a", FINAL_EXPORT_SETTINGS["audio_bitrate"],
-            "-movflags", "+faststart",
-        ],
-    )
+    print("[RENDER QUALITY PROFILE] profile=vertical_export")
+    print("[FFMPEG START] profile=vertical_export output={}".format(output_path))
+    try:
+        final_video.write_videofile(
+            output_path,
+            codec=FINAL_EXPORT_SETTINGS["codec"],
+            audio_codec=FINAL_EXPORT_SETTINGS["audio_codec"],
+            fps=30,
+            preset=FINAL_EXPORT_SETTINGS["preset"],
+            ffmpeg_params=[
+                "-crf", str(FINAL_EXPORT_SETTINGS["crf"]),
+                "-vf", VERTICAL_PREMIUM_FILTER,
+                "-pix_fmt", FINAL_EXPORT_SETTINGS["pix_fmt"],
+                "-b:a", FINAL_EXPORT_SETTINGS["audio_bitrate"],
+                "-movflags", FINAL_EXPORT_SETTINGS["movflags"],
+            ],
+        )
+    except Exception as error:
+        print(f"[FFMPEG ERROR] profile=vertical_export output={output_path} error={error}")
+        raise
 
-    print("[EXPORT QUALITY] final vertical render")
+    print("[FFMPEG SUCCESS] profile=vertical_export output={}".format(output_path))
     print(
         "[FFMPEG SETTINGS] "
         f"codec={FINAL_EXPORT_SETTINGS['codec']} preset={FINAL_EXPORT_SETTINGS['preset']} "
-        f"crf={FINAL_EXPORT_SETTINGS['crf']} bitrate={FINAL_EXPORT_SETTINGS['bitrate']} "
-        f"maxrate={FINAL_EXPORT_SETTINGS['maxrate']} bufsize={FINAL_EXPORT_SETTINGS['bufsize']} "
+        f"crf={FINAL_EXPORT_SETTINGS['crf']} "
         f"audio_codec={FINAL_EXPORT_SETTINGS['audio_codec']} audio_bitrate={FINAL_EXPORT_SETTINGS['audio_bitrate']}"
     )
 

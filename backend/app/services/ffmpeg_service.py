@@ -2,29 +2,36 @@ import subprocess
 import os
 from pathlib import Path
 from typing import Dict, List, Literal
+from app.services.render_quality import (
+    EXPORT_AUDIO_BITRATE,
+    EXPORT_AUDIO_CODEC,
+    EXPORT_CRF,
+    EXPORT_MOVFLAGS,
+    EXPORT_PIXEL_FORMAT,
+    EXPORT_PRESET,
+    EXPORT_VIDEO_CODEC,
+)
 
 CLIPS_DIR = "app/clips"
 
 EXPORT_SETTINGS = {
-    "codec": "libx264",
-    "preset": "slow",
-    "crf": "18",
-    "bitrate": "8M",
-    "maxrate": "12M",
-    "bufsize": "16M",
-    "audio_codec": "aac",
-    "audio_bitrate": "192k",
+    "codec": EXPORT_VIDEO_CODEC,
+    "preset": EXPORT_PRESET,
+    "crf": str(EXPORT_CRF),
+    "audio_codec": EXPORT_AUDIO_CODEC,
+    "audio_bitrate": EXPORT_AUDIO_BITRATE,
+    "pix_fmt": EXPORT_PIXEL_FORMAT,
+    "movflags": EXPORT_MOVFLAGS,
 }
 
 PREVIEW_SETTINGS = {
-    "codec": "libx264",
-    "preset": "veryfast",
-    "crf": "26",
-    "bitrate": "2M",
-    "maxrate": "3M",
-    "bufsize": "4M",
-    "audio_codec": "aac",
-    "audio_bitrate": "128k",
+    "codec": EXPORT_VIDEO_CODEC,
+    "preset": EXPORT_PRESET,
+    "crf": str(EXPORT_CRF),
+    "audio_codec": EXPORT_AUDIO_CODEC,
+    "audio_bitrate": EXPORT_AUDIO_BITRATE,
+    "pix_fmt": EXPORT_PIXEL_FORMAT,
+    "movflags": EXPORT_MOVFLAGS,
 }
 
 os.makedirs(CLIPS_DIR, exist_ok=True)
@@ -55,7 +62,12 @@ def cut_clip(input_file, start, end, output_name, output_dir: str = CLIPS_DIR):
         output_path
     ])
 
-    subprocess.run(command, check=False)
+    print(f"[FFMPEG START] profile=cut command={' '.join(command)}")
+    proc = subprocess.run(command, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        print(f"[FFMPEG ERROR] profile=cut output={output_path} stderr={proc.stderr}")
+    else:
+        print(f"[FFMPEG SUCCESS] profile=cut output={output_path}")
 
     return output_path
 
@@ -120,24 +132,26 @@ def apply_broll_overlay(
         "-c:v", settings["codec"],
         "-preset", settings["preset"],
         "-crf", settings["crf"],
-        "-b:v", settings["bitrate"],
-        "-maxrate", settings["maxrate"],
-        "-bufsize", settings["bufsize"],
+        "-pix_fmt", settings["pix_fmt"],
         "-c:a", settings["audio_codec"],
         "-b:a", settings["audio_bitrate"],
-        "-movflags", "+faststart",
+        "-movflags", settings["movflags"],
         output_path,
     ])
 
-    print(f"[EXPORT QUALITY] profile={quality_profile} output={output_path}")
+    print(f"[RENDER QUALITY PROFILE] profile={quality_profile} output={output_path}")
     print(
         "[FFMPEG SETTINGS] "
         f"codec={settings['codec']} preset={settings['preset']} crf={settings['crf']} "
-        f"bitrate={settings['bitrate']} maxrate={settings['maxrate']} bufsize={settings['bufsize']} "
         f"audio_codec={settings['audio_codec']} audio_bitrate={settings['audio_bitrate']}"
     )
 
-    subprocess.run(command, check=False)
+    print(f"[FFMPEG START] profile={quality_profile} command={' '.join(command)}")
+    proc = subprocess.run(command, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        print(f"[FFMPEG ERROR] profile={quality_profile} output={output_path} stderr={proc.stderr}")
+    else:
+        print(f"[FFMPEG SUCCESS] profile={quality_profile} output={output_path}")
     if os.path.exists(output_path):
         return output_path
     return clip_path
