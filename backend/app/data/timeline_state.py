@@ -20,6 +20,8 @@ timeline_state: dict[str, Any] = {
     "dual_region_config": None,
 }
 
+timeline_state_by_analysis: dict[str, dict[str, Any]] = {}
+
 
 def get_timeline_state() -> dict[str, Any]:
     return timeline_state
@@ -28,3 +30,16 @@ def get_timeline_state() -> dict[str, Any]:
 def set_timeline_state(state: dict[str, Any]) -> None:
     timeline_state.clear()
     timeline_state.update(state)
+
+
+def save_timeline_state_for_analysis(analysis_id: str | None, state: dict[str, Any]) -> None:
+    if not analysis_id:
+        return
+    timeline_state_by_analysis[analysis_id] = dict(state)
+
+
+def get_timeline_state_for_analysis(analysis_id: str | None) -> dict[str, Any] | None:
+    if not analysis_id:
+        return None
+    saved = timeline_state_by_analysis.get(analysis_id)
+    return dict(saved) if saved else None
