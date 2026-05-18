@@ -142,7 +142,10 @@ export default function UploadPage() {
     await hydrateFromBackend();
     store.setUploadStatus('success');
     setRecentUploads((prev) => [file.name, ...prev].slice(0, 4));
-    if ((result.clips?.length ?? 0) > 0) setTimeout(() => router.push(renderMode === 'dual_region' ? `/region-setup/${store.analysisId ?? result.analysis_id}` : '/editor'), 600);
+    if ((result.clips?.length ?? 0) > 0) setTimeout(() => {
+      console.log('[FRONTEND ANALYSIS ID]', result.analysis_id);
+      router.push(renderMode === 'dual_region' ? `/region-setup/${result.analysis_id}` : `/editor?analysis_id=${result.analysis_id}`);
+    }, 600);
   };
 
   const finalizeJob = async (jobId: string) => {
@@ -154,7 +157,10 @@ export default function UploadPage() {
     console.log('[FRONTEND JOB FINISHED]', { jobId });
     if ((result.clips?.length ?? 0) > 0) {
       await hydrateFromBackend();
-      setTimeout(() => router.push(renderMode === 'dual_region' ? `/region-setup/${store.analysisId ?? result.analysis_id}` : '/editor'), 600);
+      setTimeout(() => {
+        console.log('[FRONTEND ANALYSIS ID]', result.analysis_id);
+        router.push(renderMode === 'dual_region' ? `/region-setup/${result.analysis_id}` : `/editor?analysis_id=${result.analysis_id}`);
+      }, 600);
     }
   };
 

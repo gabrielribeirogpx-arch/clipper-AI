@@ -203,6 +203,7 @@ def _build_upload_response(transcription, file_id: str, filepath: str, render_mo
 
     print(f"[RENDER MODE SAVE] upload_response_render_mode={render_mode}")
     print("[DUAL REGION CONFIG SAVE] upload_response_dual_region_config=None")
+    print(f"[TIMELINE STATE BOOTSTRAP] analysis_id={analysis_id}")
     set_timeline_state({
         "renderMode": "preview",
         "analysisId": analysis_id,
