@@ -82,7 +82,7 @@ type TimelineState = {
   updateBlock: (track: TrackType, id: string, patch: Partial<ClipBlock>) => void;
   moveBlock: (track: TrackType, id: string, start: number, end: number) => void;
   setClipRenderMode: (mode: ClipRenderMode) => void;
-  setDualRegions: (regions: DualRegions) => void;
+  setDualRegions: (regions: DualRegions, options?: { persist?: boolean }) => void;
 };
 
 const clampTime = (value: number, duration: number) => Math.min(Math.max(value, 0), duration);
@@ -193,9 +193,12 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       void fetch('http://localhost:8000/timeline/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: clipRenderMode, dual_regions: state.dualRegions }) });
       return { clipRenderMode };
     }),
-  setDualRegions: (dualRegions) =>
+  setDualRegions: (dualRegions, options) =>
     set((state) => {
-      void fetch('http://localhost:8000/timeline/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: state.clipRenderMode, dual_regions: dualRegions }) });
+      const shouldPersist = options?.persist ?? true;
+      if (shouldPersist) {
+        void fetch('http://localhost:8000/timeline/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: state.clipRenderMode, dual_regions: dualRegions }) });
+      }
       return { dualRegions };
     }),
   hydrateFromBackend: async () => {
