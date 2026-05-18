@@ -69,7 +69,10 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
     status: status ?? state.status,
     clips: clips ?? state.clips,
   })),
-  setRenderMode: (renderMode) => set({ renderMode }),
+  setRenderMode: (renderMode) => {
+    console.log('[RENDER MODE SAVED]', { renderMode });
+    set({ renderMode });
+  },
   clearActiveJob: () => set({ activeJobId: null }),
   reset: () =>
     set({
