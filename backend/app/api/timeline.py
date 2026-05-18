@@ -102,3 +102,16 @@ def render_dual_region_final(payload: DualRegionRenderRequest):
     print('[DUAL REGION FINAL RENDER COMPLETE]')
     print('[EDITOR CLIPS REPLACED]')
     return {'status': 'rendered', 'clips': updated_clips, 'analysis_id': payload.analysis_id}
+
+
+@router.get("/debug-routes")
+def debug_timeline_routes():
+    return [
+        {
+            "path": route.path,
+            "methods": sorted(list(getattr(route, "methods", []) or [])),
+            "name": route.name,
+        }
+        for route in router.routes
+        if "timeline" in route.path
+    ]
