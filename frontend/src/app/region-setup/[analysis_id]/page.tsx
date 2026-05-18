@@ -130,8 +130,8 @@ export default function RegionSetupPage() {
   };
 
   const containerStyles = useMemo(() => ({
-    regionA: 'border-cyan-300/90 bg-cyan-400/15 shadow-[0_0_20px_rgba(34,211,238,0.55)]',
-    regionB: 'border-fuchsia-300/90 bg-fuchsia-500/15 shadow-[0_0_20px_rgba(232,121,249,0.55)]',
+    regionA: 'border-cyan-300/90 shadow-[0_0_20px_rgba(34,211,238,0.55)]',
+    regionB: 'border-fuchsia-300/90 shadow-[0_0_20px_rgba(232,121,249,0.55)]',
   }), []);
 
   return (
@@ -165,11 +165,19 @@ export default function RegionSetupPage() {
                   top: toPercent(region.y, VIDEO_H),
                   width: toPercent(region.width, VIDEO_W),
                   height: toPercent(region.height, VIDEO_H),
+                  backgroundColor: 'rgba(255,0,0,0.3)',
                 }}
                 onPointerDown={(e) => {
+                  console.log('TEST POINTER DOWN');
                   console.log('[OVERLAY POINTER DOWN]', { key, type: 'move', x: e.clientX, y: e.clientY });
                   startDrag(e, key, 'move');
                 }}
+                onClick={() => {
+                  console.log('TEST CLICK OVERLAY');
+                }}
+                onPointerMove={onPointerMove}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
               >
                 <div className='absolute left-2 top-2 rounded-md bg-black/65 px-2 py-1 text-xs font-semibold tracking-wider'>
                   {key === 'regionA' ? 'REGIÃO A' : 'REGIÃO B'}
