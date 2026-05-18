@@ -43,6 +43,16 @@ app.include_router(timeline_router)
 app.include_router(export_router)
 
 
+@app.on_event("startup")
+def log_timeline_routes() -> None:
+    timeline_routes = [
+        f"{','.join(sorted(list(route.methods or [])))} {route.path}"
+        for route in app.routes
+        if "timeline" in route.path
+    ]
+    print(f"[TIMELINE ROUTES REGISTERED] {timeline_routes}")
+
+
 # =========================================
 # MEDIA STREAMING
 # =========================================
