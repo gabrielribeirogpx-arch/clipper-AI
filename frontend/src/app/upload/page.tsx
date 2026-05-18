@@ -179,11 +179,18 @@ export default function UploadPage() {
     clearIngestResources(jobId);
 
     const currentJobId = useUploadStore.getState().activeJobId;
-    if (!currentJobId || currentJobId === jobId) {
-      useUploadStore.getState().resetIngestState();
-      setError(null);
-      setToast(STALE_INGEST_MESSAGE);
-    }
+    if (currentJobId && currentJobId !== jobId) return;
+
+    useUploadStore.getState().resetStaleIngestVisualState();
+    resetForNewAnalysis();
+    fileRef.current = null;
+    setDragging(false);
+    setError(null);
+    setYoutubeUrl('');
+    setAnalysisName('');
+    setStartSeconds(0);
+    setEndSeconds(MAX_YOUTUBE_DURATION_SECONDS);
+    setToast(STALE_INGEST_MESSAGE);
   };
 
   const isNotFoundError = (error: unknown) => error instanceof ApiError && error.status === 404;

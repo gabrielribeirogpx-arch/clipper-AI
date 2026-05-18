@@ -5,6 +5,8 @@ import { persist } from 'zustand/middleware';
 
 type UploadStatus = 'idle' | 'uploading' | 'processing' | 'success' | 'error';
 
+const INITIAL_STATUS_LABEL = 'Waiting for upload...';
+
 type UploadedVideo = {
   name: string;
   size: number;
@@ -19,13 +21,13 @@ type VideoQuality = '720p' | '1080p' | '4k';
 type UploadState = {
   uploadProgress: number;
   uploadStatus: UploadStatus;
-  processingStage: string;
+  processingStage: string | null;
   uploadedVideo: UploadedVideo | null;
   projectId: string | null;
   timelineData: Record<string, unknown> | null;
   activeJobId: string | null;
   analysisId: string | null;
-  currentStep: string;
+  currentStep: string | null;
   status: string;
   clips: Array<Record<string, unknown>>;
   renderMode: RenderMode;
@@ -34,26 +36,27 @@ type UploadState = {
   setVideoQuality: (quality: VideoQuality) => void;
   setUploadProgress: (progress: number) => void;
   setUploadStatus: (status: UploadStatus) => void;
-  setProcessingStage: (stage: string) => void;
+  setProcessingStage: (stage: string | null) => void;
   setUploadedVideo: (video: UploadedVideo | null) => void;
   setUploadResult: (projectId: string, timelineData: Record<string, unknown>) => void;
   setActiveJob: (jobId: string, analysisId: string) => void;
   updateIngestState: (payload: { progress?: number; step?: string; status?: string; clips?: Array<Record<string, unknown>> }) => void;
   clearActiveJob: () => void;
   resetIngestState: () => void;
+  resetStaleIngestVisualState: () => void;
   reset: () => void;
 };
 
 export const useUploadStore = create<UploadState>()(persist((set) => ({
   uploadProgress: 0,
   uploadStatus: 'idle',
-  processingStage: 'Waiting for upload...',
+  processingStage: INITIAL_STATUS_LABEL,
   uploadedVideo: null,
   projectId: null,
   timelineData: null,
   activeJobId: null,
   analysisId: null,
-  currentStep: 'Waiting for upload...',
+  currentStep: INITIAL_STATUS_LABEL,
   status: 'idle',
   clips: [],
   renderMode: 'ai_tracking',
@@ -88,29 +91,46 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
     set({
       uploadProgress: 0,
       uploadStatus: 'idle',
-      processingStage: 'Waiting for upload...',
+      processingStage: INITIAL_STATUS_LABEL,
       activeJobId: null,
       analysisId: null,
-      currentStep: 'Waiting for upload...',
+      currentStep: INITIAL_STATUS_LABEL,
       status: 'idle',
       clips: [],
     });
   },
-  reset: () =>
+  resetStaleIngestVisualState: () => {
+    console.log('[UPLOAD UI RESET]');
     set({
       uploadProgress: 0,
       uploadStatus: 'idle',
-      processingStage: 'Waiting for upload...',
+      processingStage: null,
       uploadedVideo: null,
       projectId: null,
       timelineData: null,
       activeJobId: null,
       analysisId: null,
-      currentStep: 'Waiting for upload...',
+      currentStep: null,
       status: 'idle',
       clips: [],
-  renderMode: 'ai_tracking',
-  videoQuality: '1080p',
+    });
+    console.log('[UPLOAD VISUAL STATE CLEARED]');
+  },
+  reset: () =>
+    set({
+      uploadProgress: 0,
+      uploadStatus: 'idle',
+      processingStage: INITIAL_STATUS_LABEL,
+      uploadedVideo: null,
+      projectId: null,
+      timelineData: null,
+      activeJobId: null,
+      analysisId: null,
+      currentStep: INITIAL_STATUS_LABEL,
+      status: 'idle',
+      clips: [],
+      renderMode: 'ai_tracking',
+      videoQuality: '1080p',
     }),
 }), { name: 'clipper-upload-state', partialize: (state) => ({
   uploadProgress: state.uploadProgress,
