@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTimelineStore, type RegionBox } from '@/store/timelineStore';
+import { useTimelineStore, type DualRegions, type RegionBox } from '@/store/timelineStore';
 
 type RegionKey = 'regionA' | 'regionB';
 
@@ -21,6 +21,7 @@ const VIDEO_W = 1920;
 const VIDEO_H = 1080;
 const MIN_REGION_W = 220;
 const MIN_REGION_H = 220;
+const TIMELINE_UPDATE_THROTTLE_MS = 250;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
@@ -28,6 +29,8 @@ export default function RegionSetupPage() {
   const router = useRouter();
   const { videoUrl, dualRegions, setDualRegions, generatedClips, analysisId, clipRenderMode } = useTimelineStore();
   const playerRef = useRef<HTMLDivElement | null>(null);
+  const throttleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPersistRef = useRef<DualRegions | null>(null);
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<RegionKey>('regionA');
   const [showGrid, setShowGrid] = useState(true);
@@ -42,6 +45,43 @@ export default function RegionSetupPage() {
     debate: { regionA: { x: 80, y: 100, width: 840, height: 900 }, regionB: { x: 1000, y: 100, width: 840, height: 900 } },
     reaction: { regionA: { x: 120, y: 120, width: 1020, height: 860 }, regionB: { x: 1140, y: 170, width: 660, height: 760 } },
   } as const;
+
+  const queueDualRegionPersist = (regions: DualRegions) => {
+    pendingPersistRef.current = regions;
+    if (throttleTimerRef.current) {
+      console.log('[TIMELINE UPDATE SKIPPED]', { reason: 'throttled_window_active' });
+      return;
+    }
+
+    console.log('[TIMELINE UPDATE THROTTLED]', { delayMs: TIMELINE_UPDATE_THROTTLE_MS });
+    throttleTimerRef.current = setTimeout(() => {
+      throttleTimerRef.current = null;
+      if (!pendingPersistRef.current) return;
+      const { regionA, regionB } = pendingPersistRef.current;
+      pendingPersistRef.current = null;
+      const payload = { regionA, regionB };
+      console.log('[TIMELINE UPDATE FLUSH]', payload);
+      setDualRegions(payload, { persist: true });
+    }, TIMELINE_UPDATE_THROTTLE_MS);
+  };
+
+  const flushDualRegionPersist = (reason: 'pointerup' | 'confirm') => {
+    if (throttleTimerRef.current) {
+      clearTimeout(throttleTimerRef.current);
+      throttleTimerRef.current = null;
+    }
+
+    const pending = pendingPersistRef.current;
+    pendingPersistRef.current = null;
+    const payload = pending ?? dualRegions;
+
+    console.log('[TIMELINE UPDATE FINAL SAVE]', { reason, payload });
+    setDualRegions(payload, { persist: true });
+  };
+
+  useEffect(() => () => {
+    if (throttleTimerRef.current) clearTimeout(throttleTimerRef.current);
+  }, []);
 
   const startDrag = (e: React.PointerEvent, key: RegionKey, type: 'move' | 'resize', handle?: ResizeHandle) => {
     console.log('START DRAG STEP 1', { key, type, handle, clipRenderMode, pointerId: e.pointerId });
@@ -129,7 +169,8 @@ export default function RegionSetupPage() {
       }
 
       console.log('LIVE REGION STATE', next);
-      setDualRegions(next);
+      setDualRegions(next, { persist: false });
+      queueDualRegionPersist(next);
     };
 
     const handlePointerUp = (event: PointerEvent) => {
@@ -140,6 +181,7 @@ export default function RegionSetupPage() {
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerUp);
+      flushDualRegionPersist('pointerup');
       setActiveDrag(null);
     };
 
@@ -156,7 +198,7 @@ export default function RegionSetupPage() {
 
   const confirmRegions = () => {
     console.log('[DUAL REGION CONFIRMED]', dualRegions);
-    setDualRegions(dualRegions);
+    flushDualRegionPersist('confirm');
     const target = generatedClips.length > 0 ? '/editor' : '/editor';
     const query = analysisId ? `?analysis_id=${analysisId}` : '';
     router.push(`${target}${query}`);
