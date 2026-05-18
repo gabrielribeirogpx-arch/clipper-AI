@@ -114,6 +114,7 @@ export default function UploadPage() {
   const [recentUploads, setRecentUploads] = useState<string[]>([]);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [analysisName, setAnalysisName] = useState('');
+  const [isStartingYoutubeIngest, setIsStartingYoutubeIngest] = useState(false);
   const renderMode = useUploadStore((state) => state.renderMode);
   const videoQuality = useUploadStore((state) => state.videoQuality);
   const [startSeconds, setStartSeconds] = useState(0);
@@ -129,6 +130,11 @@ export default function UploadPage() {
   const hydrateFromBackend = useTimelineStore((state) => state.hydrateFromBackend);
 
   const sizeLabel = useMemo(() => (store.uploadedVideo ? `${(store.uploadedVideo.size / (1024 * 1024)).toFixed(1)} MB` : null), [store.uploadedVideo]);
+  const isUploadStatusInProgress = store.uploadStatus === 'uploading' || store.uploadStatus === 'processing';
+  const isRealFileUploadActive = Boolean(store.uploadedVideo) && isUploadStatusInProgress;
+  const isRealIngestActive = Boolean(store.activeJobId);
+  const showUploadCard = isRealIngestActive || isStartingYoutubeIngest || isRealFileUploadActive;
+  const uploadCardLabel = store.uploadStatus === 'uploading' ? 'Enviando vídeo...' : (store.processingStage ?? store.currentStep ?? 'Processing...');
   const validateFile = (file: File) => (['video/mp4', 'video/quicktime'].includes(file.type) ? (file.size > MAX_SIZE ? 'Arquivo maior que 1GB.' : null) : 'Somente MP4 ou MOV.');
 
   const processFile = async (file: File) => {
@@ -177,6 +183,7 @@ export default function UploadPage() {
   const resetStaleIngest = (jobId: string, source: string) => {
     console.log('[STALE INGEST DETECTED]', { jobId, source });
     clearIngestResources(jobId);
+    setIsStartingYoutubeIngest(false);
 
     const currentJobId = useUploadStore.getState().activeJobId;
     if (currentJobId && currentJobId !== jobId) return;
@@ -328,24 +335,50 @@ export default function UploadPage() {
     setError(null);
     if (store.activeJobId) return setError('Já existe um job em execução. Aguarde finalizar.');
     resetForNewAnalysis();
+    setIsStartingYoutubeIngest(true);
     store.setUploadStatus('processing');
+    store.setProcessingStage('Starting YouTube ingest...');
     store.setUploadProgress(5);
 
-    const job = await ingestYouTubeJob({
-      youtube_url: youtubeUrl.trim(),
-      analysis_name: analysisName.trim() || undefined,
-      start_time: toHhMmSs(startSeconds),
-      end_time: toHhMmSs(endSeconds),
-      min_clip_length: 30,
-      max_clip_length: 90,
-      render_mode: renderMode,
-      video_quality: videoQuality,
+    try {
+      const job = await ingestYouTubeJob({
+        youtube_url: youtubeUrl.trim(),
+        analysis_name: analysisName.trim() || undefined,
+        start_time: toHhMmSs(startSeconds),
+        end_time: toHhMmSs(endSeconds),
+        min_clip_length: 30,
+        max_clip_length: 90,
+        render_mode: renderMode,
+        video_quality: videoQuality,
+      });
+
+      store.setActiveJob(job.job_id, job.analysis_id);
+      const result = await subscribeToJob(job.job_id);
+      if (result === 'completed') setRecentUploads((prev) => [youtubeUrl, ...prev].slice(0, 4));
+    } finally {
+      setIsStartingYoutubeIngest(false);
+    }
+  };
+
+  useEffect(() => {
+    console.log('[UPLOAD CARD ACTIVE STATE]', {
+      showUploadCard,
+      activeJobId: store.activeJobId,
+      uploadStatus: store.uploadStatus,
+      isStartingYoutubeIngest,
+      hasUploadedVideo: Boolean(store.uploadedVideo),
+      ingestStatus: store.status,
     });
 
-    store.setActiveJob(job.job_id, job.analysis_id);
-    const result = await subscribeToJob(job.job_id);
-    if (result === 'completed') setRecentUploads((prev) => [youtubeUrl, ...prev].slice(0, 4));
-  };
+    if (!showUploadCard) console.log('[UPLOAD CARD HIDDEN]');
+  }, [showUploadCard, store.activeJobId, store.uploadStatus, isStartingYoutubeIngest, store.uploadedVideo, store.status]);
+
+  useEffect(() => {
+    const hasOrphanedInProgressState = !showUploadCard && !store.uploadedVideo && (isUploadStatusInProgress || store.uploadProgress > 0 || Boolean(store.processingStage) || Boolean(store.currentStep));
+    if (!hasOrphanedInProgressState) return;
+
+    store.resetUploadCardVisibilityState();
+  }, [showUploadCard, store.uploadedVideo, isUploadStatusInProgress, store.uploadProgress, store.processingStage, store.currentStep, store]);
 
   useEffect(() => {
     if (!store.activeJobId) return () => clearIngestResources();
@@ -443,9 +476,9 @@ export default function UploadPage() {
           </div>
         )}
 
-        {(store.uploadStatus === 'uploading' || store.uploadStatus === 'processing') && (
+        {showUploadCard && (
           <div className="mt-8 rounded-2xl border border-cyan-300/25 bg-cyan-500/5 p-5">
-            <p className="mb-3 text-cyan-100">{store.uploadStatus === 'processing' ? store.processingStage : 'Enviando vídeo...'}</p>
+            <p className="mb-3 text-cyan-100">{uploadCardLabel}</p>
             <div className="h-2 rounded-full bg-slate-800">
               <div className="h-2 rounded-full bg-gradient-to-r from-cyan-300 to-violet-500" style={{ width: `${store.uploadProgress}%` }} />
             </div>
