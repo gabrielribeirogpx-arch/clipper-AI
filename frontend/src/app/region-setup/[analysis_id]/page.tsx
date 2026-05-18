@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { renderDualRegionFinal } from '@/lib/api';
 import { useTimelineStore, type DualRegions, type RegionBox } from '@/store/timelineStore';
 
 type RegionKey = 'regionA' | 'regionB';
@@ -196,9 +197,18 @@ export default function RegionSetupPage() {
     }
   };
 
-  const confirmRegions = () => {
+  const confirmRegions = async () => {
     console.log('[DUAL REGION CONFIRMED]', dualRegions);
     flushDualRegionPersist('confirm');
+    if (!analysisId) {
+      console.error('[DUAL REGION FINAL RENDER ERROR] missing_analysis_id');
+      return;
+    }
+    await renderDualRegionFinal({
+      analysis_id: analysisId,
+      render_mode: 'dual_region',
+      dual_region_config: dualRegions,
+    });
     const target = generatedClips.length > 0 ? '/editor' : '/editor';
     const query = analysisId ? `?analysis_id=${analysisId}` : '';
     router.push(`${target}${query}`);

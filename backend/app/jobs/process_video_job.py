@@ -91,6 +91,8 @@ def process_video(
             print("[DUAL REGION RENDER COMPLETE]")
         elif render_mode == "dual_region":
             print("[RENDER MODE OVERRIDE] dual_region_requested_but_missing_config")
+        elif render_mode == "raw_only":
+            print("[RENDER MODE OVERRIDE] raw_only_no_vertical_render")
 
         segment_timeline = broll_engine.build_timeline([
             segment for segment in transcription["segments"]

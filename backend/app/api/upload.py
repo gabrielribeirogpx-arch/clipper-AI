@@ -62,13 +62,15 @@ async def process_youtube_ingest_job(job_id: str, body: dict, output_dir: str) -
         update_job(job_id, status="rendering", progress=75, step="Rendering clips and metadata")
 
         render_mode = body.get("render_mode", "ai_tracking")
+        process_render_mode = "raw_only" if render_mode == "dual_region" else render_mode
         print(f"[PROCESS VIDEO JOB MODE] ingest_request_render_mode={render_mode}")
+        print(f"[PROCESS VIDEO JOB MODE] ingest_processing_render_mode={process_render_mode}")
         print(f"[PROCESS VIDEO JOB CONFIG] ingest_request_dual_region_config={body.get('dual_region_config')}")
         transcription = await asyncio.to_thread(
             process_video,
             filepath,
             output_dir=output_dir,
-            render_mode=render_mode,
+            render_mode=process_render_mode,
             dual_region_config=body.get('dual_region_config'),
             min_clip_length=int(body.get("min_clip_length", 30)),
             max_clip_length=int(body.get("max_clip_length", 90)),
@@ -115,9 +117,11 @@ async def upload_video(
     os.makedirs(output_dir, exist_ok=True)
     print(f"[ANALYSIS FOLDER CREATED] {output_dir}")
 
+    process_render_mode = "raw_only" if render_mode == "dual_region" else render_mode
     print(f"[PROCESS VIDEO JOB MODE] upload_request_render_mode={render_mode}")
+    print(f"[PROCESS VIDEO JOB MODE] upload_processing_render_mode={process_render_mode}")
     print("[PROCESS VIDEO JOB CONFIG] upload_request_dual_region_config=None")
-    transcription = process_video(filepath, output_dir=output_dir, render_mode=render_mode)
+    transcription = process_video(filepath, output_dir=output_dir, render_mode=process_render_mode)
     return _build_upload_response(transcription, file_id, filepath, render_mode=render_mode)
 
 
