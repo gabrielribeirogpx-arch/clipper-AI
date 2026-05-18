@@ -44,6 +44,7 @@ type UploadState = {
   clearActiveJob: () => void;
   resetIngestState: () => void;
   resetStaleIngestVisualState: () => void;
+  resetUploadCardVisibilityState: () => void;
   reset: () => void;
 };
 
@@ -101,6 +102,7 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
   },
   resetStaleIngestVisualState: () => {
     console.log('[UPLOAD UI RESET]');
+    console.log('[UPLOAD CARD VISIBILITY RESET]');
     set({
       uploadProgress: 0,
       uploadStatus: 'idle',
@@ -115,6 +117,19 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
       clips: [],
     });
     console.log('[UPLOAD VISUAL STATE CLEARED]');
+  },
+
+  resetUploadCardVisibilityState: () => {
+    console.log('[UPLOAD CARD VISIBILITY RESET]');
+    set({
+      uploadProgress: 0,
+      uploadStatus: 'idle',
+      processingStage: null,
+      currentStep: null,
+      status: 'idle',
+      activeJobId: null,
+      analysisId: null,
+    });
   },
   reset: () =>
     set({
