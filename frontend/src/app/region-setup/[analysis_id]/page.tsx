@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTimelineStore, type RegionBox } from '@/store/timelineStore';
 
@@ -49,48 +49,49 @@ export default function RegionSetupPage() {
     } else {
       console.log('[DUAL REGION RESIZE START]', { key, handle, x: e.clientX, y: e.clientY });
     }
-    setActiveDrag({ pointerId: e.pointerId, key, type, handle, startX: e.clientX, startY: e.clientY, origin: dualRegions[key] });
-  };
 
-  useEffect(() => {
-    if (!activeDrag || !playerRef.current) return;
+    const nextDragState = { pointerId: e.pointerId, key, type, handle, startX: e.clientX, startY: e.clientY, origin: dualRegions[key] };
+    console.log('DRAG STATE SET', nextDragState);
+    setActiveDrag(nextDragState);
+    console.log('USE EFFECT DRAG ACTIVE', nextDragState);
+    console.log('REGISTER GLOBAL POINTER EVENTS');
 
-    const handlePointerMove = (e: PointerEvent) => {
-      if (e.pointerId !== activeDrag.pointerId || !playerRef.current) return;
-      e.preventDefault();
-      console.log('[GLOBAL POINTER MOVE]', { pointerId: e.pointerId, x: e.clientX, y: e.clientY });
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerId !== nextDragState.pointerId || !playerRef.current) return;
+      event.preventDefault();
+      console.log('[GLOBAL POINTER MOVE]', { pointerId: event.pointerId, x: event.clientX, y: event.clientY });
 
       const rect = playerRef.current.getBoundingClientRect();
       const scaleX = VIDEO_W / rect.width;
       const scaleY = VIDEO_H / rect.height;
-      const dx = (e.clientX - activeDrag.startX) * scaleX;
-      const dy = (e.clientY - activeDrag.startY) * scaleY;
+      const dx = (event.clientX - nextDragState.startX) * scaleX;
+      const dy = (event.clientY - nextDragState.startY) * scaleY;
 
       const next = {
         regionA: { ...dualRegions.regionA },
         regionB: { ...dualRegions.regionB },
       };
-      const current = next[activeDrag.key];
+      const current = next[nextDragState.key];
 
-      if (activeDrag.type === 'move') {
-        current.x = clamp(activeDrag.origin.x + dx, 0, VIDEO_W - activeDrag.origin.width);
-        current.y = clamp(activeDrag.origin.y + dy, 0, VIDEO_H - activeDrag.origin.height);
+      if (nextDragState.type === 'move') {
+        current.x = clamp(nextDragState.origin.x + dx, 0, VIDEO_W - nextDragState.origin.width);
+        current.y = clamp(nextDragState.origin.y + dy, 0, VIDEO_H - nextDragState.origin.height);
       } else {
-        let nextX = activeDrag.origin.x;
-        let nextY = activeDrag.origin.y;
-        let nextW = activeDrag.origin.width;
-        let nextH = activeDrag.origin.height;
-        const handle = activeDrag.handle ?? 'se';
+        let nextX = nextDragState.origin.x;
+        let nextY = nextDragState.origin.y;
+        let nextW = nextDragState.origin.width;
+        let nextH = nextDragState.origin.height;
+        const resizeHandle = nextDragState.handle ?? 'se';
 
-        if (handle.includes('e')) nextW = activeDrag.origin.width + dx;
-        if (handle.includes('s')) nextH = activeDrag.origin.height + dy;
-        if (handle.includes('w')) {
-          nextW = activeDrag.origin.width - dx;
-          nextX = activeDrag.origin.x + dx;
+        if (resizeHandle.includes('e')) nextW = nextDragState.origin.width + dx;
+        if (resizeHandle.includes('s')) nextH = nextDragState.origin.height + dy;
+        if (resizeHandle.includes('w')) {
+          nextW = nextDragState.origin.width - dx;
+          nextX = nextDragState.origin.x + dx;
         }
-        if (handle.includes('n')) {
-          nextH = activeDrag.origin.height - dy;
-          nextY = activeDrag.origin.y + dy;
+        if (resizeHandle.includes('n')) {
+          nextH = nextDragState.origin.height - dy;
+          nextY = nextDragState.origin.y + dy;
         }
 
         const maxWidthByX = VIDEO_W - nextX;
@@ -113,23 +114,21 @@ export default function RegionSetupPage() {
       setDualRegions(next);
     };
 
-    const handlePointerUp = (e: PointerEvent) => {
-      if (e.pointerId !== activeDrag.pointerId) return;
-      e.preventDefault();
-      console.log('[GLOBAL POINTER UP]', { pointerId: e.pointerId, x: e.clientX, y: e.clientY });
+    const handlePointerUp = (event: PointerEvent) => {
+      if (event.pointerId !== nextDragState.pointerId) return;
+      event.preventDefault();
+      console.log('[GLOBAL POINTER UP]', { pointerId: event.pointerId, x: event.clientX, y: event.clientY });
+      console.log('REMOVE GLOBAL POINTER EVENTS');
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
       setActiveDrag(null);
     };
 
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
     window.addEventListener('pointercancel', handlePointerUp);
-
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('pointercancel', handlePointerUp);
-    };
-  }, [activeDrag, dualRegions, setDualRegions]);
+  };
 
   const confirmRegions = () => {
     console.log('[DUAL REGION CONFIRMED]', dualRegions);
