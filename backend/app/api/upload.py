@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 import asyncio
 import json
 from app.jobs.process_video_job import process_video
-from app.data.timeline_state import set_timeline_state
+from app.data.timeline_state import set_timeline_state, save_timeline_state_for_analysis
 from app.services.youtube_service import download_youtube_video, YouTubeDownloadError
 from app.data.ingest_jobs import cleanup_jobs, create_job, get_job, register_listener, unregister_listener, update_job
 import os
@@ -204,7 +204,7 @@ def _build_upload_response(transcription, file_id: str, filepath: str, render_mo
     print(f"[RENDER MODE SAVE] upload_response_render_mode={render_mode}")
     print("[DUAL REGION CONFIG SAVE] upload_response_dual_region_config=None")
     print(f"[TIMELINE STATE BOOTSTRAP] analysis_id={analysis_id}")
-    set_timeline_state({
+    next_state = {
         "renderMode": "preview",
         "analysisId": analysis_id,
         "videoUrl": _to_media_url(first_final_clip),
@@ -251,7 +251,10 @@ def _build_upload_response(transcription, file_id: str, filepath: str, render_mo
         "render_mode": render_mode,
         "dual_regions": None,
         "dual_region_config": None,
-    })
+    }
+    print(f"[TIMELINE STATE ANALYSIS] persisted_analysis_id={next_state.get('analysisId')}")
+    set_timeline_state(next_state)
+    save_timeline_state_for_analysis(next_state.get("analysisId"), next_state)
 
     return {
         "success": True,

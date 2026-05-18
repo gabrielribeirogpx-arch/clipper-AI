@@ -1,7 +1,12 @@
 from pathlib import Path
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
-from app.data.timeline_state import get_timeline_state, set_timeline_state
+from app.data.timeline_state import (
+    get_timeline_state,
+    set_timeline_state,
+    get_timeline_state_for_analysis,
+    save_timeline_state_for_analysis,
+)
 from app.schemas.timeline import TimelineUpdateRequest
 from app.services.vertical_render_service import render_dual_region_clip
 
@@ -55,6 +60,7 @@ def update_timeline(payload: TimelineUpdateRequest):
         current_state["dual_regions"] = payload.dual_regions.model_dump()
         current_state["dual_region_config"] = payload.dual_regions.model_dump()
     set_timeline_state(current_state)
+    save_timeline_state_for_analysis(current_state.get("analysisId"), current_state)
     print(f"[RENDER MODE SAVE] persisted_render_mode={current_state.get('render_mode')}")
     print(f"[DUAL REGION CONFIG SAVE] persisted_dual_region_config={current_state.get('dual_region_config')}")
 
@@ -68,11 +74,22 @@ def render_dual_region_final(payload: DualRegionRenderRequest):
         raise HTTPException(status_code=400, detail='render_mode must be dual_region')
 
     state = get_timeline_state()
+    print(f"[TIMELINE STATE BEFORE FINAL RENDER] analysisId={state.get('analysisId')} clips={len(state.get('clips', []))}")
+    print(f"[FINAL RENDER PAYLOAD ANALYSIS] analysis_id={payload.analysis_id}")
     backend_analysis_id = state.get('analysisId')
-    print(f"[DUAL REGION REQUEST ANALYSIS ID] payload={payload.analysis_id}")
-    print(f"[BACKEND ANALYSIS ID] timeline_state.analysisId={backend_analysis_id}")
-    print(f"[TIMELINE STATE ANALYSIS ID] {backend_analysis_id}")
+    print(f"[TIMELINE STATE ANALYSIS] timeline_state.analysisId={backend_analysis_id}")
+
     if backend_analysis_id != payload.analysis_id:
+        print(f"[TIMELINE FALLBACK LOAD] reason=analysis_mismatch expected={payload.analysis_id} actual={backend_analysis_id}")
+        recovered = get_timeline_state_for_analysis(payload.analysis_id)
+        if recovered:
+            state = recovered
+            set_timeline_state(state)
+            backend_analysis_id = state.get('analysisId')
+            print(f"[TIMELINE STATE RECOVERED] analysisId={backend_analysis_id} clips={len(state.get('clips', []))}")
+
+    if backend_analysis_id != payload.analysis_id:
+        print(f"[TIMELINE INTERNAL 404] reason=analysis_not_found payload_analysis_id={payload.analysis_id} timeline_state_analysis_id={backend_analysis_id}")
         raise HTTPException(status_code=404, detail='analysis not found in timeline state')
 
     clips = state.get('clips', [])
@@ -103,6 +120,7 @@ def render_dual_region_final(payload: DualRegionRenderRequest):
         state['exportVideoUrl'] = updated_clips[0]['final_video']
 
     set_timeline_state(state)
+    save_timeline_state_for_analysis(state.get("analysisId"), state)
     print('[DUAL REGION FINAL RENDER COMPLETE]')
     print('[EDITOR CLIPS REPLACED]')
     return {'status': 'rendered', 'clips': updated_clips, 'analysis_id': payload.analysis_id}
