@@ -19,6 +19,7 @@ export type YouTubeIngestRequest = {
   min_clip_length?: number;
   max_clip_length?: number;
   render_mode?: RenderMode;
+  video_quality?: '720p' | '1080p' | '4k';
 };
 
 const API_BASE = 'http://localhost:8000';
@@ -28,12 +29,14 @@ export function uploadVideo(
   analysisName?: string,
   onProgress?: (progress: number) => void,
   renderMode: RenderMode = "ai_tracking",
+  videoQuality: '720p' | '1080p' | '4k' = '1080p',
 ): Promise<UploadResponse> {
   return new Promise((resolve, reject) => {
     const formData = new FormData();
     formData.append('file', file);
     if (analysisName?.trim()) formData.append('analysis_name', analysisName.trim());
     formData.append('render_mode', renderMode);
+    formData.append('video_quality', videoQuality);
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${API_BASE}/upload`);

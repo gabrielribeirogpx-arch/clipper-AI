@@ -87,9 +87,10 @@ def _create_proxy_if_needed(video_path: str) -> tuple[str, bool]:
     return proxy_path, True
 
 
-def render_vertical_clip(video_path: str, segments: List[Dict], output_path: str, speaker_segments=None) -> str:
+def render_vertical_clip(video_path: str, segments: List[Dict], output_path: str, speaker_segments=None, tracking_video_path: str | None = None, original_video_path: str | None = None) -> str:
     """Render a vertical clip with camera reframing and original audio, without subtitles."""
-    tracking_source, proxy_created = _create_proxy_if_needed(video_path)
+    tracking_input = tracking_video_path or video_path
+    tracking_source, proxy_created = _create_proxy_if_needed(tracking_input)
     if proxy_created:
         _log_file_stats("REAL OUTPUT", tracking_source)
     tracking_clip = VideoFileClip(tracking_source)
@@ -98,6 +99,9 @@ def render_vertical_clip(video_path: str, segments: List[Dict], output_path: str
     max_zoom = 1.08 if SAFE_CPU_RENDER else 1.12
     reframer = ReframingService(sample_fps=sample_fps, max_zoom=max_zoom)
 
+    print(f"[AI USING PROXY VIDEO] {tracking_source}")
+    print(f"[FINAL RENDER USING ORIGINAL SOURCE] {video_path}")
+    print("[PROXY COORDINATES UPSCALED] using normalized coordinates for crop mapping")
     reframed_video = reframer.apply(VideoFileClip(video_path).without_audio())
     final_video = reframed_video.set_audio(VideoFileClip(video_path).audio)
 

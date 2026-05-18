@@ -1,5 +1,6 @@
 import os
 import time
+import subprocess
 
 from app.services.whisper_service import transcribe_video
 from app.services.hook_detector import detect_hooks
@@ -12,6 +13,8 @@ from app.services.ai_local_service import generate_clip_metadata
 
 def process_video(
     video_path,
+    original_video_path: str | None = None,
+    proxy_video_path: str | None = None,
     output_dir: str = "app/clips",
     render_mode: str = "ai_tracking",
     dual_region_config: dict | None = None,
@@ -31,9 +34,18 @@ def process_video(
 
     log = step_logger or (lambda _msg: None)
 
+    source_video_path = original_video_path or video_path
+    if not proxy_video_path:
+        proxy_video_path = os.path.join(output_dir, "proxy.mp4")
+        print(f"[PROXY GENERATION START] source={source_video_path} proxy={proxy_video_path}")
+        subprocess.run(["ffmpeg", "-y", "-i", source_video_path, "-vf", "scale=960:-1", proxy_video_path], check=True)
+        print(f"[PROXY GENERATION COMPLETE] proxy={proxy_video_path}")
+    print(f"[AI USING PROXY VIDEO] {proxy_video_path}")
+
     log("[STEP 5 - TRANSCRIPTION START]")
     t_start = time.perf_counter()
-    transcription = transcribe_video(video_path)
+    print(f"[WHISPER USING PROXY] {proxy_video_path}")
+    transcription = transcribe_video(proxy_video_path)
     log(f"[STEP 6 - TRANSCRIPTION FINISH] elapsed={time.perf_counter() - t_start:.2f}s")
 
     log("[STEP 7 - CLIP DETECTION START]")
@@ -67,7 +79,7 @@ def process_video(
         print(hook)
 
         raw_clip_path = cut_clip(
-            video_path,
+            source_video_path,
             hook["start"],
             hook["end"],
             f"raw_clip_{index}.mp4",
@@ -77,11 +89,16 @@ def process_video(
         processed_clip_path = raw_clip_path
         if render_mode == "ai_tracking":
             print("[RENDER MODE OVERRIDE] entering_ai_tracking_branch")
+            print(f"[TRACKING USING PROXY] {proxy_video_path}")
+            print(f"[FINAL RENDER USING ORIGINAL SOURCE] {source_video_path}")
+            print("[PROXY COORDINATES UPSCALED] via normalized tracking coordinates")
             processed_clip_path = render_vertical_clip(
                 raw_clip_path,
                 transcription["segments"],
                 os.path.join(output_dir, f"clip_{index}.mp4"),
                 speaker_segments=transcription.get("speaker_segments", []),
+                tracking_video_path=proxy_video_path,
+                original_video_path=source_video_path,
             )
         elif render_mode == "dual_region" and dual_region_config:
             print("[DUAL REGION RENDER START]")

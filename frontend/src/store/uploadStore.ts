@@ -14,6 +14,7 @@ type UploadedVideo = {
 };
 
 type RenderMode = 'ai_tracking' | 'dual_region';
+type VideoQuality = '720p' | '1080p' | '4k';
 
 type UploadState = {
   uploadProgress: number;
@@ -28,7 +29,9 @@ type UploadState = {
   status: string;
   clips: Array<Record<string, unknown>>;
   renderMode: RenderMode;
+  videoQuality: VideoQuality;
   setRenderMode: (mode: RenderMode) => void;
+  setVideoQuality: (quality: VideoQuality) => void;
   setUploadProgress: (progress: number) => void;
   setUploadStatus: (status: UploadStatus) => void;
   setProcessingStage: (stage: string) => void;
@@ -53,6 +56,7 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
   status: 'idle',
   clips: [],
   renderMode: 'ai_tracking',
+  videoQuality: '1080p',
   setUploadProgress: (uploadProgress) => set({ uploadProgress }),
   setUploadStatus: (uploadStatus) => set({ uploadStatus }),
   setProcessingStage: (processingStage) => set({ processingStage }),
@@ -73,6 +77,10 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
     console.log('[RENDER MODE SAVED]', { renderMode });
     set({ renderMode });
   },
+  setVideoQuality: (videoQuality) => {
+    console.log('[DOWNLOAD QUALITY SELECTED]', { videoQuality });
+    set({ videoQuality });
+  },
   clearActiveJob: () => set({ activeJobId: null }),
   reset: () =>
     set({
@@ -88,6 +96,7 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
       status: 'idle',
       clips: [],
   renderMode: 'ai_tracking',
+  videoQuality: '1080p',
     }),
 }), { name: 'clipper-upload-state', partialize: (state) => ({
   uploadProgress: state.uploadProgress,
@@ -101,4 +110,5 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
   status: state.status,
   clips: state.clips,
   renderMode: state.renderMode,
+  videoQuality: state.videoQuality,
 }) }));
