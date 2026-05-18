@@ -62,12 +62,14 @@ async def process_youtube_ingest_job(job_id: str, body: dict, output_dir: str) -
         update_job(job_id, status="rendering", progress=75, step="Rendering clips and metadata")
 
         render_mode = body.get("render_mode", "ai_tracking")
+        print(f"[PROCESS VIDEO JOB MODE] ingest_request_render_mode={render_mode}")
+        print(f"[PROCESS VIDEO JOB CONFIG] ingest_request_dual_region_config={body.get('dual_region_config')}")
         transcription = await asyncio.to_thread(
             process_video,
             filepath,
             output_dir=output_dir,
             render_mode=render_mode,
-            dual_region_config=body.get("dual_region_config"),
+            dual_region_config=body.get('dual_region_config'),
             min_clip_length=int(body.get("min_clip_length", 30)),
             max_clip_length=int(body.get("max_clip_length", 90)),
             max_clips=25,
@@ -113,6 +115,8 @@ async def upload_video(
     os.makedirs(output_dir, exist_ok=True)
     print(f"[ANALYSIS FOLDER CREATED] {output_dir}")
 
+    print(f"[PROCESS VIDEO JOB MODE] upload_request_render_mode={render_mode}")
+    print("[PROCESS VIDEO JOB CONFIG] upload_request_dual_region_config=None")
     transcription = process_video(filepath, output_dir=output_dir, render_mode=render_mode)
     return _build_upload_response(transcription, file_id, filepath, render_mode=render_mode)
 
@@ -193,6 +197,8 @@ def _build_upload_response(transcription, file_id: str, filepath: str, render_mo
     first_final_clip = hooks[0]["final_clip"] if hooks else filepath
     analysis_id = Path(hooks[0]["final_clip"]).parent.name if hooks else "default"
 
+    print(f"[RENDER MODE SAVE] upload_response_render_mode={render_mode}")
+    print("[DUAL REGION CONFIG SAVE] upload_response_dual_region_config=None")
     set_timeline_state({
         "renderMode": "preview",
         "analysisId": analysis_id,

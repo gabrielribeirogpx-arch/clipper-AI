@@ -180,6 +180,8 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
         render_mode: state.clipRenderMode,
         dual_regions: state.dualRegions,
       };
+      console.log('[RENDER MODE SAVE]', { source: 'moveBlock', render_mode: payload.render_mode });
+      console.log('[DUAL REGION CONFIG SAVE]', { source: 'moveBlock', dual_regions: payload.dual_regions });
       void fetch('http://localhost:8000/timeline/update', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -190,6 +192,8 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     }),
   setClipRenderMode: (clipRenderMode) =>
     set((state) => {
+      console.log('[RENDER MODE SAVE]', { source: 'setClipRenderMode', render_mode: clipRenderMode });
+      console.log('[DUAL REGION CONFIG SAVE]', { source: 'setClipRenderMode', dual_regions: state.dualRegions });
       void fetch('http://localhost:8000/timeline/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: clipRenderMode, dual_regions: state.dualRegions }) });
       return { clipRenderMode };
     }),
@@ -197,6 +201,8 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     set((state) => {
       const shouldPersist = options?.persist ?? true;
       if (shouldPersist) {
+        console.log('[RENDER MODE SAVE]', { source: 'setDualRegions', render_mode: state.clipRenderMode });
+        console.log('[DUAL REGION CONFIG SAVE]', { source: 'setDualRegions', dual_regions: dualRegions });
         void fetch('http://localhost:8000/timeline/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: state.clipRenderMode, dual_regions: dualRegions }) });
       }
       return { dualRegions };
@@ -216,7 +222,10 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     const selectedClipId = selectedClip?.id ?? null;
     const backendAnalysisId: string | null = data.analysisId ?? null;
     const clipRenderMode: ClipRenderMode = data.render_mode === 'dual_region' ? 'dual_region' : 'ai_tracking';
-    console.log('[RENDER MODE HYDRATED]', {
+    if (data.render_mode !== 'dual_region' && data.render_mode !== 'ai_tracking') {
+      console.warn('[RENDER MODE FALLBACK]', { incoming: data.render_mode, fallback: clipRenderMode });
+    }
+    console.log('[RENDER MODE HYDRATE]', {
       analysisId: backendAnalysisId,
       render_mode: data.render_mode,
       clipRenderMode,
