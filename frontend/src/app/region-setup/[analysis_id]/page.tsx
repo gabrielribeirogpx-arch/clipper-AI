@@ -30,10 +30,11 @@ export default function RegionSetupPage() {
   const router = useRouter();
   const params = useParams<{ analysis_id: string }>();
   const routeAnalysisId = params?.analysis_id ?? null;
-  const { videoUrl, dualRegions, setDualRegions, generatedClips, analysisId, clipRenderMode, hydrateFromBackend } = useTimelineStore();
+  const { videoUrl, dualRegions, setDualRegions, generatedClips, analysisId, clipRenderMode, hydrateFromBackend, setClipRenderMode, tracks } = useTimelineStore();
   const playerRef = useRef<HTMLDivElement | null>(null);
   const throttleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingPersistRef = useRef<DualRegions | null>(null);
+  const forcedDualRegionRef = useRef<string | null>(null);
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<RegionKey>('regionA');
   const [showGrid, setShowGrid] = useState(true);
@@ -46,6 +47,51 @@ export default function RegionSetupPage() {
       void hydrateFromBackend(routeAnalysisId);
     }
   }, [analysisId, clipRenderMode, routeAnalysisId, hydrateFromBackend]);
+
+  useEffect(() => {
+    const finalAnalysisId = analysisId ?? routeAnalysisId ?? null;
+    if (!finalAnalysisId) return;
+
+    if (forcedDualRegionRef.current === finalAnalysisId && clipRenderMode === 'dual_region') return;
+
+    console.log('[REGION SETUP FORCE DUAL REGION]', {
+      routeAnalysisId,
+      storeAnalysisId: analysisId,
+      previousRenderMode: clipRenderMode,
+      targetRenderMode: 'dual_region',
+    });
+    setClipRenderMode('dual_region');
+
+    const payload = {
+      analysis_id: finalAnalysisId,
+      broll: tracks.broll,
+      hooks: tracks.hooks,
+      cuts: tracks.cuts,
+      render_mode: 'dual_region',
+      dual_regions: dualRegions,
+    };
+    console.log('[DUAL REGION MODE PERSIST START]', { analysisId: finalAnalysisId });
+    console.log('[TIMELINE UPDATE PAYLOAD]', payload);
+    void fetch('http://localhost:8000/timeline/update', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(() => {
+      forcedDualRegionRef.current = finalAnalysisId;
+      console.log('[DUAL REGION MODE PERSIST SUCCESS]', { analysisId: finalAnalysisId });
+    }).catch((error) => {
+      console.error('[DUAL REGION MODE PERSIST ERROR]', { analysisId: finalAnalysisId, error });
+    });
+  }, [
+    analysisId,
+    routeAnalysisId,
+    clipRenderMode,
+    setClipRenderMode,
+    tracks.broll,
+    tracks.hooks,
+    tracks.cuts,
+    dualRegions,
+  ]);
 
   const presets = {
     podcast: { regionA: { x: 120, y: 80, width: 1680, height: 460 }, regionB: { x: 120, y: 540, width: 1680, height: 460 } },
