@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTimelineStore, type RegionBox } from '@/store/timelineStore';
 
@@ -52,75 +52,84 @@ export default function RegionSetupPage() {
     setActiveDrag({ pointerId: e.pointerId, key, type, handle, startX: e.clientX, startY: e.clientY, origin: dualRegions[key] });
   };
 
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!activeDrag || !playerRef.current || e.pointerId !== activeDrag.pointerId) return;
-    e.preventDefault();
+  useEffect(() => {
+    if (!activeDrag || !playerRef.current) return;
 
-    const rect = playerRef.current.getBoundingClientRect();
-    const scaleX = VIDEO_W / rect.width;
-    const scaleY = VIDEO_H / rect.height;
-    const dx = (e.clientX - activeDrag.startX) * scaleX;
-    const dy = (e.clientY - activeDrag.startY) * scaleY;
+    const handlePointerMove = (e: PointerEvent) => {
+      if (e.pointerId !== activeDrag.pointerId || !playerRef.current) return;
+      e.preventDefault();
+      console.log('[GLOBAL POINTER MOVE]', { pointerId: e.pointerId, x: e.clientX, y: e.clientY });
 
-    const next = {
-      regionA: { ...dualRegions.regionA },
-      regionB: { ...dualRegions.regionB },
+      const rect = playerRef.current.getBoundingClientRect();
+      const scaleX = VIDEO_W / rect.width;
+      const scaleY = VIDEO_H / rect.height;
+      const dx = (e.clientX - activeDrag.startX) * scaleX;
+      const dy = (e.clientY - activeDrag.startY) * scaleY;
+
+      const next = {
+        regionA: { ...dualRegions.regionA },
+        regionB: { ...dualRegions.regionB },
+      };
+      const current = next[activeDrag.key];
+
+      if (activeDrag.type === 'move') {
+        current.x = clamp(activeDrag.origin.x + dx, 0, VIDEO_W - activeDrag.origin.width);
+        current.y = clamp(activeDrag.origin.y + dy, 0, VIDEO_H - activeDrag.origin.height);
+      } else {
+        let nextX = activeDrag.origin.x;
+        let nextY = activeDrag.origin.y;
+        let nextW = activeDrag.origin.width;
+        let nextH = activeDrag.origin.height;
+        const handle = activeDrag.handle ?? 'se';
+
+        if (handle.includes('e')) nextW = activeDrag.origin.width + dx;
+        if (handle.includes('s')) nextH = activeDrag.origin.height + dy;
+        if (handle.includes('w')) {
+          nextW = activeDrag.origin.width - dx;
+          nextX = activeDrag.origin.x + dx;
+        }
+        if (handle.includes('n')) {
+          nextH = activeDrag.origin.height - dy;
+          nextY = activeDrag.origin.y + dy;
+        }
+
+        const maxWidthByX = VIDEO_W - nextX;
+        const maxHeightByY = VIDEO_H - nextY;
+        nextW = clamp(nextW, MIN_REGION_W, maxWidthByX);
+        nextH = clamp(nextH, MIN_REGION_H, maxHeightByY);
+
+        nextX = clamp(nextX, 0, VIDEO_W - MIN_REGION_W);
+        nextY = clamp(nextY, 0, VIDEO_H - MIN_REGION_H);
+        nextW = clamp(nextW, MIN_REGION_W, VIDEO_W - nextX);
+        nextH = clamp(nextH, MIN_REGION_H, VIDEO_H - nextY);
+
+        current.x = nextX;
+        current.y = nextY;
+        current.width = nextW;
+        current.height = nextH;
+      }
+
+      console.log('LIVE REGION STATE', next);
+      setDualRegions(next);
     };
-    const current = next[activeDrag.key];
 
-    if (activeDrag.type === 'move') {
-      current.x = clamp(activeDrag.origin.x + dx, 0, VIDEO_W - activeDrag.origin.width);
-      current.y = clamp(activeDrag.origin.y + dy, 0, VIDEO_H - activeDrag.origin.height);
-      console.log('[OVERLAY POINTER MOVE]', { key: activeDrag.key, type: 'move', region: current });
-    } else {
-      let nextX = activeDrag.origin.x;
-      let nextY = activeDrag.origin.y;
-      let nextW = activeDrag.origin.width;
-      let nextH = activeDrag.origin.height;
-      const handle = activeDrag.handle ?? 'se';
+    const handlePointerUp = (e: PointerEvent) => {
+      if (e.pointerId !== activeDrag.pointerId) return;
+      e.preventDefault();
+      console.log('[GLOBAL POINTER UP]', { pointerId: e.pointerId, x: e.clientX, y: e.clientY });
+      setActiveDrag(null);
+    };
 
-      if (handle.includes('e')) nextW = activeDrag.origin.width + dx;
-      if (handle.includes('s')) nextH = activeDrag.origin.height + dy;
-      if (handle.includes('w')) {
-        nextW = activeDrag.origin.width - dx;
-        nextX = activeDrag.origin.x + dx;
-      }
-      if (handle.includes('n')) {
-        nextH = activeDrag.origin.height - dy;
-        nextY = activeDrag.origin.y + dy;
-      }
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
 
-      const maxWidthByX = VIDEO_W - nextX;
-      const maxHeightByY = VIDEO_H - nextY;
-      nextW = clamp(nextW, MIN_REGION_W, maxWidthByX);
-      nextH = clamp(nextH, MIN_REGION_H, maxHeightByY);
-
-      nextX = clamp(nextX, 0, VIDEO_W - MIN_REGION_W);
-      nextY = clamp(nextY, 0, VIDEO_H - MIN_REGION_H);
-      nextW = clamp(nextW, MIN_REGION_W, VIDEO_W - nextX);
-      nextH = clamp(nextH, MIN_REGION_H, VIDEO_H - nextY);
-
-      current.x = nextX;
-      current.y = nextY;
-      current.width = nextW;
-      current.height = nextH;
-      console.log('[OVERLAY POINTER MOVE]', { key: activeDrag.key, type: 'resize', handle, region: current });
-    }
-
-    console.log('LIVE REGION STATE', next);
-    setDualRegions(next);
-  };
-
-  const endDrag = (e: React.PointerEvent) => {
-    if (!activeDrag || e.pointerId !== activeDrag.pointerId) return;
-    e.preventDefault();
-    const target = e.currentTarget as HTMLElement;
-    if (target?.hasPointerCapture?.(e.pointerId)) {
-      target.releasePointerCapture(e.pointerId);
-    }
-    console.log('[OVERLAY POINTER UP]', { key: activeDrag.key, type: activeDrag.type, handle: activeDrag.handle, region: dualRegions[activeDrag.key] });
-    setActiveDrag(null);
-  };
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, [activeDrag, dualRegions, setDualRegions]);
 
   const confirmRegions = () => {
     console.log('[DUAL REGION CONFIRMED]', dualRegions);
@@ -143,9 +152,6 @@ export default function RegionSetupPage() {
 
         <div
           className='relative overflow-hidden rounded-2xl border border-white/20 bg-black/40 backdrop-blur'
-          onPointerMove={onPointerMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
           ref={playerRef}
         >
           {videoUrl ? <video src={videoUrl} className='pointer-events-none aspect-video w-full object-cover' controls /> : <div className='grid aspect-video place-items-center'>Sem vídeo de origem</div>}
@@ -174,9 +180,6 @@ export default function RegionSetupPage() {
                 onClick={() => {
                   console.log('TEST CLICK OVERLAY');
                 }}
-                onPointerMove={onPointerMove}
-                onPointerUp={endDrag}
-                onPointerCancel={endDrag}
               >
                 <div className='absolute left-2 top-2 rounded-md bg-black/65 px-2 py-1 text-xs font-semibold tracking-wider'>
                   {key === 'regionA' ? 'REGIÃO A' : 'REGIÃO B'}
