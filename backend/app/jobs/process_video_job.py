@@ -80,6 +80,12 @@ def process_video(
                 os.path.join(output_dir, f"clip_{index}.mp4"),
                 speaker_segments=transcription.get("speaker_segments", []),
             )
+        elif render_mode == "dual_region" and dual_region_config:
+            print("[DUAL REGION RENDER START]")
+            print(f"[DUAL REGION CONFIG LOADED] {dual_region_config}")
+            processed_clip_path = os.path.join(output_dir, f"clip_{index}_dual.mp4")
+            render_dual_region_clip(raw_clip_path, processed_clip_path, dual_region_config)
+            print("[DUAL REGION RENDER COMPLETE]")
 
         segment_timeline = broll_engine.build_timeline([
             segment for segment in transcription["segments"]
@@ -93,12 +99,6 @@ def process_video(
             output_dir=output_dir,
             quality_profile="export",
         )
-
-        if render_mode == "dual_region" and dual_region_config:
-            print("[DUAL REGION FINAL RENDER START]")
-            render_dual_region_clip(raw_clip_path, final_clip_path, dual_region_config)
-            print("[DUAL REGION FINAL RENDER SUCCESS]")
-
 
         metadata = generate_social_metadata(hook.get("text", ""), hook.get("viral_score", 0))
         ai_metadata = generate_clip_metadata(hook.get("text", ""))

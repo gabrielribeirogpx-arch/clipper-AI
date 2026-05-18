@@ -154,12 +154,10 @@ def render_vertical_clip(video_path: str, segments: List[Dict], output_path: str
 
 
 def render_dual_region_clip(video_path: str, output_path: str, dual_regions: Dict) -> str:
-    print("[DUAL REGION ENABLED]")
+    print("[DUAL REGION RENDER START]")
     region_a = dual_regions.get("regionA", {})
     region_b = dual_regions.get("regionB", {})
-    print(f"[REGION A] {region_a}")
-    print(f"[REGION B] {region_b}")
-    print("[DUAL REGION RENDER START]")
+    print(f"[DUAL REGION CONFIG LOADED] regionA={region_a} regionB={region_b}")
 
     def _box(region: Dict) -> tuple[int, int, int, int]:
         return (
@@ -172,8 +170,8 @@ def render_dual_region_clip(video_path: str, output_path: str, dual_regions: Dic
     aw, ah, ax, ay = _box(region_a)
     bw, bh, bx, by = _box(region_b)
     filtergraph = (
-        f"[0:v]crop={aw}:{ah}:{ax}:{ay},scale=1080:960[top];"
-        f"[0:v]crop={bw}:{bh}:{bx}:{by},scale=1080:960[bottom];"
+        f"[0:v]crop={aw}:{ah}:{ax}:{ay},scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2[top];"
+        f"[0:v]crop={bw}:{bh}:{bx}:{by},scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2[bottom];"
         f"[top][bottom]vstack=inputs=2,format=yuv420p[v]"
     )
     cmd = [
@@ -181,9 +179,10 @@ def render_dual_region_clip(video_path: str, output_path: str, dual_regions: Dic
         "-c:v", EXPORT_VIDEO_CODEC, "-crf", str(EXPORT_CRF), "-preset", EXPORT_PRESET, "-pix_fmt", EXPORT_PIXEL_FORMAT,
         "-c:a", EXPORT_AUDIO_CODEC, "-b:a", EXPORT_AUDIO_BITRATE, "-movflags", EXPORT_MOVFLAGS, output_path
     ]
+    print("[DUAL REGION FFMPEG START]")
     print(f"[DUAL REGION FFMPEG COMMAND] {' '.join(shlex.quote(part) for part in cmd)}")
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if proc.returncode != 0:
         raise RuntimeError(f"Dual region render failed: {proc.stderr}")
-    print("[DUAL REGION RENDER SUCCESS]")
+    print("[DUAL REGION RENDER COMPLETE]")
     return output_path

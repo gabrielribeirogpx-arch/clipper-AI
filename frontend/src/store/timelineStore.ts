@@ -73,7 +73,7 @@ type TimelineState = {
   clipRenderMode: ClipRenderMode;
   dualRegions: DualRegions;
   resetForNewAnalysis: () => void;
-  hydrateFromBackend: () => Promise<void>;
+  hydrateFromBackend: (analysisIdHint?: string | null) => Promise<void>;
   selectClip: (clipId: string) => void;
   setCurrentTime: (time: number) => void;
   setPlaying: (playing: boolean) => void;
@@ -201,8 +201,9 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       }
       return { dualRegions };
     }),
-  hydrateFromBackend: async () => {
-    const data = await getRenderState();
+  hydrateFromBackend: async (analysisIdHint) => {
+    console.log('[EDITOR HYDRATION START]', { analysisIdHint: analysisIdHint ?? null });
+    const data = await getRenderState(analysisIdHint);
     const mapTrack = (items: ClipBlock[] = [], track: TrackType) =>
       items.map((item) => ({ ...item, track }));
     const previewVideoUrl = data.previewVideoUrl ? `http://localhost:8000${data.previewVideoUrl}` : null;
@@ -211,8 +212,8 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     const generatedClips: GeneratedClip[] = (data.clips ?? [])
       .map((clip: GeneratedClip) => ({ ...clip }))
       .sort((a: GeneratedClip, b: GeneratedClip) => b.viral_score - a.viral_score);
-    const selectedClipId = generatedClips[0]?.id ?? null;
-    const selectedClip = generatedClips[0];
+    const selectedClip = generatedClips[0] ?? null;
+    const selectedClipId = selectedClip?.id ?? null;
     const backendAnalysisId: string | null = data.analysisId ?? null;
     const clipRenderMode: ClipRenderMode = data.render_mode === 'dual_region' ? 'dual_region' : 'ai_tracking';
     console.log('[RENDER MODE HYDRATED]', {
@@ -221,11 +222,14 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       clipRenderMode,
     });
     const currentAnalysisId = get().analysisId;
+    const hasPersistedRenderMode = typeof data.render_mode === 'string' && data.render_mode.length > 0;
+    const hasAvailableClips = generatedClips.length > 0;
     const analysisChanged = currentAnalysisId !== backendAnalysisId;
+    const shouldClearState = analysisChanged && !analysisIdHint && !hasAvailableClips && !hasPersistedRenderMode;
 
     console.log('[BACKEND ANALYSIS_ID]', backendAnalysisId);
     console.log('[FRONTEND ACTIVE ANALYSIS_ID]', currentAnalysisId);
-    if (analysisChanged) {
+    if (analysisChanged && shouldClearState) {
       console.log('[ANALYSIS CHANGED - CLEARING PREVIOUS STATE]', {
         from: currentAnalysisId,
         to: backendAnalysisId,
@@ -255,6 +259,11 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
         effects: [],
       }
     });
+    if (selectedClipId) {
+      console.log('[EDITOR AUTO CLIP SELECT]', { selectedClipId, source: selectedClip?.raw_clip_path ?? selectedClip?.final_video ?? null });
+    }
+    console.log('[EDITOR RENDER MODE RESTORED]', { analysisId: backendAnalysisId, clipRenderMode });
+    console.log('[EDITOR HYDRATION SUCCESS]', { analysisId: backendAnalysisId, clipCount: generatedClips.length });
     console.log('[FRONTEND ACTIVE ANALYSIS_ID]', backendAnalysisId);
   }
 }), {
