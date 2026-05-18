@@ -25,6 +25,8 @@ def process_video(
 
     os.makedirs(output_dir, exist_ok=True)
     print(f"[CLIP OUTPUT PATH] {output_dir}")
+    print(f"[PROCESS VIDEO JOB MODE] resolved_render_mode={render_mode}")
+    print(f"[PROCESS VIDEO JOB CONFIG] resolved_dual_region_config={dual_region_config}")
 
 
     log = step_logger or (lambda _msg: None)
@@ -74,6 +76,7 @@ def process_video(
 
         processed_clip_path = raw_clip_path
         if render_mode == "ai_tracking":
+            print("[RENDER MODE OVERRIDE] entering_ai_tracking_branch")
             processed_clip_path = render_vertical_clip(
                 raw_clip_path,
                 transcription["segments"],
@@ -82,10 +85,12 @@ def process_video(
             )
         elif render_mode == "dual_region" and dual_region_config:
             print("[DUAL REGION RENDER START]")
-            print(f"[DUAL REGION CONFIG LOADED] {dual_region_config}")
+            print(f"[DUAL REGION CONFIG LOAD] {dual_region_config}")
             processed_clip_path = os.path.join(output_dir, f"clip_{index}_dual.mp4")
             render_dual_region_clip(raw_clip_path, processed_clip_path, dual_region_config)
             print("[DUAL REGION RENDER COMPLETE]")
+        elif render_mode == "dual_region":
+            print("[RENDER MODE OVERRIDE] dual_region_requested_but_missing_config")
 
         segment_timeline = broll_engine.build_timeline([
             segment for segment in transcription["segments"]
