@@ -17,7 +17,12 @@ from dataclasses import dataclass
 UPLOAD_DIR = "app/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 logger = logging.getLogger(__name__)
-YOUTUBE_FORMAT_SELECTOR = "137+140/248+251/bestvideo+bestaudio/best"
+QUALITY_FORMATS = {
+    "720p": "bestvideo[height<=720]+bestaudio/best[height<=720]",
+    "1080p": "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
+    "4k": "bestvideo[height<=2160]+bestaudio/best[height<=2160]",
+}
+
 YT_DLP_TIMEOUT_SECONDS = int(os.getenv("YT_DLP_TIMEOUT_SECONDS", "7200"))
 
 @dataclass
@@ -92,7 +97,7 @@ def _resolve_ffmpeg_location() -> str | None:
 
 
 
-def download_youtube_video(youtube_url: str, start_time: str | None = None, end_time: str | None = None) -> str:
+def download_youtube_video(youtube_url: str, start_time: str | None = None, end_time: str | None = None, video_quality: str = "1080p") -> str:
     output_template = os.path.join(UPLOAD_DIR, f"yt_{uuid.uuid4()}_%(id)s.%(ext)s")
     base_command = [
         sys.executable,
@@ -111,13 +116,18 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
         "ejs:github",
     ]
 
+    normalized_quality = (video_quality or "1080p").strip().lower()
+    quality_selector = QUALITY_FORMATS.get(normalized_quality, QUALITY_FORMATS["1080p"])
+    print(f"[DOWNLOAD QUALITY SELECTED] {normalized_quality}")
+    print(f"[YTDLP QUALITY FORMAT] {quality_selector}")
+
     command = [
         *base_command,
         "--verbose",
         "-f",
-        YOUTUBE_FORMAT_SELECTOR,
+        quality_selector,
         "-S",
-        "res:1080,fps",
+        "fps",
         "--merge-output-format",
         "mp4",
         "--print",

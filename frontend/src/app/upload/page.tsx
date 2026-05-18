@@ -113,6 +113,7 @@ export default function UploadPage() {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [analysisName, setAnalysisName] = useState('');
   const renderMode = useUploadStore((state) => state.renderMode);
+  const videoQuality = useUploadStore((state) => state.videoQuality);
   const [startSeconds, setStartSeconds] = useState(0);
   const [endSeconds, setEndSeconds] = useState(MAX_YOUTUBE_DURATION_SECONDS);
   const fileRef = useRef<File | null>(null);
@@ -132,7 +133,7 @@ export default function UploadPage() {
     resetForNewAnalysis();
     store.setUploadedVideo({ name: file.name, size: file.size, type: file.type, previewUrl: URL.createObjectURL(file) });
     store.setUploadStatus('uploading');
-    const result = await uploadVideo(file, analysisName, store.setUploadProgress, renderMode).catch((e) => {
+    const result = await uploadVideo(file, analysisName, store.setUploadProgress, renderMode, videoQuality).catch((e) => {
       store.setUploadStatus('error');
       throw e;
     });
@@ -216,6 +217,7 @@ export default function UploadPage() {
       min_clip_length: 30,
       max_clip_length: 90,
       render_mode: renderMode,
+      video_quality: videoQuality,
     });
 
     store.setActiveJob(job.job_id, job.analysis_id);
