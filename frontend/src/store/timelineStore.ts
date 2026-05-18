@@ -122,7 +122,9 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     regionB: { x: 120, y: 540, width: 1680, height: 460 },
   },
   resetForNewAnalysis: () =>
-    set({
+    set((state) => {
+      console.log('[TIMELINE STATE RESET]', { previousAnalysisId: state.analysisId });
+      return {
       analysisId: null,
       videoUrl: null,
       previewVideoUrl: null,
@@ -139,6 +141,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
         cuts: [],
         effects: [],
       },
+      };
     }),
   setCurrentTime: (currentTime) => set({ currentTime: clampTime(currentTime, get().duration) }),
   setPlaying: (isPlaying) => set({ isPlaying }),
@@ -209,6 +212,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     }),
   hydrateFromBackend: async (analysisIdHint) => {
     console.log('[EDITOR HYDRATION START]', { analysisIdHint: analysisIdHint ?? null });
+    console.log('[TIMELINE STATE HYDRATED]', { phase: 'request', analysisIdHint: analysisIdHint ?? null });
     const data = await getRenderState(analysisIdHint);
     const mapTrack = (items: ClipBlock[] = [], track: TrackType) =>
       items.map((item) => ({ ...item, track }));
@@ -236,7 +240,8 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     const analysisChanged = currentAnalysisId !== backendAnalysisId;
     const shouldClearState = analysisChanged && !analysisIdHint && !hasAvailableClips && !hasPersistedRenderMode;
 
-    console.log('[BACKEND ANALYSIS_ID]', backendAnalysisId);
+    console.log('[BACKEND ANALYSIS ID]', backendAnalysisId);
+    console.log('[TIMELINE STATE ANALYSIS ID]', backendAnalysisId);
     console.log('[FRONTEND ACTIVE ANALYSIS_ID]', currentAnalysisId);
     if (analysisChanged && shouldClearState) {
       console.log('[ANALYSIS CHANGED - CLEARING PREVIOUS STATE]', {
@@ -273,6 +278,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     }
     console.log('[EDITOR RENDER MODE RESTORED]', { analysisId: backendAnalysisId, clipRenderMode });
     console.log('[EDITOR HYDRATION SUCCESS]', { analysisId: backendAnalysisId, clipCount: generatedClips.length });
+    console.log('[TIMELINE STATE HYDRATED]', { phase: 'success', analysisId: backendAnalysisId, clipCount: generatedClips.length });
     console.log('[FRONTEND ACTIVE ANALYSIS_ID]', backendAnalysisId);
   }
 }), {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { renderDualRegionFinal } from '@/lib/api';
 import { useTimelineStore, type DualRegions, type RegionBox } from '@/store/timelineStore';
 
@@ -28,7 +28,9 @@ const clamp = (value: number, min: number, max: number) => Math.min(Math.max(val
 
 export default function RegionSetupPage() {
   const router = useRouter();
-  const { videoUrl, dualRegions, setDualRegions, generatedClips, analysisId, clipRenderMode } = useTimelineStore();
+  const params = useParams<{ analysis_id: string }>();
+  const routeAnalysisId = params?.analysis_id ?? null;
+  const { videoUrl, dualRegions, setDualRegions, generatedClips, analysisId, clipRenderMode, hydrateFromBackend } = useTimelineStore();
   const playerRef = useRef<HTMLDivElement | null>(null);
   const throttleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingPersistRef = useRef<DualRegions | null>(null);
@@ -38,7 +40,12 @@ export default function RegionSetupPage() {
 
   useEffect(() => {
     console.log('[REGION SETUP RENDER MODE]', { analysisId, clipRenderMode });
-  }, [analysisId, clipRenderMode]);
+    console.log('[REGION SETUP ANALYSIS ID]', { routeAnalysisId, storeAnalysisId: analysisId });
+    if (routeAnalysisId && routeAnalysisId !== analysisId) {
+      console.log('[TIMELINE STATE HYDRATED]', { phase: 'region_setup_sync', analysisId: routeAnalysisId });
+      void hydrateFromBackend(routeAnalysisId);
+    }
+  }, [analysisId, clipRenderMode, routeAnalysisId, hydrateFromBackend]);
 
   const presets = {
     podcast: { regionA: { x: 120, y: 80, width: 1680, height: 460 }, regionB: { x: 120, y: 540, width: 1680, height: 460 } },
@@ -200,17 +207,20 @@ export default function RegionSetupPage() {
   const confirmRegions = async () => {
     console.log('[DUAL REGION CONFIRMED]', dualRegions);
     flushDualRegionPersist('confirm');
-    if (!analysisId) {
+    const finalAnalysisId = analysisId ?? routeAnalysisId;
+    console.log('[FRONTEND ANALYSIS ID]', analysisId);
+    console.log('[REGION SETUP ANALYSIS ID]', routeAnalysisId);
+    if (!finalAnalysisId) {
       console.error('[DUAL REGION FINAL RENDER ERROR] missing_analysis_id');
       return;
     }
     await renderDualRegionFinal({
-      analysis_id: analysisId,
+      analysis_id: finalAnalysisId,
       render_mode: 'dual_region',
       dual_region_config: dualRegions,
     });
     const target = generatedClips.length > 0 ? '/editor' : '/editor';
-    const query = analysisId ? `?analysis_id=${analysisId}` : '';
+    const query = finalAnalysisId ? `?analysis_id=${finalAnalysisId}` : '';
     router.push(`${target}${query}`);
   };
 

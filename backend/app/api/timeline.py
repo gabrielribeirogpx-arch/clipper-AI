@@ -68,7 +68,11 @@ def render_dual_region_final(payload: DualRegionRenderRequest):
         raise HTTPException(status_code=400, detail='render_mode must be dual_region')
 
     state = get_timeline_state()
-    if state.get('analysisId') != payload.analysis_id:
+    backend_analysis_id = state.get('analysisId')
+    print(f"[DUAL REGION REQUEST ANALYSIS ID] payload={payload.analysis_id}")
+    print(f"[BACKEND ANALYSIS ID] timeline_state.analysisId={backend_analysis_id}")
+    print(f"[TIMELINE STATE ANALYSIS ID] {backend_analysis_id}")
+    if backend_analysis_id != payload.analysis_id:
         raise HTTPException(status_code=404, detail='analysis not found in timeline state')
 
     clips = state.get('clips', [])
