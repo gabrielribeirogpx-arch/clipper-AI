@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTimelineStore, type RegionBox } from '@/store/timelineStore';
 
@@ -31,6 +31,10 @@ export default function RegionSetupPage() {
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<RegionKey>('regionA');
   const [showGrid, setShowGrid] = useState(true);
+
+  useEffect(() => {
+    console.log('[REGION SETUP RENDER MODE]', { analysisId, clipRenderMode });
+  }, [analysisId, clipRenderMode]);
 
   const presets = {
     podcast: { regionA: { x: 120, y: 80, width: 1680, height: 460 }, regionB: { x: 120, y: 540, width: 1680, height: 460 } },

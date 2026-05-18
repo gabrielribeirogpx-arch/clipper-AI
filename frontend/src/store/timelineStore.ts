@@ -212,6 +212,11 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     const selectedClip = generatedClips[0];
     const backendAnalysisId: string | null = data.analysisId ?? null;
     const clipRenderMode: ClipRenderMode = data.render_mode === 'dual_region' ? 'dual_region' : 'ai_tracking';
+    console.log('[RENDER MODE HYDRATED]', {
+      analysisId: backendAnalysisId,
+      render_mode: data.render_mode,
+      clipRenderMode,
+    });
     const currentAnalysisId = get().analysisId;
     const analysisChanged = currentAnalysisId !== backendAnalysisId;
 
