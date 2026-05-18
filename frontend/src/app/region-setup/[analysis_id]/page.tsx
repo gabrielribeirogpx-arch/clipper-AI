@@ -55,6 +55,7 @@ export default function RegionSetupPage() {
 
   const onPointerMove = (e: React.PointerEvent) => {
     if (!activeDrag || !playerRef.current || e.pointerId !== activeDrag.pointerId) return;
+    e.preventDefault();
 
     const rect = playerRef.current.getBoundingClientRect();
     const scaleX = VIDEO_W / rect.width;
@@ -68,7 +69,7 @@ export default function RegionSetupPage() {
     if (activeDrag.type === 'move') {
       current.x = clamp(activeDrag.origin.x + dx, 0, VIDEO_W - activeDrag.origin.width);
       current.y = clamp(activeDrag.origin.y + dy, 0, VIDEO_H - activeDrag.origin.height);
-      console.log('[DUAL REGION DRAG MOVE]', activeDrag.key, current);
+      console.log('[OVERLAY POINTER MOVE]', { key: activeDrag.key, type: 'move', region: current });
     } else {
       let nextX = activeDrag.origin.x;
       let nextY = activeDrag.origin.y;
@@ -101,7 +102,7 @@ export default function RegionSetupPage() {
       current.y = nextY;
       current.width = nextW;
       current.height = nextH;
-      console.log('[DUAL REGION RESIZE MOVE]', activeDrag.key, { handle, ...current });
+      console.log('[OVERLAY POINTER MOVE]', { key: activeDrag.key, type: 'resize', handle, region: current });
     }
 
     setDualRegions(next);
@@ -109,15 +110,12 @@ export default function RegionSetupPage() {
 
   const endDrag = (e: React.PointerEvent) => {
     if (!activeDrag || e.pointerId !== activeDrag.pointerId) return;
-    const target = e.target as HTMLElement;
+    e.preventDefault();
+    const target = e.currentTarget as HTMLElement;
     if (target?.hasPointerCapture?.(e.pointerId)) {
       target.releasePointerCapture(e.pointerId);
     }
-    if (activeDrag.type === 'move') {
-      console.log('[DUAL REGION DRAG END]', { key: activeDrag.key, region: dualRegions[activeDrag.key] });
-    } else {
-      console.log('[DUAL REGION RESIZE END]', { key: activeDrag.key, handle: activeDrag.handle, region: dualRegions[activeDrag.key] });
-    }
+    console.log('[OVERLAY POINTER UP]', { key: activeDrag.key, type: activeDrag.type, handle: activeDrag.handle, region: dualRegions[activeDrag.key] });
     setActiveDrag(null);
   };
 
@@ -149,7 +147,7 @@ export default function RegionSetupPage() {
           onPointerCancel={endDrag}
           ref={playerRef}
         >
-          {videoUrl ? <video src={videoUrl} className='aspect-video w-full object-cover' controls /> : <div className='grid aspect-video place-items-center'>Sem vídeo de origem</div>}
+          {videoUrl ? <video src={videoUrl} className='pointer-events-none aspect-video w-full object-cover' controls /> : <div className='grid aspect-video place-items-center'>Sem vídeo de origem</div>}
 
           {showGrid && <div className='pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.09)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.09)_1px,transparent_1px)] bg-[size:8%_10%]' />}
           <div className='pointer-events-none absolute inset-x-0 top-1/2 h-px bg-white/35' />
@@ -161,35 +159,40 @@ export default function RegionSetupPage() {
                 key={key}
                 layout
                 transition={{ type: 'spring', stiffness: 400, damping: 35 }}
-                className={`absolute cursor-move rounded-xl border-2 transition-[box-shadow,transform] duration-100 ease-out touch-none ${containerStyles[key]} ${selectedRegion === key || activeDrag?.key === key ? 'ring-2 ring-white/70 shadow-[0_0_0_1px_rgba(255,255,255,0.45),0_0_30px_rgba(255,255,255,0.35)]' : 'hover:shadow-[0_0_18px_rgba(255,255,255,0.2)]'}`}
+                className={`absolute z-50 cursor-move rounded-xl border-2 transition-[box-shadow,transform] duration-100 ease-out touch-none pointer-events-auto ${containerStyles[key]} ${selectedRegion === key || activeDrag?.key === key ? 'ring-2 ring-white/70 shadow-[0_0_0_1px_rgba(255,255,255,0.45),0_0_30px_rgba(255,255,255,0.35)]' : 'hover:shadow-[0_0_18px_rgba(255,255,255,0.2)]'}`}
                 style={{
                   left: toPercent(region.x, VIDEO_W),
                   top: toPercent(region.y, VIDEO_H),
                   width: toPercent(region.width, VIDEO_W),
                   height: toPercent(region.height, VIDEO_H),
                 }}
-                onPointerDown={(e) => startDrag(e, key, 'move')}
+                onPointerDown={(e) => {
+                  console.log('[OVERLAY POINTER DOWN]', { key, type: 'move', x: e.clientX, y: e.clientY });
+                  startDrag(e, key, 'move');
+                }}
               >
                 <div className='absolute left-2 top-2 rounded-md bg-black/65 px-2 py-1 text-xs font-semibold tracking-wider'>
                   {key === 'regionA' ? 'REGIÃO A' : 'REGIÃO B'}
                 </div>
                 {([
-                  { h: 'n', cls: 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-n-resize w-5 h-2' },
-                  { h: 's', cls: 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 cursor-s-resize w-5 h-2' },
-                  { h: 'e', cls: 'right-0 top-1/2 translate-x-1/2 -translate-y-1/2 cursor-e-resize w-2 h-5' },
-                  { h: 'w', cls: 'left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-w-resize w-2 h-5' },
-                  { h: 'ne', cls: 'right-0 top-0 translate-x-1/2 -translate-y-1/2 cursor-ne-resize w-3 h-3' },
-                  { h: 'nw', cls: 'left-0 top-0 -translate-x-1/2 -translate-y-1/2 cursor-nw-resize w-3 h-3' },
-                  { h: 'se', cls: 'right-0 bottom-0 translate-x-1/2 translate-y-1/2 cursor-se-resize w-3 h-3' },
-                  { h: 'sw', cls: 'left-0 bottom-0 -translate-x-1/2 translate-y-1/2 cursor-sw-resize w-3 h-3' },
+                  { h: 'n', cls: 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize w-5 h-2' },
+                  { h: 's', cls: 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 cursor-ns-resize w-5 h-2' },
+                  { h: 'e', cls: 'right-0 top-1/2 translate-x-1/2 -translate-y-1/2 cursor-ew-resize w-2 h-5' },
+                  { h: 'w', cls: 'left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize w-2 h-5' },
+                  { h: 'ne', cls: 'right-0 top-0 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize w-3 h-3' },
+                  { h: 'nw', cls: 'left-0 top-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize w-3 h-3' },
+                  { h: 'se', cls: 'right-0 bottom-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize w-3 h-3' },
+                  { h: 'sw', cls: 'left-0 bottom-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize w-3 h-3' },
                 ] as { h: ResizeHandle; cls: string }[]).map(({ h, cls }) => (
                   <button
                     key={`${key}-${h}`}
                     type='button'
                     aria-label={`Resize ${key} ${h}`}
-                    className={`absolute rounded-md border border-white/80 bg-white/85 shadow-[0_0_12px_rgba(255,255,255,0.9)] ${cls}`}
+                    className={`absolute z-[60] pointer-events-auto rounded-md border border-white/80 bg-white/85 shadow-[0_0_12px_rgba(255,255,255,0.9)] ${cls}`}
                     onPointerDown={(e) => {
+                      e.preventDefault();
                       e.stopPropagation();
+                      console.log('[OVERLAY POINTER DOWN]', { key, type: 'resize', handle: h, x: e.clientX, y: e.clientY });
                       startDrag(e, key, 'resize', h);
                     }}
                   />
