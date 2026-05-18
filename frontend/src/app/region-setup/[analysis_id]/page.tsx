@@ -40,7 +40,10 @@ export default function RegionSetupPage() {
   } as const;
 
   const startDrag = (e: React.PointerEvent, key: RegionKey, type: 'move' | 'resize', handle?: ResizeHandle) => {
-    if (clipRenderMode !== 'dual_region') return;
+    console.log('START DRAG STEP 1', { key, type, handle, clipRenderMode, pointerId: e.pointerId });
+    if (clipRenderMode !== 'dual_region') {
+      console.warn('START DRAG: clipRenderMode is not dual_region, continuing for pointer diagnostics', { clipRenderMode });
+    }
     e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     setSelectedRegion(key);
@@ -51,17 +54,28 @@ export default function RegionSetupPage() {
     }
 
     const nextDragState = { pointerId: e.pointerId, key, type, handle, startX: e.clientX, startY: e.clientY, origin: dualRegions[key] };
+    console.log('START DRAG STEP 2', { nextDragState });
     console.log('DRAG STATE SET', nextDragState);
+    console.log('START DRAG BEFORE setActiveDrag');
     setActiveDrag(nextDragState);
+    console.log('START DRAG AFTER setActiveDrag');
     console.log('USE EFFECT DRAG ACTIVE', nextDragState);
     console.log('REGISTER GLOBAL POINTER EVENTS');
 
     const handlePointerMove = (event: PointerEvent) => {
-      if (event.pointerId !== nextDragState.pointerId || !playerRef.current) return;
+      if (event.pointerId !== nextDragState.pointerId || !playerRef.current) {
+        console.log('GLOBAL POINTER MOVE IGNORED', {
+          eventPointerId: event.pointerId,
+          dragPointerId: nextDragState.pointerId,
+          hasPlayerRef: Boolean(playerRef.current),
+        });
+        return;
+      }
       event.preventDefault();
       console.log('[GLOBAL POINTER MOVE]', { pointerId: event.pointerId, x: event.clientX, y: event.clientY });
 
       const rect = playerRef.current.getBoundingClientRect();
+      console.log('START DRAG STEP 3', { rectWidth: rect.width, rectHeight: rect.height });
       const scaleX = VIDEO_W / rect.width;
       const scaleY = VIDEO_H / rect.height;
       const dx = (event.clientX - nextDragState.startX) * scaleX;
@@ -125,9 +139,15 @@ export default function RegionSetupPage() {
       setActiveDrag(null);
     };
 
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('pointercancel', handlePointerUp);
+    try {
+      console.log('REGISTERING POINTERMOVE');
+      window.addEventListener('pointermove', handlePointerMove);
+      console.log('REGISTERING POINTERUP');
+      window.addEventListener('pointerup', handlePointerUp);
+      window.addEventListener('pointercancel', handlePointerUp);
+    } catch (err) {
+      console.error('POINTER REGISTER ERROR', err);
+    }
   };
 
   const confirmRegions = () => {
