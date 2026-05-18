@@ -24,6 +24,18 @@ export type YouTubeIngestRequest = {
 
 const API_BASE = 'http://localhost:8000';
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
+}
+
+
 export function uploadVideo(
   file: File,
   analysisName?: string,
@@ -112,7 +124,7 @@ export async function ingestYouTubeJob(payload: YouTubeIngestRequest): Promise<I
 
 export async function getIngestStatus(jobId: string): Promise<IngestStatus> {
   const response = await fetch(`${API_BASE}/ingest/status/${jobId}`);
-  if (!response.ok) throw new Error("Failed to fetch ingest status");
+  if (!response.ok) throw new ApiError("Failed to fetch ingest status", response.status);
   return response.json() as Promise<IngestStatus>;
 }
 
@@ -122,7 +134,7 @@ export function createIngestStream(jobId: string): EventSource {
 
 export async function getIngestJobState(jobId: string): Promise<IngestJobState> {
   const response = await fetch(`${API_BASE}/ingest/job/${jobId}`);
-  if (!response.ok) throw new Error('Failed to fetch ingest job state');
+  if (!response.ok) throw new ApiError('Failed to fetch ingest job state', response.status);
   return response.json() as Promise<IngestJobState>;
 }
 

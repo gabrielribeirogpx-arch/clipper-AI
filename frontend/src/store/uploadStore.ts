@@ -40,6 +40,7 @@ type UploadState = {
   setActiveJob: (jobId: string, analysisId: string) => void;
   updateIngestState: (payload: { progress?: number; step?: string; status?: string; clips?: Array<Record<string, unknown>> }) => void;
   clearActiveJob: () => void;
+  resetIngestState: () => void;
   reset: () => void;
 };
 
@@ -82,6 +83,19 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
     set({ videoQuality });
   },
   clearActiveJob: () => set({ activeJobId: null }),
+  resetIngestState: () => {
+    console.log('[INGEST STATE RESET]');
+    set({
+      uploadProgress: 0,
+      uploadStatus: 'idle',
+      processingStage: 'Waiting for upload...',
+      activeJobId: null,
+      analysisId: null,
+      currentStep: 'Waiting for upload...',
+      status: 'idle',
+      clips: [],
+    });
+  },
   reset: () =>
     set({
       uploadProgress: 0,
