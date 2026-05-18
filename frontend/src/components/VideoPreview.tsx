@@ -12,6 +12,7 @@ export function VideoPreview() {
   const [dragging, setDragging] = useState<'regionA' | 'regionB' | null>(null);
   const mounted = useMounted();
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const isRegionSetup = false;
 
   const resolvedVideoUrl = videoUrl && videoUrl.trim().length > 0 ? videoUrl : null;
 
@@ -55,6 +56,14 @@ export function VideoPreview() {
     console.log(resolvedVideoUrl);
   }, [resolvedVideoUrl]);
 
+  useEffect(() => {
+    if (isRegionSetup) {
+      console.log('[REGION SETUP OVERLAY ENABLED]');
+      return;
+    }
+    console.log('[EDITOR OVERLAY DISABLED]');
+  }, [isRegionSetup]);
+
   if (!mounted) return <div className="h-[760px] rounded-[2rem] border border-white/10 bg-white/5" />;
 
   return (
@@ -95,7 +104,7 @@ export function VideoPreview() {
                   }}
                   onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
                 />) : (<div className="flex h-full items-center justify-center text-slate-300">Nenhum clip real disponível ainda.</div>)}
-                {clipRenderMode === 'dual_region' && (
+                {clipRenderMode === 'dual_region' && isRegionSetup === true && (
                   <div
                     className="absolute inset-0 z-30"
                     onMouseMove={(e) => {
@@ -118,7 +127,7 @@ export function VideoPreview() {
             </div>
           </div>
         </div>
-        {clipRenderMode === 'dual_region' && <div className="mt-3 flex gap-2 text-xs">
+        {clipRenderMode === 'dual_region' && isRegionSetup === true && <div className="mt-3 flex gap-2 text-xs">
           <button className="rounded bg-white/10 px-2 py-1" onClick={() => setDualRegions({ regionA: { x: 120, y: 80, width: 1680, height: 460 }, regionB: { x: 120, y: 540, width: 1680, height: 460 } })}>Podcast Split</button>
           <button className="rounded bg-white/10 px-2 py-1" onClick={() => setDualRegions({ regionA: { x: 0, y: 0, width: 700, height: 500 }, regionB: { x: 640, y: 0, width: 1280, height: 720 } })}>Facecam + Gameplay</button>
           <button className="rounded bg-white/10 px-2 py-1" onClick={() => setDualRegions({ regionA: { x: 0, y: 0, width: 960, height: 540 }, regionB: { x: 960, y: 0, width: 960, height: 540 } })}>Debate</button>
