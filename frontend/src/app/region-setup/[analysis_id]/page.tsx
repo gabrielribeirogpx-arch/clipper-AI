@@ -2,7 +2,6 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
 import { useTimelineStore, type RegionBox } from '@/store/timelineStore';
 
 type RegionKey = 'regionA' | 'regionB';
@@ -63,7 +62,10 @@ export default function RegionSetupPage() {
     const dx = (e.clientX - activeDrag.startX) * scaleX;
     const dy = (e.clientY - activeDrag.startY) * scaleY;
 
-    const next = { ...dualRegions };
+    const next = {
+      regionA: { ...dualRegions.regionA },
+      regionB: { ...dualRegions.regionB },
+    };
     const current = next[activeDrag.key];
 
     if (activeDrag.type === 'move') {
@@ -105,6 +107,7 @@ export default function RegionSetupPage() {
       console.log('[OVERLAY POINTER MOVE]', { key: activeDrag.key, type: 'resize', handle, region: current });
     }
 
+    console.log('LIVE REGION STATE', next);
     setDualRegions(next);
   };
 
@@ -118,8 +121,6 @@ export default function RegionSetupPage() {
     console.log('[OVERLAY POINTER UP]', { key: activeDrag.key, type: activeDrag.type, handle: activeDrag.handle, region: dualRegions[activeDrag.key] });
     setActiveDrag(null);
   };
-
-  const toPercent = (value: number, base: number) => `${(value / base) * 100}%`;
 
   const confirmRegions = () => {
     console.log('[DUAL REGION CONFIRMED]', dualRegions);
@@ -155,16 +156,14 @@ export default function RegionSetupPage() {
           {(['regionA', 'regionB'] as const).map((key) => {
             const region = dualRegions[key];
             return (
-              <motion.div
+              <div
                 key={key}
-                layout
-                transition={{ type: 'spring', stiffness: 400, damping: 35 }}
                 className={`absolute z-50 cursor-move rounded-xl border-2 transition-[box-shadow,transform] duration-100 ease-out touch-none pointer-events-auto ${containerStyles[key]} ${selectedRegion === key || activeDrag?.key === key ? 'ring-2 ring-white/70 shadow-[0_0_0_1px_rgba(255,255,255,0.45),0_0_30px_rgba(255,255,255,0.35)]' : 'hover:shadow-[0_0_18px_rgba(255,255,255,0.2)]'}`}
                 style={{
-                  left: toPercent(region.x, VIDEO_W),
-                  top: toPercent(region.y, VIDEO_H),
-                  width: toPercent(region.width, VIDEO_W),
-                  height: toPercent(region.height, VIDEO_H),
+                  left: `calc(${region.x} / ${VIDEO_W} * 100%)`,
+                  top: `calc(${region.y} / ${VIDEO_H} * 100%)`,
+                  width: `calc(${region.width} / ${VIDEO_W} * 100%)`,
+                  height: `calc(${region.height} / ${VIDEO_H} * 100%)`,
                   backgroundColor: 'rgba(255,0,0,0.3)',
                 }}
                 onPointerDown={(e) => {
@@ -205,7 +204,7 @@ export default function RegionSetupPage() {
                     }}
                   />
                 ))}
-              </motion.div>
+              </div>
             );
           })}
         </div>
