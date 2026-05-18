@@ -122,3 +122,13 @@ export async function getIngestJobState(jobId: string): Promise<IngestJobState> 
   if (!response.ok) throw new Error('Failed to fetch ingest job state');
   return response.json() as Promise<IngestJobState>;
 }
+
+export async function renderDualRegionFinal(payload: { analysis_id: string; render_mode: "dual_region"; dual_region_config: unknown }) {
+  const response = await fetch(`${API_BASE}/timeline/render-dual-region`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error('Dual region render failed');
+  return response.json();
+}

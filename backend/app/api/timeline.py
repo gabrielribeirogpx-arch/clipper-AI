@@ -1,8 +1,27 @@
-from fastapi import APIRouter, Query
+from pathlib import Path
+from fastapi import APIRouter, Query, HTTPException
+from pydantic import BaseModel
 from app.data.timeline_state import get_timeline_state, set_timeline_state
 from app.schemas.timeline import TimelineUpdateRequest
+from app.services.vertical_render_service import render_dual_region_clip
 
 router = APIRouter(prefix="/timeline", tags=["timeline"])
+
+class DualRegionRenderRequest(BaseModel):
+    analysis_id: str
+    render_mode: str
+    dual_region_config: dict
+
+
+def _to_filesystem_path(media_url: str) -> Path:
+    if not media_url.startswith('/media/'):
+        raise HTTPException(status_code=400, detail=f'invalid media path: {media_url}')
+    return Path('app/clips') / media_url.replace('/media/', '', 1)
+
+
+def _to_media_url(path: Path) -> str:
+    rel_path = path.as_posix().replace('app/clips/', '', 1)
+    return f"/media/{rel_path}"
 
 
 @router.get("/render-state")
@@ -40,3 +59,46 @@ def update_timeline(payload: TimelineUpdateRequest):
     print(f"[DUAL REGION CONFIG SAVE] persisted_dual_region_config={current_state.get('dual_region_config')}")
 
     return {"status": "updated"}
+
+
+@router.post('/render-dual-region')
+def render_dual_region_final(payload: DualRegionRenderRequest):
+    print('[DUAL REGION FINAL RENDER REQUEST]')
+    if payload.render_mode != 'dual_region':
+        raise HTTPException(status_code=400, detail='render_mode must be dual_region')
+
+    state = get_timeline_state()
+    if state.get('analysisId') != payload.analysis_id:
+        raise HTTPException(status_code=404, detail='analysis not found in timeline state')
+
+    clips = state.get('clips', [])
+    print(f"[DUAL REGION RAW CLIPS LOADED] count={len(clips)}")
+    print('[DUAL REGION FINAL RENDER START]')
+
+    updated_clips = []
+    for index, clip in enumerate(clips):
+        raw_clip_path = _to_filesystem_path(clip.get('raw_clip_path') or clip.get('clip_path'))
+        if not raw_clip_path.exists():
+            raise HTTPException(status_code=404, detail=f'raw clip missing: {raw_clip_path.as_posix()}')
+
+        dual_clip_path = raw_clip_path.with_name(f"clip_{index}_dual.mp4")
+        render_dual_region_clip(str(raw_clip_path), str(dual_clip_path), payload.dual_region_config)
+
+        updated = {**clip}
+        updated['clip_path'] = _to_media_url(dual_clip_path)
+        updated['final_video'] = _to_media_url(dual_clip_path)
+        updated_clips.append(updated)
+
+    state['clips'] = updated_clips
+    state['render_mode'] = 'dual_region'
+    state['dual_regions'] = payload.dual_region_config
+    state['dual_region_config'] = payload.dual_region_config
+    if updated_clips:
+        state['videoUrl'] = updated_clips[0]['final_video']
+        state['previewVideoUrl'] = updated_clips[0]['final_video']
+        state['exportVideoUrl'] = updated_clips[0]['final_video']
+
+    set_timeline_state(state)
+    print('[DUAL REGION FINAL RENDER COMPLETE]')
+    print('[EDITOR CLIPS REPLACED]')
+    return {'status': 'rendered', 'clips': updated_clips, 'analysis_id': payload.analysis_id}
