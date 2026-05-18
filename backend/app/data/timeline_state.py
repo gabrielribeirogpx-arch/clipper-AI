@@ -17,6 +17,7 @@ timeline_state: dict[str, Any] = {
     "renderQueue": [],
     "render_mode": "ai_tracking",
     "dual_regions": None,
+    "dual_region_config": None,
 }
 
 

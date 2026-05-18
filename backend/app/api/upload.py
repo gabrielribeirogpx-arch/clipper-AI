@@ -239,6 +239,7 @@ def _build_upload_response(transcription, file_id: str, filepath: str, render_mo
         "cuts": transcription["timeline"]["cuts"],
         "render_mode": render_mode,
         "dual_regions": None,
+        "dual_region_config": None,
     })
 
     return {

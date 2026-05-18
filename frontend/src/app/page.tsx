@@ -9,6 +9,7 @@ import { useTimelineStore } from '@/store/timelineStore';
 import { exportClip } from '@/lib/api';
 import { useMounted } from '@/hooks/useMounted';
 import { useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 const navItems = [
   { label: 'Projects', icon: '⬢', active: false },
@@ -44,12 +45,14 @@ function RenderQueuePanel() {
 
 export default function Home() {
   const mounted = useMounted();
+  const searchParams = useSearchParams();
   const hydrateFromBackend = useTimelineStore((state) => state.hydrateFromBackend);
   const selectedClipId = useTimelineStore((state) => state.selectedClipId);
+  const analysisId = searchParams.get('analysis_id');
 
   useEffect(() => {
-    void hydrateFromBackend();
-  }, [hydrateFromBackend]);
+    void hydrateFromBackend(analysisId);
+  }, [analysisId, hydrateFromBackend]);
 
   if (!mounted) return <main className="min-h-screen bg-[#05070f]" />;
 

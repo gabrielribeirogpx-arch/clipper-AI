@@ -57,8 +57,9 @@ export function uploadVideo(
   });
 }
 
-export async function getRenderState() {
-  const response = await fetch(`${API_BASE}/timeline/render-state`);
+export async function getRenderState(analysisId?: string | null) {
+  const query = analysisId ? `?analysis_id=${encodeURIComponent(analysisId)}` : '';
+  const response = await fetch(`${API_BASE}/timeline/render-state${query}`);
   if (!response.ok) throw new Error('Failed to fetch render state');
   return response.json();
 }
