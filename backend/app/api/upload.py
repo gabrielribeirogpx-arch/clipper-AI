@@ -63,7 +63,7 @@ async def process_youtube_ingest_job(job_id: str, body: dict, output_dir: str) -
         update_job(job_id, status="rendering", progress=75, step="Rendering clips and metadata")
 
         render_mode = body.get("render_mode", "ai_tracking")
-        process_render_mode = "raw_only" if render_mode == "dual_region" else render_mode
+        process_render_mode = render_mode
         print(f"[BACKEND RECEIVED RENDER MODE] source=ingest_youtube render_mode={render_mode}")
         print(f"[PROCESS VIDEO JOB MODE] ingest_request_render_mode={render_mode}")
         print(f"[PROCESS VIDEO JOB MODE] ingest_processing_render_mode={process_render_mode}")
@@ -121,7 +121,7 @@ async def upload_video(
     os.makedirs(output_dir, exist_ok=True)
     print(f"[ANALYSIS FOLDER CREATED] {output_dir}")
 
-    process_render_mode = "raw_only" if render_mode == "dual_region" else render_mode
+    process_render_mode = render_mode
     print(f"[BACKEND RECEIVED RENDER MODE] source=upload render_mode={render_mode}")
     print(f"[PROCESS VIDEO JOB MODE] upload_request_render_mode={render_mode}")
     print(f"[PROCESS VIDEO JOB MODE] upload_processing_render_mode={process_render_mode}")
