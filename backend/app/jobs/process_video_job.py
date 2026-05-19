@@ -108,7 +108,9 @@ def process_video(
             render_dual_region_clip(raw_clip_path, processed_clip_path, dual_region_config)
             print("[DUAL REGION RENDER COMPLETE]")
         elif render_mode == "dual_region":
-            print("[RENDER MODE OVERRIDE] dual_region_requested_but_missing_config")
+            print("[DUAL REGION CONFIG MISSING] render_mode=dual_region dual_region_config=None")
+            print("[DUAL REGION RENDER BLOCKED] reason=missing_dual_region_config")
+            raise ValueError("dual_region render requested without dual_region_config")
         elif render_mode == "raw_only":
             print("[RENDER MODE OVERRIDE] raw_only_no_vertical_render")
 

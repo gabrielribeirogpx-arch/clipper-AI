@@ -234,6 +234,13 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       render_mode: data.render_mode,
       clipRenderMode,
     });
+    if (data.dual_regions) {
+      console.log('[DUAL REGION CONFIG HYDRATED]', {
+        analysis_id: backendAnalysisId,
+        regionA: data.dual_regions.regionA,
+        regionB: data.dual_regions.regionB,
+      });
+    }
     const currentAnalysisId = get().analysisId;
     const hasPersistedRenderMode = typeof data.render_mode === 'string' && data.render_mode.length > 0;
     const hasAvailableClips = generatedClips.length > 0;
