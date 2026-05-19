@@ -148,6 +148,13 @@ export default function UploadPage() {
     return target;
   };
   const redirectToPostAnalyzeTarget = (analysisId: string, frontendRequestedMode: 'ai_tracking' | 'dual_region', backendReturnedMode?: 'ai_tracking' | 'dual_region') => {
+    const uploadStatus = useUploadStore.getState().status;
+    if (uploadStatus === 'waiting_dual_region') {
+      console.log('[DUAL REGION SETUP REQUIRED]', { analysisId, status: uploadStatus });
+      console.log('[WAITING DUAL REGION REDIRECT]', { analysisId, target: `/region-setup/${analysisId}` });
+      router.push(`/region-setup/${analysisId}`);
+      return;
+    }
     const target = resolveRedirectTarget(analysisId, frontendRequestedMode, backendReturnedMode);
     if (frontendRequestedMode === 'dual_region' || backendReturnedMode === 'dual_region') {
       const forcedTarget = `/region-setup/${analysisId}`;
@@ -186,16 +193,18 @@ export default function UploadPage() {
     store.setUploadStatus('processing');
     store.setProcessingStage('Processing upload...');
     store.setUploadResult(result.project_id, result.timeline);
+    store.updateIngestState({ status: result.status ?? 'completed' });
     const analysisId = result.analysis_id;
     if (!analysisId) throw new Error('Missing analysis_id in upload response');
     console.log('[UPLOAD SUCCESS RENDER MODE]', { source: 'file_upload', render_mode: result.render_mode, analysis_id: analysisId });
     await hydrateFromBackend(analysisId);
     store.setUploadStatus('success');
     setRecentUploads((prev) => [file.name, ...prev].slice(0, 4));
-    if ((result.clips?.length ?? 0) > 0) setTimeout(() => {
-      console.log('[FRONTEND ANALYSIS ID]', analysisId);
-      redirectToPostAnalyzeTarget(analysisId, renderMode, result.render_mode);
-    }, 600);
+      if ((result.clips?.length ?? 0) > 0) setTimeout(() => {
+        console.log('[FRONTEND ANALYSIS ID]', analysisId);
+        redirectToPostAnalyzeTarget(analysisId, renderMode, result.render_mode);
+      }, 600);
+      if (result.status === 'waiting_dual_region') setTimeout(() => redirectToPostAnalyzeTarget(analysisId, renderMode, result.render_mode), 300);
   };
 
   const clearIngestResources = (jobId?: string) => {
@@ -254,6 +263,10 @@ export default function UploadPage() {
           console.log('[FRONTEND ANALYSIS ID]', result.analysis_id);
           redirectToPostAnalyzeTarget(result.analysis_id, renderMode, result.render_mode);
         }, 600);
+      }
+      if (result.status === 'waiting_dual_region') {
+        store.updateIngestState({ status: 'waiting_dual_region' });
+        setTimeout(() => redirectToPostAnalyzeTarget(result.analysis_id, renderMode, result.render_mode), 300);
       }
     } catch (error) {
       if (isNotFoundError(error)) {

@@ -1,5 +1,6 @@
 export type UploadResponse = {
   success: boolean;
+  status?: string;
   video_url: string;
   timeline: Record<string, unknown>;
   project_id: string;

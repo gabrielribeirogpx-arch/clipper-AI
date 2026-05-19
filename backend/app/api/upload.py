@@ -206,6 +206,8 @@ def _build_upload_response(transcription, file_id: str, filepath: str, render_mo
     first_final_clip = hooks[0]["final_clip"] if hooks else filepath
     analysis_id = Path(hooks[0]["final_clip"]).parent.name if hooks else "default"
 
+    is_waiting_dual_region = render_mode == "dual_region" and transcription.get("status") == "WAITING_FOR_DUAL_REGION_SETUP"
+    status = "waiting_dual_region" if is_waiting_dual_region else "completed"
     print(f"[RENDER MODE SAVE] upload_response_render_mode={render_mode}")
     print("[DUAL REGION CONFIG SAVE] upload_response_dual_region_config=None")
     print(f"[TIMELINE STATE BOOTSTRAP] analysis_id={analysis_id}")
@@ -254,6 +256,7 @@ def _build_upload_response(transcription, file_id: str, filepath: str, render_mo
         "broll": transcription["timeline"]["broll"],
         "cuts": transcription["timeline"]["cuts"],
         "render_mode": render_mode,
+        "status": status,
         "dual_regions": None,
         "dual_region_config": None,
         "video_quality": video_quality,
@@ -266,6 +269,7 @@ def _build_upload_response(transcription, file_id: str, filepath: str, render_mo
         "success": True,
         "render_mode": render_mode,
         "analysis_id": analysis_id,
+        "status": status,
         "video_quality": video_quality,
         "video_url": _to_media_url(first_final_clip),
         "preview_video_url": _to_media_url(first_final_clip),
