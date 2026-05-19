@@ -159,6 +159,8 @@ def render_vertical_clip(video_path: str, segments: List[Dict], output_path: str
 
 def render_dual_region_clip(video_path: str, output_path: str, dual_regions: Dict) -> str:
     print("[DUAL REGION RENDER START]")
+    print("[DUAL REGION PIPELINE ACTIVE]")
+    print("[DUAL REGION COMPOSITION START]")
     region_a = dual_regions.get("regionA", {})
     region_b = dual_regions.get("regionB", {})
     print(f"[DUAL REGION CONFIG LOADED] regionA={region_a} regionB={region_b}")
@@ -173,6 +175,12 @@ def render_dual_region_clip(video_path: str, output_path: str, dual_regions: Dic
 
     aw, ah, ax, ay = _box(region_a)
     bw, bh, bx, by = _box(region_b)
+    if aw <= 0 or ah <= 0 or bw <= 0 or bh <= 0:
+        print("[DUAL REGION CONFIG MISSING] reason=invalid_region_dimensions")
+        print("[DUAL REGION RENDER BLOCKED] reason=invalid_dual_region_config")
+        raise RuntimeError("Invalid dual region config: region dimensions must be > 0")
+    print(f"[FINAL DUAL REGION CROPS] regionA=(x={ax},y={ay},w={aw},h={ah}) regionB=(x={bx},y={by},w={bw},h={bh})")
+    print("[FINAL DUAL REGION SCALE] regionA->1080x960 regionB->1080x960 stack=1080x1920")
     filtergraph = (
         f"[0:v]crop={aw}:{ah}:{ax}:{ay},scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2[top];"
         f"[0:v]crop={bw}:{bh}:{bx}:{by},scale=1080:960:force_original_aspect_ratio=decrease,pad=1080:960:(ow-iw)/2:(oh-ih)/2[bottom];"
@@ -188,5 +196,10 @@ def render_dual_region_clip(video_path: str, output_path: str, dual_regions: Dic
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if proc.returncode != 0:
         raise RuntimeError(f"Dual region render failed: {proc.stderr}")
+    final_w, final_h = _probe_dimensions(output_path)
+    print(f"[FINAL OUTPUT RESOLUTION] {final_w}x{final_h}")
+    if (final_w, final_h) != TARGET_RENDER_SIZE:
+        raise RuntimeError(f"Dual-region rendered video has invalid size {final_w}x{final_h}; expected 1080x1920")
+    print("[DUAL REGION COMPOSITION COMPLETE]")
     print("[DUAL REGION RENDER COMPLETE]")
     return output_path

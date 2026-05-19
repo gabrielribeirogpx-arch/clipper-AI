@@ -35,6 +35,7 @@ export default function RegionSetupPage() {
   const throttleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingPersistRef = useRef<DualRegions | null>(null);
   const forcedDualRegionRef = useRef<string | null>(null);
+  const isDraggingRef = useRef(false);
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<RegionKey>('regionA');
   const [showGrid, setShowGrid] = useState(true);
@@ -43,6 +44,10 @@ export default function RegionSetupPage() {
     console.log('[REGION SETUP RENDER MODE]', { analysisId, clipRenderMode });
     console.log('[REGION SETUP ANALYSIS ID]', { routeAnalysisId, storeAnalysisId: analysisId });
     if (routeAnalysisId && routeAnalysisId !== analysisId) {
+      if (isDraggingRef.current) {
+        console.log('[HYDRATE BLOCKED DURING DRAG]');
+        return;
+      }
       console.log('[TIMELINE STATE HYDRATED]', { phase: 'region_setup_sync', analysisId: routeAnalysisId });
       void hydrateFromBackend(routeAnalysisId);
     }
@@ -139,6 +144,8 @@ export default function RegionSetupPage() {
 
   const startDrag = (e: React.PointerEvent, key: RegionKey, type: 'move' | 'resize', handle?: ResizeHandle) => {
     console.log('START DRAG STEP 1', { key, type, handle, clipRenderMode, pointerId: e.pointerId });
+    isDraggingRef.current = true;
+    console.log('[REGION DRAG START]', { key, type, pointerId: e.pointerId });
     if (clipRenderMode !== 'dual_region') {
       console.warn('START DRAG: clipRenderMode is not dual_region, continuing for pointer diagnostics', { clipRenderMode });
     }
@@ -237,6 +244,8 @@ export default function RegionSetupPage() {
       window.removeEventListener('pointercancel', handlePointerUp);
       flushDualRegionPersist('pointerup');
       setActiveDrag(null);
+      isDraggingRef.current = false;
+      console.log('[REGION DRAG END]', { key: nextDragState.key, type: nextDragState.type, pointerId: event.pointerId });
     };
 
     try {
@@ -260,6 +269,8 @@ export default function RegionSetupPage() {
       console.error('[DUAL REGION FINAL RENDER ERROR] missing_analysis_id');
       return;
     }
+    console.log('[DUAL REGION CONFIG SAVED]', { analysis_id: finalAnalysisId, regionA: dualRegions.regionA, regionB: dualRegions.regionB });
+    console.log('[DUAL REGION CONFIG SENT TO RENDER]', { analysis_id: finalAnalysisId, regionA: dualRegions.regionA, regionB: dualRegions.regionB });
     await renderDualRegionFinal({
       analysis_id: finalAnalysisId,
       render_mode: 'dual_region',

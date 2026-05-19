@@ -147,6 +147,20 @@ export default function UploadPage() {
     console.log('[REDIRECT TARGET]', { analysisId, target, resolvedMode });
     return target;
   };
+  const redirectToPostAnalyzeTarget = (analysisId: string, frontendRequestedMode: 'ai_tracking' | 'dual_region', backendReturnedMode?: 'ai_tracking' | 'dual_region') => {
+    const target = resolveRedirectTarget(analysisId, frontendRequestedMode, backendReturnedMode);
+    if (frontendRequestedMode === 'dual_region' || backendReturnedMode === 'dual_region') {
+      const forcedTarget = `/region-setup/${analysisId}`;
+      console.log('[DUAL REGION REDIRECT]', { frontendRequestedMode, backendReturnedMode: backendReturnedMode ?? null });
+      console.log('[REDIRECT ANALYSIS ID]', analysisId);
+      console.log('[REDIRECT TARGET FINAL]', forcedTarget);
+      router.push(forcedTarget);
+      return;
+    }
+    console.log('[REDIRECT ANALYSIS ID]', analysisId);
+    console.log('[REDIRECT TARGET FINAL]', target);
+    router.push(target);
+  };
 
   const sizeLabel = useMemo(() => (store.uploadedVideo ? `${(store.uploadedVideo.size / (1024 * 1024)).toFixed(1)} MB` : null), [store.uploadedVideo]);
   const isUploadStatusInProgress = store.uploadStatus === 'uploading' || store.uploadStatus === 'processing';
@@ -180,8 +194,7 @@ export default function UploadPage() {
     setRecentUploads((prev) => [file.name, ...prev].slice(0, 4));
     if ((result.clips?.length ?? 0) > 0) setTimeout(() => {
       console.log('[FRONTEND ANALYSIS ID]', analysisId);
-      const target = resolveRedirectTarget(analysisId, renderMode, result.render_mode);
-      router.push(target);
+      redirectToPostAnalyzeTarget(analysisId, renderMode, result.render_mode);
     }, 600);
   };
 
@@ -239,8 +252,7 @@ export default function UploadPage() {
         await hydrateFromBackend(result.analysis_id);
         setTimeout(() => {
           console.log('[FRONTEND ANALYSIS ID]', result.analysis_id);
-          const target = resolveRedirectTarget(result.analysis_id, renderMode);
-          router.push(target);
+          redirectToPostAnalyzeTarget(result.analysis_id, renderMode, result.render_mode);
         }, 600);
       }
     } catch (error) {

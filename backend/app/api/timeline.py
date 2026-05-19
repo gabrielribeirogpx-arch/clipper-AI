@@ -72,6 +72,11 @@ def render_dual_region_final(payload: DualRegionRenderRequest):
     print('[DUAL REGION FINAL RENDER REQUEST]')
     if payload.render_mode != 'dual_region':
         raise HTTPException(status_code=400, detail='render_mode must be dual_region')
+    if not payload.dual_region_config:
+        print('[DUAL REGION CONFIG MISSING] analysis_id={} dual_region_config=None'.format(payload.analysis_id))
+        print('[DUAL REGION RENDER BLOCKED] reason=missing_payload_dual_region_config')
+        raise HTTPException(status_code=400, detail='dual_region_config is required for dual_region render')
+    print(f"[DUAL REGION CONFIG SENT TO RENDER] analysis_id={payload.analysis_id} regionA={payload.dual_region_config.get('regionA')} regionB={payload.dual_region_config.get('regionB')}")
 
     state = get_timeline_state()
     print(f"[TIMELINE STATE BEFORE FINAL RENDER] analysisId={state.get('analysisId')} clips={len(state.get('clips', []))}")
@@ -114,6 +119,7 @@ def render_dual_region_final(payload: DualRegionRenderRequest):
     state['render_mode'] = 'dual_region'
     state['dual_regions'] = payload.dual_region_config
     state['dual_region_config'] = payload.dual_region_config
+    print(f"[DUAL REGION CONFIG SAVED] analysis_id={payload.analysis_id} regionA={payload.dual_region_config.get('regionA')} regionB={payload.dual_region_config.get('regionB')}")
     if updated_clips:
         state['videoUrl'] = updated_clips[0]['final_video']
         state['previewVideoUrl'] = updated_clips[0]['final_video']
