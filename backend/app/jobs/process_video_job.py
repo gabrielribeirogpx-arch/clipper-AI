@@ -62,8 +62,14 @@ def process_video(
     log(f"[STEP 8 - CLIP DETECTION FINISH] elapsed={time.perf_counter() - d_start:.2f}s")
     broll_engine = BRollEngine()
 
-    log("[STEP 9 - RENDER START]")
-    r_start = time.perf_counter()
+    should_wait_for_dual_region_setup = render_mode == "dual_region" and not dual_region_config
+    if should_wait_for_dual_region_setup:
+        print("[DUAL REGION WAITING FOR SETUP]")
+        print("[DUAL REGION AUTO RENDER BLOCKED] reason=missing_dual_region_config")
+        log("[STEP 9 - AUTO RENDER SKIPPED] waiting_for_dual_region_setup")
+    else:
+        log("[STEP 9 - RENDER START]")
+        r_start = time.perf_counter()
 
     generated_clips = []
     timeline_broll = []
@@ -87,6 +93,36 @@ def process_video(
             output_dir=output_dir,
         )
 
+        if should_wait_for_dual_region_setup:
+            generated_clips.append({
+                "raw_clip_path": raw_clip_path,
+                "clip_path": raw_clip_path,
+                "final_clip": raw_clip_path,
+                "start": hook["start"],
+                "end": hook["end"],
+                "text": hook["text"],
+                "viral_score": hook["viral_score"],
+                "hook_score": hook.get("hook_score", hook["viral_score"]),
+                "emotional_score": hook["emotional_score"],
+                "retention_score": hook["retention_score"],
+                "title_suggestion": "",
+                "caption_suggestion": "",
+                "description_suggestion": "",
+                "hashtags": [],
+                "emotion": "neutro",
+                "category": "curiosidade",
+                "viral_reason": "",
+                "title_options": [],
+                "broll_timeline": [],
+            })
+            timeline_cuts.append({
+                "id": f"cut-{index}",
+                "label": f"Cut {index + 1}",
+                "start": hook["start"],
+                "end": hook["start"] + 0.1,
+            })
+            continue
+
         processed_clip_path = raw_clip_path
         if render_mode == "ai_tracking":
             print("[RENDER MODE OVERRIDE] entering_ai_tracking_branch")
@@ -108,8 +144,6 @@ def process_video(
             render_dual_region_clip(raw_clip_path, processed_clip_path, dual_region_config)
             print("[DUAL REGION RENDER COMPLETE]")
         elif render_mode == "dual_region":
-            print("[DUAL REGION CONFIG MISSING] render_mode=dual_region dual_region_config=None")
-            print("[DUAL REGION RENDER BLOCKED] reason=missing_dual_region_config")
             raise ValueError("dual_region render requested without dual_region_config")
         elif render_mode == "raw_only":
             print("[RENDER MODE OVERRIDE] raw_only_no_vertical_render")
@@ -167,7 +201,10 @@ def process_video(
                 "end": float(broll_segment.get("end", broll_segment.get("start", 0) + 0.5)),
             })
 
-    log(f"[STEP 10 - RENDER FINISH] elapsed={time.perf_counter() - r_start:.2f}s")
+    if should_wait_for_dual_region_setup:
+        print("[DUAL REGION ANALYSIS READY]")
+    else:
+        log(f"[STEP 10 - RENDER FINISH] elapsed={time.perf_counter() - r_start:.2f}s")
 
     full_text = " ".join(
         [segment["text"] for segment in transcription["segments"]]
@@ -176,6 +213,7 @@ def process_video(
     return {
         "text": full_text,
         "hooks": generated_clips,
+        "status": "WAITING_FOR_DUAL_REGION_SETUP" if should_wait_for_dual_region_setup else "completed",
         "timeline": {
             "broll": timeline_broll,
             "cuts": timeline_cuts,
