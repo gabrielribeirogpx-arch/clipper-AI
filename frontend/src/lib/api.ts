@@ -4,6 +4,7 @@ export type UploadResponse = {
   timeline: Record<string, unknown>;
   project_id: string;
   analysis_id?: string;
+  render_mode?: RenderMode;
   duration: number;
   clips?: Array<Record<string, unknown>>;
 };

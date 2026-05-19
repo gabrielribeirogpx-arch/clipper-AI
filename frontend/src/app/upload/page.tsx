@@ -129,6 +129,25 @@ export default function UploadPage() {
   const resetForNewAnalysis = useTimelineStore((state) => state.resetForNewAnalysis);
   const hydrateFromBackend = useTimelineStore((state) => state.hydrateFromBackend);
 
+  const resolveRedirectTarget = (analysisId: string, frontendRequestedMode: 'ai_tracking' | 'dual_region', backendReturnedMode?: 'ai_tracking' | 'dual_region') => {
+    const hydratedMode = useTimelineStore.getState().clipRenderMode;
+    console.log('[TIMELINE HYDRATED RENDER MODE]', { analysisId, clipRenderMode: hydratedMode });
+    const resolvedMode = hydratedMode === 'dual_region' || backendReturnedMode === 'dual_region' || frontendRequestedMode === 'dual_region'
+      ? 'dual_region'
+      : 'ai_tracking';
+    const target = resolvedMode === 'dual_region' ? `/region-setup/${analysisId}` : `/editor?analysis_id=${analysisId}`;
+    console.log('[DUAL REGION ROUTE CHECK]', {
+      analysisId,
+      frontendRequestedMode,
+      backendReturnedMode: backendReturnedMode ?? null,
+      hydratedMode,
+      resolvedMode,
+      routeTarget: target,
+    });
+    console.log('[REDIRECT TARGET]', { analysisId, target, resolvedMode });
+    return target;
+  };
+
   const sizeLabel = useMemo(() => (store.uploadedVideo ? `${(store.uploadedVideo.size / (1024 * 1024)).toFixed(1)} MB` : null), [store.uploadedVideo]);
   const isUploadStatusInProgress = store.uploadStatus === 'uploading' || store.uploadStatus === 'processing';
   const isRealFileUploadActive = Boolean(store.uploadedVideo) && isUploadStatusInProgress;
@@ -145,6 +164,7 @@ export default function UploadPage() {
     resetForNewAnalysis();
     store.setUploadedVideo({ name: file.name, size: file.size, type: file.type, previewUrl: URL.createObjectURL(file) });
     store.setUploadStatus('uploading');
+    console.log('[UPLOAD SELECTED RENDER MODE]', { source: 'file_upload', renderMode });
     const result = await uploadVideo(file, analysisName, store.setUploadProgress, renderMode, videoQuality).catch((e) => {
       store.setUploadStatus('error');
       throw e;
@@ -152,12 +172,16 @@ export default function UploadPage() {
     store.setUploadStatus('processing');
     store.setProcessingStage('Processing upload...');
     store.setUploadResult(result.project_id, result.timeline);
-    await hydrateFromBackend();
+    const analysisId = result.analysis_id;
+    if (!analysisId) throw new Error('Missing analysis_id in upload response');
+    console.log('[UPLOAD SUCCESS RENDER MODE]', { source: 'file_upload', render_mode: result.render_mode, analysis_id: analysisId });
+    await hydrateFromBackend(analysisId);
     store.setUploadStatus('success');
     setRecentUploads((prev) => [file.name, ...prev].slice(0, 4));
     if ((result.clips?.length ?? 0) > 0) setTimeout(() => {
-      console.log('[FRONTEND ANALYSIS ID]', result.analysis_id);
-      router.push(renderMode === 'dual_region' ? `/region-setup/${result.analysis_id}` : `/editor?analysis_id=${result.analysis_id}`);
+      console.log('[FRONTEND ANALYSIS ID]', analysisId);
+      const target = resolveRedirectTarget(analysisId, renderMode, result.render_mode);
+      router.push(target);
     }, 600);
   };
 
@@ -211,10 +235,12 @@ export default function UploadPage() {
       store.clearActiveJob();
       console.log('[FRONTEND JOB FINISHED]', { jobId });
       if ((result.clips?.length ?? 0) > 0) {
-        await hydrateFromBackend();
+        console.log('[UPLOAD SUCCESS RENDER MODE]', { source: 'youtube_ingest', render_mode: renderMode, analysis_id: result.analysis_id });
+        await hydrateFromBackend(result.analysis_id);
         setTimeout(() => {
           console.log('[FRONTEND ANALYSIS ID]', result.analysis_id);
-          router.push(renderMode === 'dual_region' ? `/region-setup/${result.analysis_id}` : `/editor?analysis_id=${result.analysis_id}`);
+          const target = resolveRedirectTarget(result.analysis_id, renderMode);
+          router.push(target);
         }, 600);
       }
     } catch (error) {
@@ -341,6 +367,7 @@ export default function UploadPage() {
     store.setUploadProgress(5);
 
     try {
+      console.log('[UPLOAD SELECTED RENDER MODE]', { source: 'youtube_ingest', renderMode });
       const job = await ingestYouTubeJob({
         youtube_url: youtubeUrl.trim(),
         analysis_name: analysisName.trim() || undefined,

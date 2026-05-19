@@ -28,6 +28,7 @@ def process_video(
 
     os.makedirs(output_dir, exist_ok=True)
     print(f"[CLIP OUTPUT PATH] {output_dir}")
+    print(f"[PROCESS VIDEO RESOLVED MODE] render_mode={render_mode}")
     print(f"[PROCESS VIDEO JOB MODE] resolved_render_mode={render_mode}")
     print(f"[PROCESS VIDEO JOB CONFIG] resolved_dual_region_config={dual_region_config}")
 
