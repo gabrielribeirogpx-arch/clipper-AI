@@ -84,15 +84,26 @@ async def process_youtube_ingest_job(job_id: str, body: dict, output_dir: str) -
         )
 
         response_payload = _build_upload_response(transcription, str(uuid.uuid4()), filepath, render_mode=render_mode, video_quality=body.get("video_quality", "1080p"))
-        update_job(
-            job_id,
-            status="completed",
-            progress=100,
-            step="Completed",
-            clips=response_payload.get("clips", []),
-            result=response_payload,
-        )
-        print(f"[JOB COMPLETED] job_id={job_id}")
+        if response_payload.get("status") == "waiting_dual_region":
+            update_job(
+                job_id,
+                status="waiting_dual_region",
+                progress=100,
+                step="Waiting dual-region setup",
+                clips=response_payload.get("clips", []),
+                result=response_payload,
+            )
+            print(f"[JOB WAITING DUAL REGION] job_id={job_id}")
+        else:
+            update_job(
+                job_id,
+                status="completed",
+                progress=100,
+                step="Completed",
+                clips=response_payload.get("clips", []),
+                result=response_payload,
+            )
+            print(f"[JOB COMPLETED] job_id={job_id}")
     except YouTubeDownloadError as error:
         update_job(job_id, status="failed", progress=100, step="Failed", error={"category": error.category, "message": error.message})
         print(f"[JOB FAILED] job_id={job_id} category={error.category} message={error.message}")
