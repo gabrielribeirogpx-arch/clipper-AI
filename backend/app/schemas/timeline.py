@@ -36,3 +36,4 @@ class TimelineUpdateRequest(BaseModel):
     cuts: List[TimelineBlock]
     render_mode: Optional[str] = None
     dual_regions: Optional[DualRegions] = None
+    manual_region: Optional[RegionBox] = None

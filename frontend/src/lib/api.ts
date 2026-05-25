@@ -10,7 +10,7 @@ export type UploadResponse = {
   clips?: Array<Record<string, unknown>>;
 };
 
-export type RenderMode = "ai_tracking" | "dual_region";
+export type RenderMode = "ai_tracking" | "dual_region" | "manual_region" | "raw_only";
 
 export type YouTubeIngestRequest = {
   youtube_url: string;
@@ -147,5 +147,15 @@ export async function renderDualRegionFinal(payload: { analysis_id: string; rend
     body: JSON.stringify(payload),
   });
   if (!response.ok) throw new Error('Dual region render failed');
+  return response.json();
+}
+
+export async function renderManualRegionFinal(payload: { analysis_id: string; render_mode: "manual_region"; manual_region: unknown }) {
+  const response = await fetch(`${API_BASE}/timeline/render-manual-region`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error('Manual region render failed');
   return response.json();
 }

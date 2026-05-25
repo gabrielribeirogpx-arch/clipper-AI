@@ -5,7 +5,7 @@ import subprocess
 from app.services.whisper_service import transcribe_video
 from app.services.hook_detector import detect_hooks
 from app.services.ffmpeg_service import cut_clip, apply_broll_overlay
-from app.services.vertical_render_service import render_vertical_clip, render_dual_region_clip
+from app.services.vertical_render_service import render_vertical_clip, render_dual_region_clip, render_manual_region_vertical
 from app.services.broll_engine import BRollEngine
 from app.services.social_metadata_service import generate_social_metadata
 from app.services.ai_local_service import generate_clip_metadata
@@ -19,6 +19,7 @@ def process_video(
     output_dir: str = "app/clips",
     render_mode: str = "ai_tracking",
     dual_region_config: dict | None = None,
+    manual_region: dict | None = None,
     min_clip_length: int = 30,
     max_clip_length: int = 90,
     max_clips: int = 25,
@@ -32,6 +33,7 @@ def process_video(
     print(f"[PROCESS VIDEO RESOLVED MODE] render_mode={render_mode}")
     print(f"[PROCESS VIDEO JOB MODE] resolved_render_mode={render_mode}")
     print(f"[PROCESS VIDEO JOB CONFIG] resolved_dual_region_config={dual_region_config}")
+    print(f"[PROCESS VIDEO JOB CONFIG] resolved_manual_region={manual_region}")
 
 
     log = step_logger or (lambda _msg: None)
@@ -184,6 +186,13 @@ def process_video(
             processed_clip_path = os.path.join(output_dir, f"clip_{index}_dual.mp4")
             render_dual_region_clip(raw_clip_path, processed_clip_path, dual_region_config)
             print("[DUAL REGION RENDER COMPLETE]")
+        elif render_mode == "manual_region":
+            if not manual_region:
+                print("[MANUAL REGION CONFIG MISSING]")
+                print("[MANUAL REGION RENDER BLOCKED]")
+                raise RuntimeError("manual_region render requires manual_region config")
+            processed_clip_path = os.path.join(output_dir, f"clip_{index}_manual.mp4")
+            render_manual_region_vertical(raw_clip_path, processed_clip_path, manual_region)
         elif render_mode == "raw_only":
             print("[RENDER MODE OVERRIDE] raw_only_no_vertical_render")
         elif render_mode == "dual_region" and not dual_region_config:

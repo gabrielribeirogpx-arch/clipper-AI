@@ -8,7 +8,7 @@ from app.data.timeline_state import (
     save_timeline_state_for_analysis,
 )
 from app.schemas.timeline import TimelineUpdateRequest
-from app.services.vertical_render_service import render_dual_region_clip
+from app.services.vertical_render_service import render_dual_region_clip, render_manual_region_vertical
 
 router = APIRouter(prefix="/timeline", tags=["timeline"])
 
@@ -16,6 +16,11 @@ class DualRegionRenderRequest(BaseModel):
     analysis_id: str
     render_mode: str
     dual_region_config: dict
+
+class ManualRegionRenderRequest(BaseModel):
+    analysis_id: str
+    render_mode: str
+    manual_region: dict
 
 
 def _to_filesystem_path(media_url: str) -> Path:
@@ -70,6 +75,8 @@ def update_timeline(payload: TimelineUpdateRequest):
     if payload.dual_regions:
         current_state["dual_regions"] = payload.dual_regions.model_dump()
         current_state["dual_region_config"] = payload.dual_regions.model_dump()
+    if payload.manual_region:
+        current_state["manual_region"] = payload.manual_region.model_dump()
     set_timeline_state(current_state)
     save_timeline_state_for_analysis(current_state.get("analysisId"), current_state)
     print(f"[TIMELINE AFTER COMMIT] {current_state.get('render_mode')}")
@@ -141,6 +148,32 @@ def render_dual_region_final(payload: DualRegionRenderRequest):
     save_timeline_state_for_analysis(state.get("analysisId"), state)
     print('[DUAL REGION FINAL RENDER COMPLETE]')
     print('[EDITOR CLIPS REPLACED]')
+    return {'status': 'rendered', 'clips': updated_clips, 'analysis_id': payload.analysis_id}
+
+@router.post('/render-manual-region')
+def render_manual_region_final(payload: ManualRegionRenderRequest):
+    if payload.render_mode != 'manual_region':
+        raise HTTPException(status_code=400, detail='render_mode must be manual_region')
+    if not payload.manual_region:
+        print('[MANUAL REGION CONFIG MISSING]')
+        print('[MANUAL REGION RENDER BLOCKED]')
+        raise HTTPException(status_code=400, detail='manual_region is required for manual_region render')
+    state = get_timeline_state()
+    clips = state.get('clips', [])
+    updated_clips = []
+    for index, clip in enumerate(clips):
+        raw_clip_path = _to_filesystem_path(clip.get('raw_clip_path') or clip.get('clip_path'))
+        manual_clip_path = raw_clip_path.with_name(f"clip_{index}_manual.mp4")
+        render_manual_region_vertical(str(raw_clip_path), str(manual_clip_path), payload.manual_region)
+        updated = {**clip}
+        updated['clip_path'] = _to_media_url(manual_clip_path)
+        updated['final_video'] = _to_media_url(manual_clip_path)
+        updated_clips.append(updated)
+    state['clips'] = updated_clips
+    state['render_mode'] = 'manual_region'
+    state['manual_region'] = payload.manual_region
+    set_timeline_state(state)
+    save_timeline_state_for_analysis(state.get("analysisId"), state)
     return {'status': 'rendered', 'clips': updated_clips, 'analysis_id': payload.analysis_id}
 
 
