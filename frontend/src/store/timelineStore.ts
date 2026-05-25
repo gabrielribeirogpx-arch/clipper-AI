@@ -51,7 +51,7 @@ export type GeneratedClip = {
 };
 
 type RenderMode = 'preview' | 'export';
-export type ClipRenderMode = 'ai_tracking' | 'dual_region';
+export type ClipRenderMode = 'ai_tracking' | 'dual_region' | 'manual_region' | 'raw_only';
 export type RegionBox = { x: number; y: number; width: number; height: number };
 export type DualRegions = { regionA: RegionBox; regionB: RegionBox };
 
@@ -72,6 +72,7 @@ type TimelineState = {
   selectedClipId: string | null;
   clipRenderMode: ClipRenderMode;
   dualRegions: DualRegions;
+  manualRegion: RegionBox;
   resetForNewAnalysis: () => void;
   hydrateFromBackend: (analysisIdHint?: string | null) => Promise<void>;
   selectClip: (clipId: string) => void;
@@ -83,6 +84,7 @@ type TimelineState = {
   moveBlock: (track: TrackType, id: string, start: number, end: number) => void;
   setClipRenderMode: (mode: ClipRenderMode) => void;
   setDualRegions: (regions: DualRegions, options?: { persist?: boolean }) => void;
+  setManualRegion: (region: RegionBox, options?: { persist?: boolean }) => void;
 };
 
 const clampTime = (value: number, duration: number) => Math.min(Math.max(value, 0), duration);
@@ -121,6 +123,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     regionA: { x: 120, y: 80, width: 1680, height: 460 },
     regionB: { x: 120, y: 540, width: 1680, height: 460 },
   },
+  manualRegion: { x: 420, y: 60, width: 1080, height: 960 },
   resetForNewAnalysis: () =>
     set((state) => {
       console.log('[TIMELINE STATE RESET]', { previousAnalysisId: state.analysisId });
@@ -182,6 +185,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
         cuts: nextTracks.cuts,
         render_mode: state.clipRenderMode,
         dual_regions: state.dualRegions,
+        manual_region: state.manualRegion,
       };
       console.log('[RENDER MODE SAVE]', { source: 'moveBlock', render_mode: payload.render_mode });
       console.log('[DUAL REGION CONFIG SAVE]', { source: 'moveBlock', dual_regions: payload.dual_regions });
@@ -197,7 +201,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     set((state) => {
       console.log('[RENDER MODE SAVE]', { source: 'setClipRenderMode', render_mode: clipRenderMode });
       console.log('[DUAL REGION CONFIG SAVE]', { source: 'setClipRenderMode', dual_regions: state.dualRegions });
-      void fetch('http://localhost:8000/timeline/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: clipRenderMode, dual_regions: state.dualRegions }) });
+      void fetch('http://localhost:8000/timeline/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: clipRenderMode, dual_regions: state.dualRegions, manual_region: state.manualRegion }) });
       return { clipRenderMode };
     }),
   setDualRegions: (dualRegions, options) =>
@@ -206,9 +210,18 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       if (shouldPersist) {
         console.log('[RENDER MODE SAVE]', { source: 'setDualRegions', render_mode: state.clipRenderMode });
         console.log('[DUAL REGION CONFIG SAVE]', { source: 'setDualRegions', dual_regions: dualRegions });
-        void fetch('http://localhost:8000/timeline/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: state.clipRenderMode, dual_regions: dualRegions }) });
+        void fetch('http://localhost:8000/timeline/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: state.clipRenderMode, dual_regions: dualRegions, manual_region: state.manualRegion }) });
       }
       return { dualRegions };
+    }),
+  setManualRegion: (manualRegion, options) =>
+    set((state) => {
+      const shouldPersist = options?.persist ?? true;
+      if (shouldPersist) {
+        console.log('[MANUAL REGION CONFIG SAVE]', { source: 'setManualRegion', manual_region: manualRegion });
+        void fetch('http://localhost:8000/timeline/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: state.clipRenderMode, dual_regions: state.dualRegions, manual_region: manualRegion }) });
+      }
+      return { manualRegion };
     }),
   hydrateFromBackend: async (analysisIdHint) => {
     console.log('[EDITOR HYDRATION START]', { analysisIdHint: analysisIdHint ?? null });
@@ -225,8 +238,8 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     const selectedClip = generatedClips[0] ?? null;
     const selectedClipId = selectedClip?.id ?? null;
     const backendAnalysisId: string | null = data.analysisId ?? null;
-    const clipRenderMode: ClipRenderMode = data.render_mode === 'dual_region' ? 'dual_region' : 'ai_tracking';
-    if (data.render_mode !== 'dual_region' && data.render_mode !== 'ai_tracking') {
+    const clipRenderMode: ClipRenderMode = data.render_mode === 'dual_region' || data.render_mode === 'manual_region' || data.render_mode === 'raw_only' ? data.render_mode : 'ai_tracking';
+    if (!['dual_region', 'ai_tracking', 'manual_region', 'raw_only'].includes(data.render_mode)) {
       console.warn('[RENDER MODE FALLBACK]', { incoming: data.render_mode, fallback: clipRenderMode });
     }
     console.log('[RENDER MODE HYDRATE]', {
@@ -241,6 +254,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
         regionB: data.dual_regions.regionB,
       });
     }
+    if (data.manual_region) console.log('[MANUAL REGION CONFIG HYDRATED]', { analysis_id: backendAnalysisId, manual_region: data.manual_region });
     const currentAnalysisId = get().analysisId;
     const hasPersistedRenderMode = typeof data.render_mode === 'string' && data.render_mode.length > 0;
     const hasAvailableClips = generatedClips.length > 0;
@@ -273,6 +287,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       selectedClipId,
       clipRenderMode,
       dualRegions: data.dual_regions ?? get().dualRegions,
+      manualRegion: data.manual_region ?? get().manualRegion,
       tracks: {
         broll: mapTrack(data.broll, 'broll'),
         hooks: mapTrack(data.hooks, 'hooks'),
@@ -305,5 +320,6 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     selectedClipId: state.selectedClipId,
     clipRenderMode: state.clipRenderMode,
     dualRegions: state.dualRegions,
+    manualRegion: state.manualRegion,
   }),
 }));

@@ -15,7 +15,7 @@ type UploadedVideo = {
   previewUrl?: string;
 };
 
-type RenderMode = 'ai_tracking' | 'dual_region';
+type RenderMode = 'ai_tracking' | 'dual_region' | 'manual_region' | 'raw_only';
 type VideoQuality = '720p' | '1080p' | '4k';
 
 type UploadState = {

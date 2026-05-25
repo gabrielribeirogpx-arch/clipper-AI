@@ -203,3 +203,29 @@ def render_dual_region_clip(video_path: str, output_path: str, dual_regions: Dic
     print("[DUAL REGION COMPOSITION COMPLETE]")
     print("[DUAL REGION RENDER COMPLETE]")
     return output_path
+
+
+def render_manual_region_vertical(video_path: str, output_path: str, manual_region: Dict) -> str:
+    print("[MANUAL REGION PIPELINE ACTIVE]")
+    print(f"[MANUAL REGION CONFIG RECEIVED] manual_region={manual_region}")
+    w = int(manual_region.get("width", 0))
+    h = int(manual_region.get("height", 0))
+    x = int(manual_region.get("x", 0))
+    y = int(manual_region.get("y", 0))
+    if w <= 0 or h <= 0:
+        print("[MANUAL REGION CONFIG MISSING]")
+        print("[MANUAL REGION RENDER BLOCKED]")
+        raise RuntimeError("manual_region is required with positive width/height")
+    print(f"[MANUAL REGION CROP] x={x} y={y} width={w} height={h}")
+    print("[MANUAL REGION SCALE] target=1080x1920 force_original_aspect_ratio=increase crop_center")
+    vf = f"crop={w}:{h}:{x}:{y},scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p"
+    cmd = ["ffmpeg","-y","-i",video_path,"-vf",vf,"-map","0:v","-map","0:a?","-c:v",EXPORT_VIDEO_CODEC,"-crf",str(EXPORT_CRF),"-preset",EXPORT_PRESET,"-pix_fmt",EXPORT_PIXEL_FORMAT,"-c:a",EXPORT_AUDIO_CODEC,"-b:a",EXPORT_AUDIO_BITRATE,"-movflags",EXPORT_MOVFLAGS,output_path]
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError(f"Manual region render failed: {proc.stderr}")
+    final_w, final_h = _probe_dimensions(output_path)
+    print(f"[MANUAL REGION OUTPUT RESOLUTION] {final_w}x{final_h}")
+    if (final_w, final_h) != TARGET_RENDER_SIZE:
+        raise RuntimeError(f"Manual-region rendered video has invalid size {final_w}x{final_h}; expected 1080x1920")
+    print("[MANUAL REGION COMPOSITION COMPLETE]")
+    return output_path
