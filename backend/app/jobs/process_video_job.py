@@ -114,8 +114,12 @@ def process_video(
             "end": hook["start"] + 0.1,
         })
 
-    if render_mode == "dual_region" and not dual_region_config:
+    should_wait_for_dual_region_setup = render_mode == "dual_region" and not dual_region_config
+    if should_wait_for_dual_region_setup:
         analysis_id = os.path.basename(output_dir.rstrip("/"))
+        print("[DUAL REGION EARLY RETURN]")
+        print("[DUAL REGION WAIT STATE SAVED]")
+        print("[DUAL REGION RENDER PIPELINE SKIPPED]")
         print("[DUAL REGION WAITING FOR SETUP]")
         print(f"[DUAL REGION ANALYSIS READY] analysis_id={analysis_id}")
         next_state = {
@@ -151,6 +155,9 @@ def process_video(
             "timeline": {"broll": [], "cuts": timeline_cuts},
         }
 
+    if should_wait_for_dual_region_setup:
+        raise RuntimeError("dual-region render pipeline reached while waiting for setup")
+
     log("[STEP 9 - RENDER START]")
     r_start = time.perf_counter()
 
@@ -179,6 +186,8 @@ def process_video(
             print("[DUAL REGION RENDER COMPLETE]")
         elif render_mode == "raw_only":
             print("[RENDER MODE OVERRIDE] raw_only_no_vertical_render")
+        elif render_mode == "dual_region" and not dual_region_config:
+            raise RuntimeError("dual-region render called without dual_region_config")
 
         segment_timeline = broll_engine.build_timeline([
             segment for segment in transcription["segments"]
