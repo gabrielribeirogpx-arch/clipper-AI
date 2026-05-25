@@ -8,8 +8,7 @@ from fastapi.responses import StreamingResponse
 from app.api.upload import router as upload_router
 from app.api.timeline import router as timeline_router
 from app.api.export import router as export_router
-from app.db import Base, engine
-from app.models.timeline_state_model import TimelineRenderState
+from app.db import Base, DB_PATH, engine
 
 app = FastAPI()
 
@@ -48,7 +47,7 @@ app.include_router(export_router)
 @app.on_event("startup")
 def log_timeline_routes() -> None:
     Base.metadata.create_all(bind=engine)
-    TimelineRenderState.__table__.create(bind=engine, checkfirst=True)
+    print(f"[TIMELINE DB PATH] {DB_PATH}")
     timeline_routes = [
         f"{','.join(sorted(list(route.methods or [])))} {route.path}"
         for route in app.routes
