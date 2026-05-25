@@ -37,15 +37,16 @@ def _to_media_url(path: Path) -> str:
 @router.get("/render-state")
 def get_render_state(analysis_id: str | None = Query(default=None)):
     if analysis_id:
-        print(f"[EDITOR HYDRATION REQUEST] analysis_id={analysis_id}")
-        analysis_state = get_timeline_state_for_analysis(analysis_id)
+        normalized_analysis_id = str(analysis_id)
+        print(f"[EDITOR HYDRATION REQUEST] analysis_id={normalized_analysis_id}")
+        analysis_state = get_timeline_state_for_analysis(normalized_analysis_id)
         if analysis_state:
             set_timeline_state(analysis_state)
             state = analysis_state
-            print(f"[EDITOR HYDRATION HIT] analysis_id={analysis_id}")
+            print(f"[EDITOR HYDRATION HIT] analysis_id={normalized_analysis_id}")
         else:
-            state = get_timeline_state()
-            print(f"[EDITOR HYDRATION MISS] analysis_id={analysis_id} fallback_analysis_id={state.get('analysisId')}")
+            print(f"[EDITOR HYDRATION MISS] analysis_id={normalized_analysis_id}")
+            raise HTTPException(status_code=404, detail=f"timeline state not found for analysis_id={normalized_analysis_id}")
     else:
         state = get_timeline_state()
     print(f"[RENDER MODE LOAD] render_mode={state.get('render_mode')}")
@@ -79,10 +80,11 @@ def update_timeline(payload: TimelineUpdateRequest):
     if payload.manual_region:
         current_state["manual_region"] = payload.manual_region.model_dump()
     set_timeline_state(current_state)
-    save_timeline_state_for_analysis(current_state.get("analysisId"), current_state)
-    persisted_state = get_timeline_state_for_analysis(current_state.get("analysisId")) or {}
+    normalized_analysis_id = str(current_state.get("analysisId")) if current_state.get("analysisId") is not None else None
+    save_timeline_state_for_analysis(normalized_analysis_id, current_state)
+    persisted_state = get_timeline_state_for_analysis(normalized_analysis_id) or {}
     print("[PERSISTENCE VERIFY]", {
-        "analysis_id": current_state.get("analysisId"),
+        "analysis_id": normalized_analysis_id,
         "render_mode": persisted_state.get("render_mode"),
         "dual_region_config": persisted_state.get("dual_region_config"),
         "manual_region_config": persisted_state.get("manual_region"),
