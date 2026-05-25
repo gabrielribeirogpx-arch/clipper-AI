@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
-DB_PATH = Path(__file__).resolve().parent / "timeline_state.db"
+DB_PATH = (Path(__file__).resolve().parent / "timeline_state.db").resolve()
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 engine = create_engine(DATABASE_URL, future=True)
