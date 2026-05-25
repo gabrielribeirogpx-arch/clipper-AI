@@ -50,6 +50,7 @@ def get_render_state(analysis_id: str | None = Query(default=None)):
         state = get_timeline_state()
     print(f"[RENDER MODE LOAD] render_mode={state.get('render_mode')}")
     print(f"[DUAL REGION CONFIG LOAD] dual_region_config={state.get('dual_region_config')}")
+    state["manual_region_config"] = state.get("manual_region")
     return state
 
 
@@ -79,6 +80,13 @@ def update_timeline(payload: TimelineUpdateRequest):
         current_state["manual_region"] = payload.manual_region.model_dump()
     set_timeline_state(current_state)
     save_timeline_state_for_analysis(current_state.get("analysisId"), current_state)
+    persisted_state = get_timeline_state_for_analysis(current_state.get("analysisId")) or {}
+    print("[PERSISTENCE VERIFY]", {
+        "analysis_id": current_state.get("analysisId"),
+        "render_mode": persisted_state.get("render_mode"),
+        "dual_region_config": persisted_state.get("dual_region_config"),
+        "manual_region_config": persisted_state.get("manual_region"),
+    })
     print(f"[TIMELINE AFTER COMMIT] {current_state.get('render_mode')}")
     print(f"[RENDER MODE SAVE] persisted_render_mode={current_state.get('render_mode')}")
     print(f"[DUAL REGION CONFIG SAVE] persisted_dual_region_config={current_state.get('dual_region_config')}")
