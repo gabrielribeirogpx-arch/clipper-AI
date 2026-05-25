@@ -124,6 +124,7 @@ export default function UploadPage() {
   const activeStreamJobIdRef = useRef<string | null>(null);
   const ingestProgressListenerRef = useRef<((event: MessageEvent) => void) | null>(null);
   const reconnectTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const dualRegionRedirectedRef = useRef(false);
   const router = useRouter();
   const store = useUploadStore();
   const resetForNewAnalysis = useTimelineStore((state) => state.resetForNewAnalysis);
@@ -148,10 +149,13 @@ export default function UploadPage() {
     return target;
   };
   const redirectToPostAnalyzeTarget = (analysisId: string, frontendRequestedMode: 'ai_tracking' | 'dual_region', backendReturnedMode?: 'ai_tracking' | 'dual_region') => {
+    if (dualRegionRedirectedRef.current) return;
     const uploadStatus = useUploadStore.getState().status;
     if (uploadStatus === 'waiting_dual_region') {
-      console.log('[DUAL REGION SETUP REQUIRED]', { analysisId, status: uploadStatus });
-      console.log('[WAITING DUAL REGION REDIRECT]', { analysisId, target: `/region-setup/${analysisId}` });
+      useUploadStore.getState().updateIngestState({ analysisId, status: 'waiting_dual_region' });
+      console.log('[DUAL REGION STATUS RECEIVED]', { analysis_id: analysisId, status: uploadStatus });
+      console.log('[DUAL REGION REDIRECT]', analysisId);
+      dualRegionRedirectedRef.current = true;
       router.push(`/region-setup/${analysisId}`);
       return;
     }
@@ -161,6 +165,7 @@ export default function UploadPage() {
       console.log('[DUAL REGION REDIRECT]', { frontendRequestedMode, backendReturnedMode: backendReturnedMode ?? null });
       console.log('[REDIRECT ANALYSIS ID]', analysisId);
       console.log('[REDIRECT TARGET FINAL]', forcedTarget);
+      dualRegionRedirectedRef.current = true;
       router.push(forcedTarget);
       return;
     }
@@ -178,6 +183,7 @@ export default function UploadPage() {
   const validateFile = (file: File) => (['video/mp4', 'video/quicktime'].includes(file.type) ? (file.size > MAX_SIZE ? 'Arquivo maior que 1GB.' : null) : 'Somente MP4 ou MOV.');
 
   const processFile = async (file: File) => {
+    dualRegionRedirectedRef.current = false;
     fileRef.current = file;
     const validation = validateFile(file);
     if (validation) return setError(validation);
@@ -196,6 +202,7 @@ export default function UploadPage() {
     store.updateIngestState({ status: result.status ?? 'completed' });
     const analysisId = result.analysis_id;
     if (!analysisId) throw new Error('Missing analysis_id in upload response');
+    store.updateIngestState({ analysisId, status: result.status ?? 'completed' });
     console.log('[UPLOAD SUCCESS RENDER MODE]', { source: 'file_upload', render_mode: result.render_mode, analysis_id: analysisId });
     await hydrateFromBackend(analysisId);
     store.setUploadStatus('success');
@@ -204,7 +211,11 @@ export default function UploadPage() {
         console.log('[FRONTEND ANALYSIS ID]', analysisId);
         redirectToPostAnalyzeTarget(analysisId, renderMode, result.render_mode);
       }, 600);
-      if (result.status === 'waiting_dual_region') setTimeout(() => redirectToPostAnalyzeTarget(analysisId, renderMode, result.render_mode), 300);
+      if (result.status === 'waiting_dual_region') {
+        store.updateIngestState({ status: 'waiting_dual_region', analysisId });
+        console.log('[DUAL REGION STATUS RECEIVED]', { analysis_id: analysisId, status: result.status });
+        setTimeout(() => redirectToPostAnalyzeTarget(analysisId, renderMode, result.render_mode), 300);
+      }
   };
 
   const clearIngestResources = (jobId?: string) => {
@@ -265,7 +276,8 @@ export default function UploadPage() {
         }, 600);
       }
       if (result.status === 'waiting_dual_region') {
-        store.updateIngestState({ status: 'waiting_dual_region' });
+        store.updateIngestState({ status: 'waiting_dual_region', analysisId: result.analysis_id });
+        console.log('[DUAL REGION STATUS RECEIVED]', { analysis_id: result.analysis_id, status: result.status });
         setTimeout(() => redirectToPostAnalyzeTarget(result.analysis_id, renderMode, result.render_mode), 300);
       }
     } catch (error) {
@@ -322,10 +334,27 @@ export default function UploadPage() {
       activeStreamJobIdRef.current = jobId;
 
       const onProgress = (event: MessageEvent) => {
-        const payload = JSON.parse(event.data) as { status: string; progress: number; step: string; clips?: Array<Record<string, unknown>>; error?: { message?: string } };
+        const payload = JSON.parse(event.data) as { status: string; progress: number; step: string; clips?: Array<Record<string, unknown>>; analysis_id?: string; error?: { message?: string } };
         store.setUploadProgress(payload.progress ?? 0);
         store.setProcessingStage(payload.step || 'Processing...');
-        store.updateIngestState({ progress: payload.progress ?? 0, step: payload.step || 'Processing...', status: payload.status, clips: payload.clips });
+        store.updateIngestState({
+          progress: payload.progress ?? 0,
+          step: payload.step || 'Processing...',
+          status: payload.status,
+          clips: payload.clips,
+          analysisId: payload.analysis_id ?? useUploadStore.getState().analysisId,
+        });
+
+        if (payload.status === 'waiting_dual_region') {
+          const analysisId = payload.analysis_id ?? useUploadStore.getState().analysisId;
+          console.log('[DUAL REGION STATUS RECEIVED]', payload);
+          if (analysisId && !dualRegionRedirectedRef.current) {
+            console.log('[DUAL REGION REDIRECT]', analysisId);
+            dualRegionRedirectedRef.current = true;
+            router.push(`/region-setup/${analysisId}`);
+            return;
+          }
+        }
 
         if (payload.status === 'completed') {
           stream.removeEventListener('progress', onProgress);
@@ -386,6 +415,7 @@ export default function UploadPage() {
     setError(null);
     if (store.activeJobId) return setError('Já existe um job em execução. Aguarde finalizar.');
     resetForNewAnalysis();
+    dualRegionRedirectedRef.current = false;
     setIsStartingYoutubeIngest(true);
     store.setUploadStatus('processing');
     store.setProcessingStage('Starting YouTube ingest...');
@@ -441,7 +471,16 @@ export default function UploadPage() {
         const state = await getIngestJobState(jobId);
         console.log('[FRONTEND JOB RESYNC]', state);
         store.setUploadStatus('processing');
-        store.updateIngestState({ progress: state.progress, step: state.step, status: state.status, clips: state.clips });
+        store.updateIngestState({ progress: state.progress, step: state.step, status: state.status, clips: state.clips, analysisId: state.analysis_id });
+        if (state.status === 'waiting_dual_region') {
+          console.log('[DUAL REGION STATUS RECEIVED]', state);
+          if (state.analysis_id && !dualRegionRedirectedRef.current) {
+            console.log('[DUAL REGION REDIRECT]', state.analysis_id);
+            dualRegionRedirectedRef.current = true;
+            router.push(`/region-setup/${state.analysis_id}`);
+            return;
+          }
+        }
         if (state.status === 'completed') return finalizeJob(state.job_id);
         if (state.status !== 'failed') await subscribeToJob(state.job_id);
       } catch (error) {

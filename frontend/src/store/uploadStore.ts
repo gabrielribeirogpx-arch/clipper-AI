@@ -40,7 +40,7 @@ type UploadState = {
   setUploadedVideo: (video: UploadedVideo | null) => void;
   setUploadResult: (projectId: string, timelineData: Record<string, unknown>) => void;
   setActiveJob: (jobId: string, analysisId: string) => void;
-  updateIngestState: (payload: { progress?: number; step?: string; status?: string; clips?: Array<Record<string, unknown>> }) => void;
+  updateIngestState: (payload: { progress?: number; step?: string; status?: string; clips?: Array<Record<string, unknown>>; analysisId?: string | null }) => void;
   clearActiveJob: () => void;
   resetIngestState: () => void;
   resetStaleIngestVisualState: () => void;
@@ -71,12 +71,13 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
     console.log('[FRONTEND ACTIVE JOB]', { activeJobId, analysisId });
     set({ activeJobId, analysisId, status: 'processing' });
   },
-  updateIngestState: ({ progress, step, status, clips }) => set((state) => ({
+  updateIngestState: ({ progress, step, status, clips, analysisId }) => set((state) => ({
     uploadProgress: progress ?? state.uploadProgress,
     processingStage: step ?? state.processingStage,
     currentStep: step ?? state.currentStep,
     status: status ?? state.status,
     clips: clips ?? state.clips,
+    analysisId: analysisId ?? state.analysisId,
   })),
   setRenderMode: (renderMode) => {
     console.log('[RENDER MODE SAVED]', { renderMode });
