@@ -28,6 +28,9 @@ class RenderStateResponse(BaseModel):
     hooks: List[TimelineBlock]
     broll: List[TimelineBlock]
     cuts: List[TimelineBlock]
+    render_mode: Optional[str] = None
+    dual_region_config: Optional[DualRegions] = None
+    manual_region_config: Optional[RegionBox] = None
 
 
 class TimelineUpdateRequest(BaseModel):
