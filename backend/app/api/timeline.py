@@ -51,7 +51,8 @@ def get_render_state(analysis_id: str | None = Query(default=None)):
         state = get_timeline_state()
     print(f"[RENDER MODE LOAD] render_mode={state.get('render_mode')}")
     print(f"[DUAL REGION CONFIG LOAD] dual_region_config={state.get('dual_region_config')}")
-    state["manual_region_config"] = state.get("manual_region")
+    state["manual_region_config"] = state.get("manual_region_config", state.get("manual_region"))
+    print(f"[TIMELINE LOAD MANUAL REGION] manual_region_config={state.get('manual_region_config')}")
     return state
 
 
@@ -64,6 +65,7 @@ def get_broll():
 def update_timeline(payload: TimelineUpdateRequest):
     print(f"[RENDER MODE SAVE] incoming_render_mode={payload.render_mode}")
     print(f"[DUAL REGION CONFIG SAVE] incoming_dual_regions={payload.dual_regions.model_dump() if payload.dual_regions else None}")
+    resolved_manual_region = payload.manual_region_config or payload.manual_region
     current_state = get_timeline_state()
     print(f"[TIMELINE BEFORE SAVE] {current_state.get('render_mode')}")
     print(f"[TIMELINE ASSIGNED] {payload.render_mode}")
@@ -77,8 +79,11 @@ def update_timeline(payload: TimelineUpdateRequest):
     if payload.dual_regions:
         current_state["dual_regions"] = payload.dual_regions.model_dump()
         current_state["dual_region_config"] = payload.dual_regions.model_dump()
-    if payload.manual_region:
-        current_state["manual_region"] = payload.manual_region.model_dump()
+    if resolved_manual_region is not None:
+        manual_region_dump = resolved_manual_region.model_dump()
+        current_state["manual_region"] = manual_region_dump
+        current_state["manual_region_config"] = manual_region_dump
+        print(f"[TIMELINE SAVE MANUAL REGION] manual_region_config={manual_region_dump}")
     set_timeline_state(current_state)
     normalized_analysis_id = str(current_state.get("analysisId")) if current_state.get("analysisId") is not None else None
     save_timeline_state_for_analysis(normalized_analysis_id, current_state)
@@ -87,7 +92,7 @@ def update_timeline(payload: TimelineUpdateRequest):
         "analysis_id": normalized_analysis_id,
         "render_mode": persisted_state.get("render_mode"),
         "dual_region_config": persisted_state.get("dual_region_config"),
-        "manual_region_config": persisted_state.get("manual_region"),
+        "manual_region_config": persisted_state.get("manual_region_config", persisted_state.get("manual_region")),
     })
     print(f"[TIMELINE AFTER COMMIT] {current_state.get('render_mode')}")
     print(f"[RENDER MODE SAVE] persisted_render_mode={current_state.get('render_mode')}")
@@ -169,6 +174,7 @@ def render_manual_region_final(payload: ManualRegionRenderRequest):
         print('[MANUAL REGION RENDER BLOCKED]')
         raise HTTPException(status_code=400, detail='manual_region is required for manual_region render')
     state = get_timeline_state()
+    print(f"[RENDER PIPELINE MANUAL REGION] payload_manual_region={payload.manual_region}")
     clips = state.get('clips', [])
     updated_clips = []
     for index, clip in enumerate(clips):
@@ -182,6 +188,7 @@ def render_manual_region_final(payload: ManualRegionRenderRequest):
     state['clips'] = updated_clips
     state['render_mode'] = 'manual_region'
     state['manual_region'] = payload.manual_region
+    state['manual_region_config'] = payload.manual_region
     set_timeline_state(state)
     save_timeline_state_for_analysis(state.get("analysisId"), state)
     return {'status': 'rendered', 'clips': updated_clips, 'analysis_id': payload.analysis_id}

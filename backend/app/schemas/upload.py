@@ -13,3 +13,7 @@ class YoutubeIngestRequest(BaseModel):
     min_score: float = Field(default=0.45, ge=0.0, le=1.0)
     overlap_tolerance: float = Field(default=0.6, ge=0.0, le=1.0)
     video_quality: str = Field(default="1080p")
+    render_mode: str | None = "ai_tracking"
+    dual_region_config: dict | None = None
+    manual_region_config: dict | None = None
+    manual_region: dict | None = None

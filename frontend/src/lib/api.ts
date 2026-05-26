@@ -21,6 +21,7 @@ export type YouTubeIngestRequest = {
   min_clip_length?: number;
   max_clip_length?: number;
   render_mode?: RenderMode;
+  manual_region_config?: Record<string, unknown>;
   video_quality?: '720p' | '1080p' | '4k';
 };
 
@@ -119,6 +120,7 @@ export type IngestStatus = { status: string; progress: number; step: string; ana
 export type IngestJobState = IngestStatus & { job_id: string; finished: boolean };
 
 export async function ingestYouTubeJob(payload: YouTubeIngestRequest): Promise<IngestJobResponse> {
+  console.log('[FRONTEND MANUAL REGION SENT]', { manual_region_config: payload.manual_region_config, render_mode: payload.render_mode });
   const response = await fetch(`${API_BASE}/ingest/youtube`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   if (!response.ok) throw new Error("YouTube ingestion failed");
   return response.json() as Promise<IngestJobResponse>;
