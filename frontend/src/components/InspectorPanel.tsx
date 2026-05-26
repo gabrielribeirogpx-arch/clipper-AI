@@ -19,7 +19,7 @@ export function InspectorPanel() {
 
   return (
     <div className="panel-premium p-5">
-      <h3 className="mb-5 text-sm font-semibold uppercase tracking-[0.24em] text-slate-200">Inspector</h3>
+      <h3 className="mb-5 text-sm font-semibold uppercase tracking-[0.24em] text-slate-200">AI Suggestions</h3>
       <div className="space-y-4 rounded-2xl border border-white/10 bg-[#0b1224]/80 p-4">
         <label className="block text-xs uppercase tracking-[0.12em] text-slate-400">Texto</label>
         <textarea

@@ -27,3 +27,8 @@ body { @apply antialiased text-slate-100; font-family: 'Inter Tight', Inter, ui-
 }
 body { background: var(--bg-primary); }
 .premium-chip { border:1px solid var(--border-subtle); background:rgba(255,255,255,.04); border-radius:999px; }
+
+
+:root { --bg-primary:#060913; }
+.panel-premium { border-color: rgba(148,163,184,.16); background: linear-gradient(180deg, rgba(15,23,42,.72), rgba(7,10,20,.84)); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 25px 65px rgba(0,0,0,.45); }
+.ambient-bg { background: radial-gradient(circle at 14% 4%, rgba(56,189,248,.17), transparent 34%), radial-gradient(circle at 85% 11%, rgba(109,40,217,.18), transparent 32%), radial-gradient(circle at 42% 100%, rgba(30,64,175,.2), transparent 50%), linear-gradient(180deg,#050811,#090f1e 50%,#0b1224 100%); }
