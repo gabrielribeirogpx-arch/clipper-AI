@@ -62,7 +62,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
   if (!mounted) return <div className="h-[240px] rounded-[2rem] border border-white/10 bg-white/5" />;
 
   return (
-    <section className="panel-premium min-h-0 w-full shrink-0 basis-[240px] p-3">
+    <section className="panel-premium editor-timeline-section min-h-0 w-full p-3">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-200">Cinematic Timeline</p>
         <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#0a1122]/88 px-4 py-2">
