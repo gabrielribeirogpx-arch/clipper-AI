@@ -29,11 +29,10 @@ export default function Home() {
   const heroRef = useRef<HTMLElement | null>(null);
   
   useEffect(() => {
-    console.log('[EDITOR LAYOUT REBUILT FROM SCRATCH]');
-    console.log('[VIDEO PLAYER DOMINANT]');
-    console.log('[CONTROLS POSITION FIXED]');
-    console.log('[TIMELINE COMPACT MODE]');
-    console.log('[GRID HIERARCHY SIMPLIFIED]');
+    console.log('[FINAL VISUAL REFINEMENT ACTIVE]');
+    console.log('[VIDEO AREA EXPANDED]');
+    console.log('[TIMELINE DENSITY REDUCED]');
+    console.log('[PLAYER CARD COMPACTED]');
   }, []);
 
   useEffect(() => { void hydrateFromBackend(analysisId); }, [analysisId, hydrateFromBackend]);
