@@ -40,3 +40,4 @@ class TimelineUpdateRequest(BaseModel):
     render_mode: Optional[str] = None
     dual_regions: Optional[DualRegions] = None
     manual_region: Optional[RegionBox] = None
+    manual_region_config: Optional[RegionBox] = None

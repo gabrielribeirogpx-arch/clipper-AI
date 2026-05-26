@@ -22,6 +22,7 @@ timeline_state: dict[str, Any] = {
     "dual_regions": None,
     "dual_region_config": None,
     "manual_region": None,
+    "manual_region_config": None,
 }
 
 
@@ -43,7 +44,7 @@ def save_timeline_state_for_analysis(analysis_id: str | None, state: dict[str, A
         "analysis_id": normalized_analysis_id,
         "render_mode": state.get("render_mode"),
         "dual_region_config": state.get("dual_region_config"),
-        "manual_region_config": state.get("manual_region"),
+        "manual_region_config": state.get("manual_region_config", state.get("manual_region")),
     })
 
     with SessionLocal() as session:
@@ -55,7 +56,7 @@ def save_timeline_state_for_analysis(analysis_id: str | None, state: dict[str, A
 
         row.render_mode = state.get("render_mode")
         row.dual_region_config = state.get("dual_region_config")
-        row.manual_region_config = state.get("manual_region")
+        row.manual_region_config = state.get("manual_region_config", state.get("manual_region"))
 
         session.add(row)
         session.flush()
@@ -90,6 +91,7 @@ def get_timeline_state_for_analysis(analysis_id: str | None) -> dict[str, Any] |
         hydrated["dual_region_config"] = row.dual_region_config
         hydrated["dual_regions"] = row.dual_region_config
         hydrated["manual_region"] = row.manual_region_config
+        hydrated["manual_region_config"] = row.manual_region_config
 
         print("[TIMELINE DB HYDRATION SUCCESS]", {
             "analysis_id": normalized_analysis_id,

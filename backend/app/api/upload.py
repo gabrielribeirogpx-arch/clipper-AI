@@ -11,6 +11,7 @@ from app.jobs.process_video_job import process_video
 from app.data.timeline_state import set_timeline_state, save_timeline_state_for_analysis
 from app.services.youtube_service import download_youtube_video, YouTubeDownloadError
 from app.data.ingest_jobs import cleanup_jobs, create_job, get_job, register_listener, unregister_listener, update_job
+from app.schemas.upload import YoutubeIngestRequest
 import os
 import uuid
 import shutil
@@ -67,13 +68,17 @@ async def process_youtube_ingest_job(job_id: str, body: dict, output_dir: str) -
         print(f"[BACKEND RECEIVED RENDER MODE] source=ingest_youtube render_mode={render_mode}")
         print(f"[PROCESS VIDEO JOB MODE] ingest_request_render_mode={render_mode}")
         print(f"[PROCESS VIDEO JOB MODE] ingest_processing_render_mode={process_render_mode}")
+        ingest_manual_region_config = body.get("manual_region_config", body.get("manual_region"))
+        print(f"[INGEST RECEIVED MANUAL REGION] manual_region_config={ingest_manual_region_config}")
         print(f"[PROCESS VIDEO JOB CONFIG] ingest_request_dual_region_config={body.get('dual_region_config')}")
+        print(f"[JOB PAYLOAD MANUAL REGION] manual_region_config={ingest_manual_region_config}")
         transcription = await asyncio.to_thread(
             process_video,
             filepath,
             output_dir=output_dir,
             render_mode=process_render_mode,
             dual_region_config=body.get('dual_region_config'),
+            manual_region=ingest_manual_region_config,
             min_clip_length=int(body.get("min_clip_length", 30)),
             max_clip_length=int(body.get("max_clip_length", 90)),
             max_clips=25,
@@ -144,17 +149,21 @@ async def upload_video(
 @router.post("/ingest/youtube")
 async def ingest_youtube(request: Request):
     body = await request.json()
-    youtube_url = (body.get("youtube_url") or "").strip()
+    payload = YoutubeIngestRequest.model_validate(body)
+    youtube_url = (payload.youtube_url or "").strip()
     if not youtube_url:
         raise HTTPException(status_code=400, detail="youtube_url is required")
 
-    analysis_folder = _resolve_analysis_folder(body.get("analysis_name"), body.get("output_folder"))
+    analysis_folder = _resolve_analysis_folder(payload.analysis_name, payload.output_folder)
     output_dir = os.path.join(CLIPS_DIR, analysis_folder)
     os.makedirs(output_dir, exist_ok=True)
 
     analysis_id = analysis_folder
     job_id = str(uuid.uuid4())
+    body = payload.model_dump()
     body["youtube_url"] = youtube_url
+    body["manual_region_config"] = body.get("manual_region_config", body.get("manual_region"))
+    print(f"[JOB PAYLOAD MANUAL REGION] ingest_youtube manual_region_config={body.get('manual_region_config')}")
     create_job(job_id, analysis_id)
     asyncio.create_task(process_youtube_ingest_job(job_id, body, output_dir))
     return {"success": True, "job_id": job_id, "analysis_id": analysis_id, "status": "queued"}

@@ -34,6 +34,8 @@ def process_video(
     print(f"[PROCESS VIDEO JOB MODE] resolved_render_mode={render_mode}")
     print(f"[PROCESS VIDEO JOB CONFIG] resolved_dual_region_config={dual_region_config}")
     print(f"[PROCESS VIDEO JOB CONFIG] resolved_manual_region={manual_region}")
+    print(f"[JOB RESTORED MANUAL REGION] manual_region_config={manual_region}")
+    print(f"[PROCESS VIDEO MANUAL REGION] render_mode={render_mode} manual_region_config={manual_region}")
 
 
     log = step_logger or (lambda _msg: None)
@@ -187,10 +189,14 @@ def process_video(
             render_dual_region_clip(raw_clip_path, processed_clip_path, dual_region_config)
             print("[DUAL REGION RENDER COMPLETE]")
         elif render_mode == "manual_region":
+            print(f"[RENDER PIPELINE MANUAL REGION] manual_region_config={manual_region}")
             if not manual_region:
                 print("[MANUAL REGION CONFIG MISSING]")
                 print("[MANUAL REGION RENDER BLOCKED]")
-                raise RuntimeError("manual_region render requires manual_region config")
+                raise RuntimeError(
+                    f"manual_region render requires manual_region config | debug={{'render_mode': {render_mode!r}, 'manual_region_config': {manual_region!r}, 'dual_region_config': {dual_region_config!r}, 'output_dir': {output_dir!r}}}"
+                )
+            print("[MANUAL REGION FULL CONFIG VERIFIED]")
             processed_clip_path = os.path.join(output_dir, f"clip_{index}_manual.mp4")
             render_manual_region_vertical(raw_clip_path, processed_clip_path, manual_region)
         elif render_mode == "raw_only":
