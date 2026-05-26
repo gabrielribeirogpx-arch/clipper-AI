@@ -8,7 +8,7 @@ import { ClipResultsPanel } from '@/components/ClipResultsPanel';
 import { useTimelineStore } from '@/store/timelineStore';
 import { exportClip } from '@/lib/api';
 import { useMounted } from '@/hooks/useMounted';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { springConfigs } from '@/lib/motion-config';
 
@@ -27,29 +27,16 @@ export default function Home() {
   const selectedClipId = useTimelineStore((state) => state.selectedClipId);
   const analysisId = searchParams.get('analysis_id');
   const heroRef = useRef<HTMLElement | null>(null);
-  const [sidebarExpanded, setSidebarExpanded] = useState(true);
-
+  
   useEffect(() => {
-    const recalcLayout = () => {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
-      const nextExpanded = width >= 1280;
-      setSidebarExpanded(nextExpanded);
-      console.log('[WORKSTATION LAYOUT ACTIVE]');
-      console.log(`[VIEWPORT SIZE] ${width}x${height}`);
-      console.log('[MAIN GRID HEIGHT FIXED]');
-      console.log(`[SIDEBAR RESPONSIVE MODE] ${nextExpanded ? 'expanded' : 'collapsed'}`);
-      console.log('[EDITOR VIEWPORT LOCKED]');
-    };
-
-    recalcLayout();
-    window.addEventListener('resize', recalcLayout);
-    return () => window.removeEventListener('resize', recalcLayout);
+    console.log('[WORKSTATION GRID ACTIVE]');
+    console.log('[CENTER EDITOR EXPANDED]');
+    console.log('[VIEWPORT LOCKED 100VH]');
   }, []);
 
   useEffect(() => { void hydrateFromBackend(analysisId); }, [analysisId, hydrateFromBackend]);
 
-  if (!mounted) return <main className="min-h-screen bg-[#05070f]" />;
+  if (!mounted) return <main className="h-screen overflow-hidden bg-[#05070f]" />;
 
   const handleExport = async () => {
     if (!selectedClipId) return;
@@ -67,24 +54,24 @@ export default function Home() {
   return (
     <main className="relative h-screen w-full overflow-hidden bg-[var(--bg-primary)] text-slate-100">
       <div className="ambient-bg" />
-      <div className="editor-shell relative grid h-full w-full grid-cols-1 gap-2 p-2 md:p-2.5 lg:gap-3 lg:p-3">
-        <aside className={`panel-premium editor-sidebar flex h-full min-h-0 flex-col ${sidebarExpanded ? 'p-6' : 'p-4'}`}>
+      <div className="editor-shell relative grid h-full w-full gap-2 p-2 [grid-template-columns:220px_minmax(0,1fr)_320px]">
+        <aside className="panel-premium editor-sidebar flex h-full min-h-0 w-[220px] flex-none flex-col p-4">
           <div className="border-b border-white/10 pb-5">
             <div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-indigo-500 font-bold text-slate-950">✂</div><div><p className="text-lg font-semibold">Clipper AI</p><p className="text-xs tracking-[0.18em] text-slate-400">Creative OS</p></div></div>
           </div>
           <nav className="mt-6 flex-1 space-y-2">
-            {navItems.map((item) => <motion.button key={item.label} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} transition={springConfigs.snappy} className={`flex w-full items-center gap-3 rounded-xl border ${sidebarExpanded ? 'px-4 py-3 text-sm' : 'justify-center px-2 py-3 text-base'} text-left transition ${item.active ? 'border-cyan-300/35 bg-cyan-400/10 text-cyan-100 shadow-[0_0_0_1px_rgba(56,189,248,.22)]' : 'border-white/5 bg-white/[0.02] text-slate-300 hover:border-white/15 hover:bg-white/[0.04]'}`}><span>{item.icon}</span>{sidebarExpanded && <span>{item.label}</span>}</motion.button>)}
+            {navItems.map((item) => <motion.button key={item.label} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} transition={springConfigs.snappy} className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm transition ${item.active ? 'border-cyan-300/35 bg-cyan-400/10 text-cyan-100 shadow-[0_0_0_1px_rgba(56,189,248,.22)]' : 'border-white/5 bg-white/[0.02] text-slate-300 hover:border-white/15 hover:bg-white/[0.04]'}`}><span>{item.icon}</span><span>{item.label}</span></motion.button>)}
           </nav>
-          {sidebarExpanded && <><div className="mt-6 rounded-2xl border border-violet-300/25 bg-gradient-to-br from-violet-500/14 to-cyan-400/8 p-4"><p className="text-xs uppercase tracking-[0.17em] text-violet-200">Pro Plan</p><p className="mt-2 text-sm text-slate-300">8K exports · team review · AI scenes</p></div>
-          <div className="mt-4 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3"><div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-600/60">AM</div><div><p className="text-sm">Ana Martins</p><p className="text-xs text-slate-400">Founder</p></div></div></>}
+          <><div className="mt-5 rounded-2xl border border-violet-300/25 bg-gradient-to-br from-violet-500/14 to-cyan-400/8 p-3"><p className="text-xs uppercase tracking-[0.17em] text-violet-200">Pro Plan</p><p className="mt-2 text-sm text-slate-300">8K exports · team review · AI scenes</p></div>
+          <div className="mt-3 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3"><div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-600/60">AM</div><div><p className="text-sm">Ana Martins</p><p className="text-xs text-slate-400">Founder</p></div></div></>
         </aside>
 
-        <section className="editor-main min-w-0 flex min-h-0 flex-col gap-2 overflow-hidden lg:gap-3">
-          <header className="panel-premium shrink-0 px-5 py-4">
+        <section className="editor-main flex h-full min-h-0 min-w-0 flex-col gap-2 overflow-hidden">
+          <header className="panel-premium shrink-0 px-5 py-3">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Workspace / Campaigns / Q2</p>
-                <h1 className="mt-2 text-3xl font-semibold tracking-tight">Clipper Launch Campaign</h1>
+                <h1 className="mt-1 text-2xl font-semibold tracking-tight">Clipper Launch Campaign</h1>
               </div>
               <div className="flex items-center gap-2">
                 <span className="premium-chip px-3 py-1 text-xs text-cyan-200">AI Online</span>
@@ -97,7 +84,7 @@ export default function Home() {
           <TimelineTracks />
         </section>
 
-        <section className="editor-right min-w-0 min-h-0 space-y-2 overflow-y-auto pr-1 lg:space-y-3">
+        <section className="editor-right min-h-0 w-[320px] min-w-0 flex-none space-y-2 overflow-y-auto pr-1">
           <ClipResultsPanel />
           <InspectorPanel />
         </section>
