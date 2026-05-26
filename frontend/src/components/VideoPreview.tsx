@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { type RefObject, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { shouldSyncProgress } from '@/lib/playbackEngine';
 import { useMounted } from '@/hooks/useMounted';
 import { useTimelineStore } from '@/store/timelineStore';
 
 
-export function VideoPreview() {
+export function VideoPreview({ sectionRef }: { sectionRef?: RefObject<HTMLElement | null> }) {
   const { currentTime, setCurrentTime, isPlaying, setPlaying, duration, videoUrl, clipRenderMode, setClipRenderMode, dualRegions, setDualRegions } = useTimelineStore();
   const [dragging, setDragging] = useState<'regionA' | 'regionB' | null>(null);
   const mounted = useMounted();
@@ -67,9 +67,9 @@ export function VideoPreview() {
   if (!mounted) return <div className="h-[760px] rounded-[2rem] border border-white/10 bg-white/5" />;
 
   return (
-    <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden panel-premium p-7">
-      <div className="pointer-events-none absolute -left-20 top-4 h-[24rem] w-[24rem] rounded-full bg-cyan-500/30 blur-[130px]" />
-      <div className="pointer-events-none absolute -right-20 bottom-0 h-[24rem] w-[24rem] rounded-full bg-violet-500/30 blur-[140px]" />
+    <motion.section ref={sectionRef} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="panel-premium relative w-full max-w-full overflow-hidden p-7">
+      <div className="pointer-events-none absolute inset-0"><div className="absolute -left-20 top-4 h-[24rem] w-[24rem] rounded-full bg-cyan-500/30 blur-[130px]" /></div>
+      <div className="pointer-events-none absolute inset-0"><div className="absolute -right-20 bottom-0 h-[24rem] w-[24rem] rounded-full bg-violet-500/30 blur-[140px]" /></div>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_-10%,rgba(255,255,255,.18),transparent_38%),radial-gradient(circle_at_50%_110%,rgba(168,85,247,.24),transparent_48%)]" />
 
       <div className="relative mx-auto w-full max-w-[1080px]">
