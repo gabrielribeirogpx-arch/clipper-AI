@@ -63,7 +63,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
         <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-200">Cinematic Timeline</p>
         <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#0a1122]/88 px-4 py-2">
           <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-300">Zoom {zoom.toFixed(1)}x</span>
-          <input type="range" min={0.5} max={3} step={0.1} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="timeline-zoom-slider w-56" />
+          <input type="range" min={0.5} max={3} step={0.1} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="timeline-zoom-slider w-[clamp(9rem,20vw,14rem)]" />
         </div>
       </div>
 
@@ -102,8 +102,8 @@ export const TimelineTracks = memo(function TimelineTracks() {
               const rowHeight = TRACK_HEIGHT + 16;
 
               return (
-                <div key={name} className="grid grid-cols-[160px_1fr] gap-3">
-                  <div className="flex items-center rounded-xl border border-white/10 bg-white/[0.03] px-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-300">
+                <div key={name} className="grid grid-cols-[minmax(96px,clamp(6rem,12vw,10rem))_1fr] gap-3">
+                  <div className="flex items-center rounded-xl border border-white/10 bg-white/[0.03] px-3 lg:px-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-300">
                     {name}
                   </div>
                   <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#0b1324]/95" style={{ height: rowHeight }}>

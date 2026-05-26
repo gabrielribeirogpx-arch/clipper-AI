@@ -58,7 +58,7 @@ export function ClipResultsPanel() {
   return (
     <div className="panel-premium p-5">
       <h3 className="mb-5 text-sm font-semibold uppercase tracking-[0.24em] text-slate-200">AI Insights Panel</h3>
-      <div className="grid max-h-[560px] gap-4 overflow-auto pr-1">
+      <div className="grid max-h-[clamp(20rem,42vh,38rem)] gap-4 overflow-auto pr-1">
         {clips.map((clip) => <ClipCard key={clip.id} clip={clip} />)}
         {!clips.length && <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">No generated clips yet.</div>}
       </div>
