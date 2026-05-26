@@ -129,6 +129,7 @@ export default function UploadPage() {
   const store = useUploadStore();
   const resetForNewAnalysis = useTimelineStore((state) => state.resetForNewAnalysis);
   const hydrateFromBackend = useTimelineStore((state) => state.hydrateFromBackend);
+  const manualRegionConfig = useTimelineStore((state) => state.manualRegion);
 
   const resolveRedirectTarget = (analysisId: string, frontendRequestedMode: 'ai_tracking' | 'dual_region' | 'manual_region' | 'raw_only', backendReturnedMode?: 'ai_tracking' | 'dual_region' | 'manual_region' | 'raw_only') => {
     const hydratedMode = useTimelineStore.getState().clipRenderMode;
@@ -462,7 +463,24 @@ export default function UploadPage() {
 
     try {
       console.log('[UPLOAD SELECTED RENDER MODE]', { source: 'youtube_ingest', renderMode });
-      const job = await ingestYouTubeJob({
+
+      if (renderMode === 'manual_region') {
+        const hasValidManualRegion =
+          manualRegionConfig
+          && Number.isFinite(manualRegionConfig.x)
+          && Number.isFinite(manualRegionConfig.y)
+          && Number.isFinite(manualRegionConfig.width)
+          && Number.isFinite(manualRegionConfig.height)
+          && manualRegionConfig.width > 0
+          && manualRegionConfig.height > 0;
+
+        if (!hasValidManualRegion) {
+          throw new Error('Manual region render selected, but manual_region_config is missing or invalid. Please set x, y, width, and height before starting ingest.');
+        }
+      }
+
+      console.log('[FRONTEND MANUAL REGION SENT]', manualRegionConfig);
+      const ingestPayload = {
         youtube_url: youtubeUrl.trim(),
         analysis_name: analysisName.trim() || undefined,
         start_time: toHhMmSs(startSeconds),
@@ -470,8 +488,11 @@ export default function UploadPage() {
         min_clip_length: 30,
         max_clip_length: 90,
         render_mode: renderMode,
+        manual_region_config: renderMode === 'manual_region' ? manualRegionConfig : undefined,
         video_quality: videoQuality,
-      });
+      };
+      console.log('[FRONTEND INGEST PAYLOAD]', ingestPayload);
+      const job = await ingestYouTubeJob(ingestPayload);
 
       store.setActiveJob(job.job_id, job.analysis_id);
       const result = await subscribeToJob(job.job_id);
