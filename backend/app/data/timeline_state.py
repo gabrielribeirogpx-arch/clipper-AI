@@ -21,8 +21,8 @@ timeline_state: dict[str, Any] = {
     "render_mode": "ai_tracking",
     "dual_regions": None,
     "dual_region_config": None,
-    "manual_region": None,
-    "manual_region_config": None,
+    "semi_auto": None,
+    "semi_auto_config": None,
 }
 
 
@@ -44,7 +44,7 @@ def save_timeline_state_for_analysis(analysis_id: str | None, state: dict[str, A
         "analysis_id": normalized_analysis_id,
         "render_mode": state.get("render_mode"),
         "dual_region_config": state.get("dual_region_config"),
-        "manual_region_config": state.get("manual_region_config", state.get("manual_region")),
+        "semi_auto_config": state.get("semi_auto_config", state.get("semi_auto")),
     })
 
     with SessionLocal() as session:
@@ -56,7 +56,7 @@ def save_timeline_state_for_analysis(analysis_id: str | None, state: dict[str, A
 
         row.render_mode = state.get("render_mode")
         row.dual_region_config = state.get("dual_region_config")
-        row.manual_region_config = state.get("manual_region_config", state.get("manual_region"))
+        row.semi_auto_config = state.get("semi_auto_config", state.get("semi_auto"))
 
         session.add(row)
         session.flush()
@@ -70,7 +70,7 @@ def save_timeline_state_for_analysis(analysis_id: str | None, state: dict[str, A
             "analysis_id": normalized_analysis_id,
             "render_mode": verify_row.render_mode if verify_row else None,
             "dual_region_config": verify_row.dual_region_config if verify_row else None,
-            "manual_region_config": verify_row.manual_region_config if verify_row else None,
+            "semi_auto_config": verify_row.semi_auto_config if verify_row else None,
         })
 
 
@@ -90,13 +90,13 @@ def get_timeline_state_for_analysis(analysis_id: str | None) -> dict[str, Any] |
         hydrated["render_mode"] = row.render_mode
         hydrated["dual_region_config"] = row.dual_region_config
         hydrated["dual_regions"] = row.dual_region_config
-        hydrated["manual_region"] = row.manual_region_config
-        hydrated["manual_region_config"] = row.manual_region_config
+        hydrated["semi_auto"] = row.semi_auto_config
+        hydrated["semi_auto_config"] = row.semi_auto_config
 
         print("[TIMELINE DB HYDRATION SUCCESS]", {
             "analysis_id": normalized_analysis_id,
             "render_mode": row.render_mode,
             "dual_region_config": row.dual_region_config,
-            "manual_region_config": row.manual_region_config,
+            "semi_auto_config": row.semi_auto_config,
         })
         return hydrated

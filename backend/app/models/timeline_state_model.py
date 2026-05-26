@@ -12,5 +12,5 @@ class TimelineRenderState(Base):
     analysis_id: Mapped[str] = mapped_column(String, primary_key=True)
     render_mode: Mapped[str | None] = mapped_column(String, nullable=True)
     dual_region_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    manual_region_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    semi_auto_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 

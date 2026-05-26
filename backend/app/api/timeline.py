@@ -8,7 +8,7 @@ from app.data.timeline_state import (
     save_timeline_state_for_analysis,
 )
 from app.schemas.timeline import TimelineUpdateRequest
-from app.services.vertical_render_service import normalize_manual_region, render_dual_region_clip, render_manual_region_vertical
+from app.services.vertical_render_service import render_dual_region_clip, render_semi_auto_vertical
 
 router = APIRouter(prefix="/timeline", tags=["timeline"])
 
@@ -17,10 +17,9 @@ class DualRegionRenderRequest(BaseModel):
     render_mode: str
     dual_region_config: dict
 
-class ManualRegionRenderRequest(BaseModel):
+class SemiAutoRenderRequest(BaseModel):
     analysis_id: str
     render_mode: str
-    manual_region: dict
 
 
 def _to_filesystem_path(media_url: str) -> Path:
@@ -51,8 +50,8 @@ def get_render_state(analysis_id: str | None = Query(default=None)):
         state = get_timeline_state()
     print(f"[RENDER MODE LOAD] render_mode={state.get('render_mode')}")
     print(f"[DUAL REGION CONFIG LOAD] dual_region_config={state.get('dual_region_config')}")
-    state["manual_region_config"] = state.get("manual_region_config", state.get("manual_region"))
-    print(f"[TIMELINE LOAD MANUAL REGION] manual_region_config={state.get('manual_region_config')}")
+    state["semi_auto_config"] = state.get("semi_auto_config", state.get("semi_auto"))
+    print(f"[TIMELINE LOAD MANUAL REGION] semi_auto_config={state.get('semi_auto_config')}")
     return state
 
 
@@ -65,7 +64,7 @@ def get_broll():
 def update_timeline(payload: TimelineUpdateRequest):
     print(f"[RENDER MODE SAVE] incoming_render_mode={payload.render_mode}")
     print(f"[DUAL REGION CONFIG SAVE] incoming_dual_regions={payload.dual_regions.model_dump() if payload.dual_regions else None}")
-    resolved_manual_region = payload.manual_region_config or payload.manual_region
+    resolved_semi_auto = payload.semi_auto_config or payload.semi_auto
     current_state = get_timeline_state()
     print(f"[TIMELINE BEFORE SAVE] {current_state.get('render_mode')}")
     print(f"[TIMELINE ASSIGNED] {payload.render_mode}")
@@ -79,11 +78,11 @@ def update_timeline(payload: TimelineUpdateRequest):
     if payload.dual_regions:
         current_state["dual_regions"] = payload.dual_regions.model_dump()
         current_state["dual_region_config"] = payload.dual_regions.model_dump()
-    if resolved_manual_region is not None:
-        manual_region_dump = resolved_manual_region.model_dump()
-        current_state["manual_region"] = manual_region_dump
-        current_state["manual_region_config"] = manual_region_dump
-        print(f"[TIMELINE SAVE MANUAL REGION] manual_region_config={manual_region_dump}")
+    if resolved_semi_auto is not None:
+        semi_auto_dump = resolved_semi_auto.model_dump()
+        current_state["semi_auto"] = semi_auto_dump
+        current_state["semi_auto_config"] = semi_auto_dump
+        print(f"[TIMELINE SAVE MANUAL REGION] semi_auto_config={semi_auto_dump}")
     set_timeline_state(current_state)
     normalized_analysis_id = str(current_state.get("analysisId")) if current_state.get("analysisId") is not None else None
     save_timeline_state_for_analysis(normalized_analysis_id, current_state)
@@ -92,7 +91,7 @@ def update_timeline(payload: TimelineUpdateRequest):
         "analysis_id": normalized_analysis_id,
         "render_mode": persisted_state.get("render_mode"),
         "dual_region_config": persisted_state.get("dual_region_config"),
-        "manual_region_config": persisted_state.get("manual_region_config", persisted_state.get("manual_region")),
+        "semi_auto_config": persisted_state.get("semi_auto_config", persisted_state.get("semi_auto")),
     })
     print(f"[TIMELINE AFTER COMMIT] {current_state.get('render_mode')}")
     print(f"[RENDER MODE SAVE] persisted_render_mode={current_state.get('render_mode')}")
@@ -165,37 +164,27 @@ def render_dual_region_final(payload: DualRegionRenderRequest):
     print('[EDITOR CLIPS REPLACED]')
     return {'status': 'rendered', 'clips': updated_clips, 'analysis_id': payload.analysis_id}
 
-@router.post('/render-manual-region')
-def render_manual_region_final(payload: ManualRegionRenderRequest):
-    if payload.render_mode != 'manual_region':
-        raise HTTPException(status_code=400, detail='render_mode must be manual_region')
-    if not payload.manual_region:
-        print('[MANUAL REGION CONFIG MISSING]')
-        print('[MANUAL REGION RENDER BLOCKED]')
-        raise HTTPException(status_code=400, detail='manual_region is required for manual_region render')
-    try:
-        normalized_region = normalize_manual_region(payload.manual_region)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+@router.post('/render-semi-auto')
+def render_semi_auto_final(payload: SemiAutoRenderRequest):
+    if payload.render_mode != 'semi_auto':
+        raise HTTPException(status_code=400, detail='render_mode must be semi_auto')
     state = get_timeline_state()
-    print(f"[RENDER PIPELINE MANUAL REGION] payload_manual_region={normalized_region}")
     clips = state.get('clips', [])
     updated_clips = []
     for index, clip in enumerate(clips):
         raw_clip_path = _to_filesystem_path(clip.get('raw_clip_path') or clip.get('clip_path'))
-        manual_clip_path = raw_clip_path.with_name(f"clip_{index}_manual.mp4")
-        render_manual_region_vertical(str(raw_clip_path), str(manual_clip_path), normalized_region)
+        semi_auto_clip_path = raw_clip_path.with_name(f"clip_{index}_semi_auto.mp4")
+        render_semi_auto_vertical(str(raw_clip_path), str(semi_auto_clip_path))
         updated = {**clip}
-        updated['clip_path'] = _to_media_url(manual_clip_path)
-        updated['final_video'] = _to_media_url(manual_clip_path)
+        updated['clip_path'] = _to_media_url(semi_auto_clip_path)
+        updated['final_video'] = _to_media_url(semi_auto_clip_path)
         updated_clips.append(updated)
     state['clips'] = updated_clips
-    state['render_mode'] = 'manual_region'
-    state['manual_region'] = normalized_region
-    state['manual_region_config'] = normalized_region
+    state['render_mode'] = 'semi_auto'
     set_timeline_state(state)
     save_timeline_state_for_analysis(state.get("analysisId"), state)
     return {'status': 'rendered', 'clips': updated_clips, 'analysis_id': payload.analysis_id}
+
 
 
 @router.get("/debug-routes")

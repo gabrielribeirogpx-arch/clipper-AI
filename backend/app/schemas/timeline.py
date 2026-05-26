@@ -30,7 +30,7 @@ class RenderStateResponse(BaseModel):
     cuts: List[TimelineBlock]
     render_mode: Optional[str] = None
     dual_region_config: Optional[DualRegions] = None
-    manual_region_config: Optional[RegionBox] = None
+    semi_auto_config: Optional[RegionBox] = None
 
 
 class TimelineUpdateRequest(BaseModel):
@@ -39,5 +39,5 @@ class TimelineUpdateRequest(BaseModel):
     cuts: List[TimelineBlock]
     render_mode: Optional[str] = None
     dual_regions: Optional[DualRegions] = None
-    manual_region: Optional[RegionBox] = None
-    manual_region_config: Optional[RegionBox] = None
+    semi_auto: Optional[RegionBox] = None
+    semi_auto_config: Optional[RegionBox] = None

@@ -10,7 +10,7 @@ export type UploadResponse = {
   clips?: Array<Record<string, unknown>>;
 };
 
-export type RenderMode = "ai_tracking" | "dual_region" | "manual_region" | "raw_only";
+export type RenderMode = "ai_tracking" | "dual_region" | "semi_auto" | "raw_only";
 
 export type YouTubeIngestRequest = {
   youtube_url: string;
@@ -21,7 +21,7 @@ export type YouTubeIngestRequest = {
   min_clip_length?: number;
   max_clip_length?: number;
   render_mode?: RenderMode;
-  manual_region_config?: Record<string, unknown>;
+  semi_auto_config?: Record<string, unknown>;
   video_quality?: '720p' | '1080p' | '4k';
 };
 
@@ -120,7 +120,7 @@ export type IngestStatus = { status: string; progress: number; step: string; ana
 export type IngestJobState = IngestStatus & { job_id: string; finished: boolean };
 
 export async function ingestYouTubeJob(payload: YouTubeIngestRequest): Promise<IngestJobResponse> {
-  console.log('[FRONTEND MANUAL REGION SENT]', { manual_region_config: payload.manual_region_config, render_mode: payload.render_mode });
+  console.log('[FRONTEND MANUAL REGION SENT]', { semi_auto_config: payload.semi_auto_config, render_mode: payload.render_mode });
   const response = await fetch(`${API_BASE}/ingest/youtube`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   if (!response.ok) throw new Error("YouTube ingestion failed");
   return response.json() as Promise<IngestJobResponse>;
@@ -152,8 +152,8 @@ export async function renderDualRegionFinal(payload: { analysis_id: string; rend
   return response.json();
 }
 
-export async function renderManualRegionFinal(payload: { analysis_id: string; render_mode: "manual_region"; manual_region: unknown }) {
-  const response = await fetch(`${API_BASE}/timeline/render-manual-region`, {
+export async function renderManualRegionFinal(payload: { analysis_id: string; render_mode: "semi_auto"; semi_auto: unknown }) {
+  const response = await fetch(`${API_BASE}/timeline/render-semi-auto`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

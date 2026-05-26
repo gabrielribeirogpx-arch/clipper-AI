@@ -15,5 +15,5 @@ class YoutubeIngestRequest(BaseModel):
     video_quality: str = Field(default="1080p")
     render_mode: str | None = "ai_tracking"
     dual_region_config: dict | None = None
-    manual_region_config: dict | None = None
-    manual_region: dict | None = None
+    semi_auto_config: dict | None = None
+    semi_auto: dict | None = None
