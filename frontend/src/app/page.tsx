@@ -12,35 +12,26 @@ import { useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 const navItems = [
-  { label: 'Projects', icon: '⬢', active: false },
+  { label: 'Projects', icon: '◻', active: false },
   { label: 'Sequences', icon: '◉', active: false },
-  { label: 'Timeline', icon: '▤', active: true },
+  { label: 'Timeline', icon: '▦', active: true },
   { label: 'AI Studio', icon: '✦', active: false },
   { label: 'Assets', icon: '◈', active: false }
 ];
 
 function RenderQueuePanel() {
   const { renderQueue } = useTimelineStore();
-  const color = { queued: 'bg-slate-500', rendering: 'bg-cyan-400', completed: 'bg-emerald-400', failed: 'bg-rose-400' } as const;
+  const color = { queued: 'from-slate-500 to-slate-300', rendering: 'from-cyan-400 to-blue-400', completed: 'from-emerald-400 to-teal-300', failed: 'from-rose-400 to-orange-300' } as const;
 
-  return (
-    <div className="rounded-[2.2rem] border border-white/15 bg-white/[0.05] p-7 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_24px_80px_rgba(0,0,0,.6)] backdrop-blur-3xl">
-      <h3 className="mb-5 text-xs font-semibold uppercase tracking-[0.34em] text-slate-200">Render Queue</h3>
-      <div className="space-y-4">
-        {renderQueue.map((job) => (
-          <div key={job.id} className="rounded-2xl border border-white/10 bg-[#0a1020]/80 p-4">
-            <div className="mb-3 flex items-center justify-between text-sm">
-              <span className="font-semibold text-slate-100">{job.clipName}</span>
-              <span className="capitalize text-slate-300">{job.state}</span>
-            </div>
-            <div className="h-2.5 rounded-full bg-slate-800/90">
-              <div className={`h-2.5 rounded-full shadow-[0_0_18px_rgba(34,211,238,0.45)] ${color[job.state]}`} style={{ width: `${job.progress}%` }} />
-            </div>
-          </div>
-        ))}
-      </div>
+  return <div className="panel-premium p-5">
+    <h3 className="panel-title">Render Queue</h3>
+    <div className="space-y-3">
+      {renderQueue.map((job) => <div key={job.id} className="rounded-2xl bg-white/[0.03] p-3">
+        <div className="mb-2 flex items-center justify-between text-sm"><span>{job.clipName}</span><span className="text-slate-400">{job.state}</span></div>
+        <div className="h-1.5 rounded-full bg-white/10"><div className={`h-1.5 rounded-full bg-gradient-to-r ${color[job.state]}`} style={{ width: `${job.progress}%` }} /></div>
+      </div>)}
     </div>
-  );
+  </div>;
 }
 
 export default function Home() {
@@ -50,104 +41,46 @@ export default function Home() {
   const selectedClipId = useTimelineStore((state) => state.selectedClipId);
   const analysisId = searchParams.get('analysis_id');
 
-  useEffect(() => {
-    void hydrateFromBackend(analysisId);
-  }, [analysisId, hydrateFromBackend]);
-
-  if (!mounted) return <main className="min-h-screen bg-[#05070f]" />;
+  useEffect(() => { void hydrateFromBackend(analysisId); }, [analysisId, hydrateFromBackend]);
+  if (!mounted) return <main className="min-h-screen bg-[#050505]" />;
 
   const handleExport = async () => {
     if (!selectedClipId) return;
-
     try {
-      console.log('[EXPORT START]', selectedClipId);
       const data = await exportClip(selectedClipId);
-      console.log('[EXPORT SUCCESS]', data);
-
       if (data.success && data.download_url) {
         const downloadUrl = `http://localhost:8000${data.download_url}`;
-        console.log('[DOWNLOAD START]', downloadUrl);
         const link = document.createElement('a');
         link.href = downloadUrl;
         link.download = downloadUrl.split('/').pop() ?? 'clip.mp4';
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        console.log('[DOWNLOAD SUCCESS]', downloadUrl);
+        document.body.appendChild(link); link.click(); link.remove();
       }
-
       await hydrateFromBackend();
-    } catch (err) {
-      console.error('[EXPORT ERROR]', err);
-    }
+    } catch (err) { console.error('[EXPORT ERROR]', err); }
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#05070f] text-slate-100">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_8%_10%,rgba(56,189,248,0.24),transparent_34%),radial-gradient(circle_at_90%_12%,rgba(168,85,247,.3),transparent_36%),radial-gradient(circle_at_52%_92%,rgba(34,211,238,.12),transparent_48%),linear-gradient(180deg,#05070f_0%,#070b15_48%,#05070f_100%)]" />
-      <div className="pointer-events-none fixed -left-20 top-10 h-[38rem] w-[38rem] rounded-full bg-cyan-500/20 blur-[170px]" />
-      <div className="pointer-events-none fixed -right-24 top-10 h-[40rem] w-[40rem] rounded-full bg-violet-500/22 blur-[190px]" />
-      <div className="pointer-events-none fixed inset-0 opacity-[0.08] [background-image:radial-gradient(rgba(255,255,255,0.8)_1px,transparent_1px)] [background-size:3px_3px]" />
-      <div className="pointer-events-none fixed inset-0 opacity-[0.18]" style={{ background: 'radial-gradient(ellipse_at_center,transparent_34%,rgba(0,0,0,.84)_100%)' }} />
-
-      <div className="relative mx-auto grid min-h-screen max-w-[2200px] grid-cols-1 gap-10 px-10 py-10 2xl:grid-cols-[340px_minmax(1320px,1fr)]">
-        <aside className="rounded-[2.4rem] border border-white/15 bg-white/[0.06] p-7 shadow-[inset_0_1px_0_rgba(255,255,255,.2),0_35px_100px_rgba(0,0,0,.55)] backdrop-blur-3xl">
-          <div className="mb-14 flex items-center gap-4">
-            <div className="grid h-16 w-16 place-items-center rounded-[1.35rem] bg-gradient-to-br from-cyan-300 via-cyan-400 to-violet-500 text-2xl text-slate-950 shadow-[0_0_40px_rgba(34,211,238,0.44)]">✂</div>
-            <div>
-              <p className="text-base font-bold tracking-[0.24em] text-cyan-200">CLIPPER AI</p>
-              <p className="text-sm text-slate-400">Creative Film OS</p>
-            </div>
-          </div>
-          <nav className="space-y-3.5">
-            {navItems.map((item) => (
-              <motion.button
-                key={item.label}
-                whileHover={{ x: 10, scale: 1.02, y: -1 }}
-                className={`flex w-full items-center gap-4 rounded-2xl border px-4 py-4 text-base transition-all ${item.active
-                  ? 'border-cyan-300/45 bg-cyan-400/12 text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,0.26)]'
-                  : 'border-white/8 bg-white/[0.03] text-slate-300 hover:border-white/20 hover:bg-white/[0.09] hover:text-slate-100'
-                }`}
-              >
-                <span className="w-6 text-center text-xl">{item.icon}</span>
-                <span className="tracking-wide">{item.label}</span>
-              </motion.button>
-            ))}
-          </nav>
+    <main className="relative min-h-screen overflow-hidden bg-[#050505] text-slate-100">
+      <div className="ambient-bg" />
+      <div className="relative mx-auto grid min-h-screen max-w-[2200px] grid-cols-1 gap-6 px-6 py-6 xl:grid-cols-[240px_1fr_420px]">
+        <aside className="panel-premium h-fit p-4">
+          <div className="mb-8 flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10">✂</div><div><p className="text-xs tracking-[0.25em] text-slate-300">CLIPPER AI</p><p className="text-xs text-slate-500">Creative OS</p></div></div>
+          <nav className="space-y-1.5">{navItems.map((item) => <motion.button key={item.label} whileHover={{ x: 4 }} transition={{ type: 'spring', stiffness: 260, damping: 20 }} className={`flex w-full items-center gap-3 rounded-full px-3 py-2.5 text-sm ${item.active ? 'bg-white/12 text-white' : 'text-slate-400 hover:bg-white/6 hover:text-slate-200'}`}><span>{item.icon}</span><span>{item.label}</span></motion.button>)}</nav>
         </aside>
 
-        <section className="space-y-10">
-          <header className="flex flex-wrap items-center justify-between gap-5 rounded-[2.3rem] border border-white/15 bg-[#0f1628]/75 px-8 py-6 shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_38px_100px_rgba(0,0,0,.5)] backdrop-blur-3xl">
-            <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Current Sequence</p>
-              <h1 className="text-4xl font-semibold tracking-tight text-white">Clipper Launch Campaign</h1>
-            </div>
-            <div className="flex items-center gap-3.5">
-              <span className="rounded-xl border border-violet-400/30 bg-violet-500/15 px-4 py-2 text-sm text-violet-100">◍ AI Online</span>
-              <span className="rounded-xl border border-cyan-300/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100">◔ 78% usage</span>
-              <button
-                onClick={handleExport}
-                className="rounded-xl border border-cyan-300/35 bg-cyan-400/15 px-6 py-3 text-sm font-semibold text-cyan-100">Render</button>
-              <button
-                onClick={handleExport}
-                className="rounded-xl bg-gradient-to-r from-cyan-300 to-violet-500 px-6 py-3 text-sm font-bold text-slate-950 shadow-[0_0_34px_rgba(34,211,238,.35)]"
-              >
-                ↗ Export
-              </button>
-            </div>
+        <section className="space-y-5">
+          <header className="panel-premium flex items-center justify-between px-5 py-4">
+            <div><p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Current Sequence</p><h1 className="text-3xl font-semibold tracking-tight">Clipper Launch Campaign</h1></div>
+            <div className="flex items-center gap-2"><span className="rounded-full bg-white/10 px-3 py-1 text-xs">AI Online</span><button onClick={handleExport} className="rounded-full bg-white/10 px-4 py-2 text-sm">Render</button><button onClick={handleExport} className="rounded-full bg-gradient-to-r from-cyan-300 to-blue-400 px-4 py-2 text-sm font-semibold text-slate-950">Export</button></div>
           </header>
+          <VideoPreview />
+          <TimelineTracks />
+        </section>
 
-          <div className="grid gap-10 2xl:grid-cols-[minmax(960px,1fr)_420px]">
-            <div className="space-y-10">
-              <VideoPreview />
-              <TimelineTracks />
-            </div>
-            <div className="space-y-10">
-              <ClipResultsPanel />
-              <InspectorPanel />
-              <RenderQueuePanel />
-            </div>
-          </div>
+        <section className="space-y-5">
+          <ClipResultsPanel />
+          <InspectorPanel />
+          <RenderQueuePanel />
         </section>
       </div>
     </main>
