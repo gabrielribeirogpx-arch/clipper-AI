@@ -99,4 +99,10 @@ def get_timeline_state_for_analysis(analysis_id: str | None) -> dict[str, Any] |
             "dual_region_config": row.dual_region_config,
             "semi_auto_config": row.semi_auto_config,
         })
+        print("[RENDER STATE LOAD]", {
+            "analysis_id": normalized_analysis_id,
+            "render_mode": row.render_mode,
+            "dual_region_config": row.dual_region_config,
+            "semi_auto_config": row.semi_auto_config,
+        })
         return hydrated

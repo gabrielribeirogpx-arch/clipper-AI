@@ -73,6 +73,8 @@ type TimelineState = {
   clipRenderMode: ClipRenderMode;
   dualRegions: DualRegions;
   semiAuto: RegionBox;
+  isHydratingFromBackend: boolean;
+  hasHydratedFromBackend: boolean;
   resetForNewAnalysis: () => void;
   hydrateFromBackend: (analysisIdHint?: string | null) => Promise<void>;
   selectClip: (clipId: string) => void;
@@ -124,6 +126,8 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     regionB: { x: 120, y: 540, width: 1680, height: 460 },
   },
   semiAuto: { x: 656, y: 0, width: 608, height: 1080 },
+  isHydratingFromBackend: false,
+  hasHydratedFromBackend: false,
   resetForNewAnalysis: () =>
     set((state) => {
       console.log('[TIMELINE STATE RESET]', { previousAnalysisId: state.analysisId });
@@ -224,9 +228,11 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       return { semiAuto };
     }),
   hydrateFromBackend: async (analysisIdHint) => {
-    console.log('[EDITOR HYDRATION START]', { analysisIdHint: analysisIdHint ?? null });
-    console.log('[TIMELINE STATE HYDRATED]', { phase: 'request', analysisIdHint: analysisIdHint ?? null });
-    const data = await getRenderState(analysisIdHint);
+    set({ isHydratingFromBackend: true });
+    try {
+      console.log('[EDITOR HYDRATION START]');
+      console.log('[TIMELINE STATE HYDRATED]', { phase: 'request', analysisIdHint: analysisIdHint ?? null });
+      const data = await getRenderState(analysisIdHint);
     const mapTrack = (items: ClipBlock[] = [], track: TrackType) =>
       items.map((item) => ({ ...item, track }));
     const previewVideoUrl = data.previewVideoUrl ? `http://localhost:8000${data.previewVideoUrl}` : null;
@@ -238,23 +244,23 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     const selectedClip = generatedClips[0] ?? null;
     const selectedClipId = selectedClip?.id ?? null;
     const backendAnalysisId: string | null = data.analysisId ?? null;
-    const clipRenderMode: ClipRenderMode = data.render_mode === 'dual_region' || data.render_mode === 'semi_auto' || data.render_mode === 'raw_only' ? data.render_mode : 'ai_tracking';
-    if (!['dual_region', 'ai_tracking', 'semi_auto', 'raw_only'].includes(data.render_mode)) {
-      console.warn('[RENDER MODE FALLBACK]', { incoming: data.render_mode, fallback: clipRenderMode });
+    const validModes: ClipRenderMode[] = ['ai_tracking', 'dual_region', 'semi_auto', 'raw_only'];
+    const backendRenderMode = data.render_mode;
+    const priorMode = get().clipRenderMode;
+    const clipRenderMode: ClipRenderMode = validModes.includes(backendRenderMode) ? backendRenderMode : priorMode;
+    if (!validModes.includes(backendRenderMode)) {
+      console.warn('[RENDER MODE FALLBACK BLOCKED]', { incoming: backendRenderMode, preserved: priorMode });
     }
+    console.log('[RENDER MODE FROM BACKEND]', backendRenderMode);
     console.log('[RENDER MODE HYDRATE]', {
       analysisId: backendAnalysisId,
       render_mode: data.render_mode,
       clipRenderMode,
     });
-    if (data.dual_regions) {
-      console.log('[DUAL REGION CONFIG HYDRATED]', {
-        analysis_id: backendAnalysisId,
-        regionA: data.dual_regions.regionA,
-        regionB: data.dual_regions.regionB,
-      });
-    }
-    if (data.semi_auto) console.log('[SEMI AUTO CONFIG HYDRATED]', { analysis_id: backendAnalysisId, semi_auto: data.semi_auto });
+    const hydratedDualRegionConfig = data.dual_region_config ?? data.dual_regions ?? null;
+    const hydratedSemiAutoConfig = data.semi_auto_config ?? data.semi_auto ?? null;
+    console.log('[DUAL REGION HYDRATED]', hydratedDualRegionConfig);
+    console.log('[SEMI AUTO HYDRATED]', hydratedSemiAutoConfig);
     const currentAnalysisId = get().analysisId;
     const hasPersistedRenderMode = typeof data.render_mode === 'string' && data.render_mode.length > 0;
     const hasAvailableClips = generatedClips.length > 0;
@@ -286,8 +292,10 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       generatedClips,
       selectedClipId,
       clipRenderMode,
-      dualRegions: data.dual_regions ?? get().dualRegions,
-      semiAuto: data.semi_auto ?? get().semiAuto,
+      dualRegions: hydratedDualRegionConfig ?? get().dualRegions,
+      semiAuto: hydratedSemiAutoConfig ?? get().semiAuto,
+      isHydratingFromBackend: false,
+      hasHydratedFromBackend: true,
       tracks: {
         broll: mapTrack(data.broll, 'broll'),
         hooks: mapTrack(data.hooks, 'hooks'),
@@ -298,10 +306,16 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     if (selectedClipId) {
       console.log('[EDITOR AUTO CLIP SELECT]', { selectedClipId, source: selectedClip?.raw_clip_path ?? selectedClip?.final_video ?? null });
     }
-    console.log('[EDITOR RENDER MODE RESTORED]', { analysisId: backendAnalysisId, clipRenderMode });
-    console.log('[EDITOR HYDRATION SUCCESS]', { analysisId: backendAnalysisId, clipCount: generatedClips.length });
-    console.log('[TIMELINE STATE HYDRATED]', { phase: 'success', analysisId: backendAnalysisId, clipCount: generatedClips.length });
-    console.log('[FRONTEND ACTIVE ANALYSIS_ID]', backendAnalysisId);
+    console.log('[EDITOR MODE RESTORED]', clipRenderMode);
+    console.log('[NO FALLBACK OVERRIDE DETECTED]');
+      console.log('[EDITOR HYDRATION SUCCESS]', { analysisId: backendAnalysisId, clipCount: generatedClips.length });
+      console.log('[TIMELINE STATE HYDRATED]', { phase: 'success', analysisId: backendAnalysisId, clipCount: generatedClips.length });
+      console.log('[FRONTEND ACTIVE ANALYSIS_ID]', backendAnalysisId);
+    } finally {
+      if (get().isHydratingFromBackend) {
+        set({ isHydratingFromBackend: false });
+      }
+    }
   }
 }), {
   name: 'clipper-timeline-state',
