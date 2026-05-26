@@ -34,24 +34,14 @@ body { background: var(--bg-primary); }
 .ambient-bg { background: radial-gradient(circle at 14% 4%, rgba(56,189,248,.17), transparent 34%), radial-gradient(circle at 85% 11%, rgba(109,40,217,.18), transparent 32%), radial-gradient(circle at 42% 100%, rgba(30,64,175,.2), transparent 50%), linear-gradient(180deg,#050811,#090f1e 50%,#0b1224 100%); }
 
 
-.editor-shell { display:grid; grid-template-columns: 220px minmax(0,1fr) 320px; height:100vh; overflow:hidden; }
-.editor-sidebar,.editor-main,.editor-right { min-height: 0; }
-.editor-main { display:grid; grid-template-rows:72px minmax(0,1fr) 220px; height:100vh; min-width:0; min-height:0; overflow:hidden; gap:0.35rem; padding:0.4rem; }
-.editor-topbar { min-height:0; }
-.editor-player-card { min-height:0; display:flex; align-items:center; justify-content:center; overflow:hidden; width:100%; height:100%; padding:0.4rem; }
-.editor-video-area { width:100%; height:100%; min-height:0; display:flex; align-items:center; justify-content:center; overflow:hidden; }
-.editor-video-frame { width:min(100%, calc((100vh - 320px) * (16 / 9))); max-height:58%; aspect-ratio:16 / 9; min-height:0; }
-.editor-timeline-section { flex:0 0 200px; height:220px; max-height:220px; min-height:0; overflow:hidden; }
-.editor-right { width:320px; overflow-y:auto; height:100vh; padding:0.5rem 0.5rem 0.5rem 0; }
-.editor-sidebar { width:220px; overflow:hidden; height:100vh; padding:0.5rem; }
 
-@media (max-width: 1279px) {
-  .editor-shell { grid-template-columns: 220px minmax(0,1fr); }
-  .editor-right { display:none; }
-}
-
-@media (max-width: 767px) {
-  .editor-shell { grid-template-columns: minmax(0,1fr); }
-  .editor-sidebar { display:none; }
-  .editor-main { padding:0.35rem; }
-}
+.editor-shell { display:grid; grid-template-columns:220px minmax(0,1fr) 320px; height:100vh; overflow:hidden; }
+.editor-sidebar { width:220px; height:100vh; min-height:0; overflow:hidden; padding:0.5rem; }
+.editor-main { display:grid; grid-template-rows:72px minmax(0,1fr) 220px; height:100vh; min-width:0; min-height:0; overflow:hidden; padding:0.35rem; gap:0.35rem; }
+.editor-topbar { height:72px; min-height:72px; overflow:hidden; }
+.editor-player-card { min-height:0; display:flex; flex-direction:column; justify-content:center; overflow:hidden; padding:12px 16px 8px 16px; }
+.editor-video-area { width:100%; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:hidden; }
+.editor-video-frame { width:100%; max-height:calc(100vh - 380px); aspect-ratio:16 / 9; min-height:0; margin:0 auto; }
+.editor-player-controls { margin-top:12px; width:100%; }
+.editor-timeline-section { height:220px; max-height:220px; min-height:0; overflow:hidden; }
+.editor-right { width:320px; height:100vh; min-height:0; overflow-y:auto; padding:0.35rem 0.35rem 0.35rem 0; }
