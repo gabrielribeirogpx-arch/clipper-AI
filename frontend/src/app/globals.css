@@ -16,3 +16,13 @@ body { @apply antialiased text-slate-100; font-family: 'Inter Tight', Inter, ui-
 .timeline-zoom-slider { appearance:none; height: 4px; border-radius:99px; background: rgba(255,255,255,.2); }
 .timeline-zoom-slider::-webkit-slider-thumb { appearance:none; width:14px; height:14px; border-radius:99px; background: rgba(224,242,254,.95); box-shadow:0 0 0 4px rgba(56,189,248,.2); }
 .timeline-zoom-slider::-moz-range-thumb { width:14px; height:14px; border:0; border-radius:99px; background: rgba(224,242,254,.95); box-shadow:0 0 0 4px rgba(56,189,248,.2); }
+
+
+:root {
+  --bg-primary:#0a0a0f;--bg-secondary:#12121a;--bg-tertiary:#1a1a24;
+  --surface-primary:#1e1e2e;--surface-secondary:#25252f;--surface-elevated:#2d2d3a;
+  --accent-cyan:#22d3ee;--accent-blue:#3b82f6;--accent-purple:#8b5cf6;
+  --border-subtle:rgba(255,255,255,.06);--border-medium:rgba(255,255,255,.1);
+}
+body { background: var(--bg-primary); }
+.premium-chip { border:1px solid var(--border-subtle); background:rgba(255,255,255,.04); border-radius:999px; }
