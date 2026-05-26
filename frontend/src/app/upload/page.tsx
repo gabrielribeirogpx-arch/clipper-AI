@@ -162,9 +162,9 @@ export default function UploadPage() {
     }
     if (uploadStatus === 'processing') {
       useUploadStore.getState().updateIngestState({ analysisId, status: 'processing' });
-      console.log('[MANUAL REGION WAITING FOR SETUP]', { analysis_id: analysisId, status: uploadStatus });
-      console.log('[MANUAL REGION REDIRECT]', analysisId);
-      console.log('[MANUAL REGION SETUP REQUIRED]', { analysis_id: analysisId });
+      console.log('[SEMI AUTO WAITING FOR SETUP]', { analysis_id: analysisId, status: uploadStatus });
+      console.log('[SEMI AUTO REDIRECT]', analysisId);
+      console.log('[SEMI AUTO SETUP REQUIRED]', { analysis_id: analysisId });
       dualRegionRedirectedRef.current = true;
       router.push(`/editor?analysis_id=${analysisId}`);
       return;
@@ -181,9 +181,9 @@ export default function UploadPage() {
     }
     if (frontendRequestedMode === 'semi_auto' || backendReturnedMode === 'semi_auto') {
       const forcedTarget = `/editor?analysis_id=${analysisId}`;
-      console.log('[MANUAL REGION WAITING FOR SETUP]', { frontendRequestedMode, backendReturnedMode: backendReturnedMode ?? null });
-      console.log('[MANUAL REGION REDIRECT]', analysisId);
-      console.log('[MANUAL REGION SETUP REQUIRED]', { analysis_id: analysisId });
+      console.log('[SEMI AUTO WAITING FOR SETUP]', { frontendRequestedMode, backendReturnedMode: backendReturnedMode ?? null });
+      console.log('[SEMI AUTO REDIRECT]', analysisId);
+      console.log('[SEMI AUTO SETUP REQUIRED]', { analysis_id: analysisId });
       dualRegionRedirectedRef.current = true;
       router.push(forcedTarget);
       return;
@@ -237,12 +237,12 @@ export default function UploadPage() {
       }
       if (result.status === 'processing') {
         store.updateIngestState({ status: 'processing', analysisId: result.analysis_id });
-        console.log('[MANUAL REGION WAITING FOR SETUP]', { analysis_id: result.analysis_id, status: result.status });
+        console.log('[SEMI AUTO WAITING FOR SETUP]', { analysis_id: result.analysis_id, status: result.status });
         setTimeout(() => redirectToPostAnalyzeTarget(result.analysis_id, renderMode, result.render_mode), 300);
       }
       if (result.status === 'processing') {
         store.updateIngestState({ status: 'processing', analysisId });
-        console.log('[MANUAL REGION WAITING FOR SETUP]', { analysis_id: analysisId, status: result.status });
+        console.log('[SEMI AUTO WAITING FOR SETUP]', { analysis_id: analysisId, status: result.status });
         setTimeout(() => redirectToPostAnalyzeTarget(analysisId, renderMode, result.render_mode), 300);
       }
   };
@@ -386,10 +386,10 @@ export default function UploadPage() {
         }
         if (payload.status === 'processing') {
           const analysisId = payload.analysis_id ?? useUploadStore.getState().analysisId;
-          console.log('[MANUAL REGION WAITING FOR SETUP]', payload);
+          console.log('[SEMI AUTO WAITING FOR SETUP]', payload);
           if (analysisId && !dualRegionRedirectedRef.current) {
-            console.log('[MANUAL REGION REDIRECT]', analysisId);
-            console.log('[MANUAL REGION SETUP REQUIRED]', { analysis_id: analysisId });
+            console.log('[SEMI AUTO REDIRECT]', analysisId);
+            console.log('[SEMI AUTO SETUP REQUIRED]', { analysis_id: analysisId });
             dualRegionRedirectedRef.current = true;
             router.push(`/editor?analysis_id=${analysisId}`);
             return;
@@ -525,10 +525,10 @@ export default function UploadPage() {
           }
         }
         if (state.status === 'processing') {
-          console.log('[MANUAL REGION WAITING FOR SETUP]', state);
+          console.log('[SEMI AUTO WAITING FOR SETUP]', state);
           if (state.analysis_id && !dualRegionRedirectedRef.current) {
-            console.log('[MANUAL REGION REDIRECT]', state.analysis_id);
-            console.log('[MANUAL REGION SETUP REQUIRED]', { analysis_id: state.analysis_id });
+            console.log('[SEMI AUTO REDIRECT]', state.analysis_id);
+            console.log('[SEMI AUTO SETUP REQUIRED]', { analysis_id: state.analysis_id });
             dualRegionRedirectedRef.current = true;
             router.push(`/semi-auto/${state.analysis_id}`);
             return;
@@ -599,7 +599,7 @@ export default function UploadPage() {
           <div className="flex gap-2 text-sm text-slate-200">
             <button type="button" onClick={() => store.setRenderMode('ai_tracking')} className={`rounded-lg px-3 py-2 ${renderMode === 'ai_tracking' ? 'bg-cyan-400 text-black' : 'bg-slate-800'}`}>AI Tracking</button>
             <button type="button" onClick={() => store.setRenderMode('dual_region')} className={`rounded-lg px-3 py-2 ${renderMode === 'dual_region' ? 'bg-cyan-400 text-black' : 'bg-slate-800'}`}>Dual Region</button>
-            <button type="button" onClick={() => { console.log('[MANUAL REGION MODE SELECTED]'); store.setRenderMode('semi_auto'); }} className={`rounded-lg px-3 py-2 ${renderMode === 'semi_auto' ? 'bg-cyan-400 text-black' : 'bg-slate-800'}`}>Semi Auto</button>
+            <button type="button" onClick={() => { console.log('[SEMI AUTO MODE SELECTED]'); store.setRenderMode('semi_auto'); }} className={`rounded-lg px-3 py-2 ${renderMode === 'semi_auto' ? 'bg-cyan-400 text-black' : 'bg-slate-800'}`}>Semi Auto</button>
           </div>
 
           <input value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)} placeholder="https://youtube.com/live/..." className="rounded-lg bg-slate-900 px-3 py-2 text-sm" />

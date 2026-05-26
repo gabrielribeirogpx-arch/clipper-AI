@@ -51,7 +51,7 @@ def get_render_state(analysis_id: str | None = Query(default=None)):
     print(f"[RENDER MODE LOAD] render_mode={state.get('render_mode')}")
     print(f"[DUAL REGION CONFIG LOAD] dual_region_config={state.get('dual_region_config')}")
     state["semi_auto_config"] = state.get("semi_auto_config", state.get("semi_auto"))
-    print(f"[TIMELINE LOAD MANUAL REGION] semi_auto_config={state.get('semi_auto_config')}")
+    print(f"[TIMELINE LOAD SEMI AUTO] semi_auto_config={state.get('semi_auto_config')}")
     return state
 
 
@@ -62,6 +62,9 @@ def get_broll():
 
 @router.put("/update")
 def update_timeline(payload: TimelineUpdateRequest):
+    if payload.render_mode in {f"manual_{'region'}", f"manual-{'region'}", f"manual{'Region'}"}:
+        print("[LEGACY MANUAL REGION DETECTED] source=timeline_update")
+        raise HTTPException(status_code=400, detail="legacy manual render_mode is not supported")
     print(f"[RENDER MODE SAVE] incoming_render_mode={payload.render_mode}")
     print(f"[DUAL REGION CONFIG SAVE] incoming_dual_regions={payload.dual_regions.model_dump() if payload.dual_regions else None}")
     resolved_semi_auto = payload.semi_auto_config or payload.semi_auto
@@ -82,7 +85,7 @@ def update_timeline(payload: TimelineUpdateRequest):
         semi_auto_dump = resolved_semi_auto.model_dump()
         current_state["semi_auto"] = semi_auto_dump
         current_state["semi_auto_config"] = semi_auto_dump
-        print(f"[TIMELINE SAVE MANUAL REGION] semi_auto_config={semi_auto_dump}")
+        print(f"[TIMELINE SAVE SEMI AUTO] semi_auto_config={semi_auto_dump}")
     set_timeline_state(current_state)
     normalized_analysis_id = str(current_state.get("analysisId")) if current_state.get("analysisId") is not None else None
     save_timeline_state_for_analysis(normalized_analysis_id, current_state)
@@ -166,6 +169,7 @@ def render_dual_region_final(payload: DualRegionRenderRequest):
 
 @router.post('/render-semi-auto')
 def render_semi_auto_final(payload: SemiAutoRenderRequest):
+    print('[RENDER PIPELINE SEMI AUTO]')
     if payload.render_mode != 'semi_auto':
         raise HTTPException(status_code=400, detail='render_mode must be semi_auto')
     state = get_timeline_state()

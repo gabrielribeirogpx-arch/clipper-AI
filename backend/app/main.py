@@ -9,6 +9,7 @@ from app.api.upload import router as upload_router
 from app.api.timeline import router as timeline_router
 from app.api.export import router as export_router
 from app.db import Base, DB_PATH, engine
+from sqlalchemy import text
 
 app = FastAPI()
 
@@ -47,6 +48,15 @@ app.include_router(export_router)
 @app.on_event("startup")
 def log_timeline_routes() -> None:
     Base.metadata.create_all(bind=engine)
+    print("[DB MIGRATION CHECK]")
+    with engine.begin() as conn:
+        columns = conn.execute(text("PRAGMA table_info(timeline_render_state)")).fetchall()
+        exists = any(column[1] == "semi_auto_config" for column in columns)
+        print(f"[DB COLUMN EXISTS] table=timeline_render_state column=semi_auto_config exists={exists}")
+        if not exists:
+            conn.execute(text("ALTER TABLE timeline_render_state ADD COLUMN semi_auto_config JSON"))
+            print("[DB COLUMN CREATED] table=timeline_render_state column=semi_auto_config")
+    print("[DB MIGRATION COMPLETE]")
     print(f"[TIMELINE DB PATH] {DB_PATH}")
     timeline_routes = [
         f"{','.join(sorted(list(route.methods or [])))} {route.path}"

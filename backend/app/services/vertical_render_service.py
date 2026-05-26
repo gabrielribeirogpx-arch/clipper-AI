@@ -253,9 +253,9 @@ def render_semi_auto_vertical(video_path: str, output_path: str) -> str:
     cmd = ["ffmpeg","-y","-i",video_path,"-vf",vf,"-map","0:v","-map","0:a?","-c:v",EXPORT_VIDEO_CODEC,"-crf",str(EXPORT_CRF),"-preset",EXPORT_PRESET,"-pix_fmt",EXPORT_PIXEL_FORMAT,"-c:a",EXPORT_AUDIO_CODEC,"-b:a",EXPORT_AUDIO_BITRATE,"-movflags",EXPORT_MOVFLAGS,output_path]
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if proc.returncode != 0:
-        raise RuntimeError(f"Manual region render failed: {proc.stderr}")
+        raise RuntimeError(f"Semi auto render failed: {proc.stderr}")
     final_w, final_h = _probe_dimensions(output_path)
-    print(f"[MANUAL REGION OUTPUT RESOLUTION] {final_w}x{final_h}")
+    print(f"[SEMI AUTO OUTPUT RESOLUTION] {final_w}x{final_h}")
     if (final_w, final_h) != TARGET_RENDER_SIZE:
         raise RuntimeError(f"Semi-auto rendered video has invalid size {final_w}x{final_h}; expected 1080x1920")
     print("[SEMI AUTO COMPOSITION COMPLETE]")
