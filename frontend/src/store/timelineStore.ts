@@ -123,7 +123,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     regionA: { x: 120, y: 80, width: 1680, height: 460 },
     regionB: { x: 120, y: 540, width: 1680, height: 460 },
   },
-  manualRegion: { x: 420, y: 60, width: 1080, height: 960 },
+  manualRegion: { x: 656, y: 0, width: 608, height: 1080 },
   resetForNewAnalysis: () =>
     set((state) => {
       console.log('[TIMELINE STATE RESET]', { previousAnalysisId: state.analysisId });

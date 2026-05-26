@@ -23,6 +23,9 @@ from app.services.render_quality import (
 SAFE_CPU_RENDER = os.getenv("SAFE_CPU_RENDER", "false").strip().lower() in {"1", "true", "yes", "on"}
 MAX_TRACKING_WIDTH = 1920
 TARGET_RENDER_SIZE = (1080, 1920)
+MANUAL_REGION_TARGET_ASPECT = 9 / 16
+MANUAL_REGION_MIN_HEIGHT = 720
+MANUAL_REGION_MIN_WIDTH = int(round(MANUAL_REGION_MIN_HEIGHT * MANUAL_REGION_TARGET_ASPECT))
 FINAL_EXPORT_SETTINGS = {
     "codec": EXPORT_VIDEO_CODEC,
     "preset": EXPORT_PRESET,
@@ -32,6 +35,31 @@ FINAL_EXPORT_SETTINGS = {
     "pix_fmt": EXPORT_PIXEL_FORMAT,
     "movflags": EXPORT_MOVFLAGS,
 }
+
+
+def normalize_manual_region(manual_region: Dict, frame_width: int = 1920, frame_height: int = 1080) -> Dict[str, int]:
+    raw_w = int(manual_region.get("width", 0))
+    raw_h = int(manual_region.get("height", 0))
+    raw_x = int(manual_region.get("x", 0))
+    raw_y = int(manual_region.get("y", 0))
+    if raw_w <= 0 or raw_h <= 0:
+        raise RuntimeError("manual_region is required with positive width/height")
+
+    max_h = frame_height
+    min_h = min(MANUAL_REGION_MIN_HEIGHT, max_h)
+    requested_h = max(min_h, min(raw_h, max_h))
+    width_from_aspect = int(round(requested_h * MANUAL_REGION_TARGET_ASPECT))
+    max_w = int(round(frame_height * MANUAL_REGION_TARGET_ASPECT))
+    w = max(MANUAL_REGION_MIN_WIDTH, min(width_from_aspect, max_w))
+    h = int(round(w / MANUAL_REGION_TARGET_ASPECT))
+    x = max(0, min(raw_x, frame_width - w))
+    y = max(0, min(raw_y, frame_height - h))
+    aspect_ratio = w / h
+    print(f"[MANUAL REGION FINAL] width={w} height={h} aspect_ratio={aspect_ratio:.6f}")
+
+    if abs(aspect_ratio - MANUAL_REGION_TARGET_ASPECT) > 0.002:
+        raise RuntimeError(f"manual_region aspect ratio invalid: {aspect_ratio:.6f}, expected {MANUAL_REGION_TARGET_ASPECT:.6f}")
+    return {"x": x, "y": y, "width": w, "height": h}
 
 
 def _probe_dimensions(media_path: str) -> tuple[int, int]:
@@ -208,17 +236,20 @@ def render_dual_region_clip(video_path: str, output_path: str, dual_regions: Dic
 def render_manual_region_vertical(video_path: str, output_path: str, manual_region: Dict) -> str:
     print("[MANUAL REGION PIPELINE ACTIVE]")
     print(f"[MANUAL REGION CONFIG RECEIVED] manual_region={manual_region}")
-    w = int(manual_region.get("width", 0))
-    h = int(manual_region.get("height", 0))
-    x = int(manual_region.get("x", 0))
-    y = int(manual_region.get("y", 0))
-    if w <= 0 or h <= 0:
+    try:
+        normalized = normalize_manual_region(manual_region, frame_width=1920, frame_height=1080)
+    except RuntimeError:
         print("[MANUAL REGION CONFIG MISSING]")
         print("[MANUAL REGION RENDER BLOCKED]")
-        raise RuntimeError("manual_region is required with positive width/height")
+        raise
+
+    w = normalized["width"]
+    h = normalized["height"]
+    x = normalized["x"]
+    y = normalized["y"]
     print(f"[MANUAL REGION CROP] x={x} y={y} width={w} height={h}")
-    print("[MANUAL REGION SCALE] target=1080x1920 force_original_aspect_ratio=increase crop_center")
-    vf = f"crop={w}:{h}:{x}:{y},scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p"
+    print("[MANUAL REGION SCALE] target=1080x1920 exact_9x16")
+    vf = f"crop={w}:{h}:{x}:{y},scale=1080:1920:flags=lanczos,format=yuv420p"
     cmd = ["ffmpeg","-y","-i",video_path,"-vf",vf,"-map","0:v","-map","0:a?","-c:v",EXPORT_VIDEO_CODEC,"-crf",str(EXPORT_CRF),"-preset",EXPORT_PRESET,"-pix_fmt",EXPORT_PIXEL_FORMAT,"-c:a",EXPORT_AUDIO_CODEC,"-b:a",EXPORT_AUDIO_BITRATE,"-movflags",EXPORT_MOVFLAGS,output_path]
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if proc.returncode != 0:
