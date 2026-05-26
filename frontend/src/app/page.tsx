@@ -35,11 +35,11 @@ export default function Home() {
       const height = window.innerHeight;
       const nextExpanded = width >= 1280;
       setSidebarExpanded(nextExpanded);
-      console.log('[EDITOR WIDE LAYOUT ACTIVE]');
+      console.log('[WORKSTATION LAYOUT ACTIVE]');
       console.log(`[VIEWPORT SIZE] ${width}x${height}`);
-      console.log('[MAIN GRID RECALCULATED]');
+      console.log('[MAIN GRID HEIGHT FIXED]');
       console.log(`[SIDEBAR RESPONSIVE MODE] ${nextExpanded ? 'expanded' : 'collapsed'}`);
-      console.log('[RIGHT PANEL COMPACT MODE]');
+      console.log('[EDITOR VIEWPORT LOCKED]');
     };
 
     recalcLayout();
@@ -67,7 +67,7 @@ export default function Home() {
   return (
     <main className="relative h-screen w-full overflow-hidden bg-[var(--bg-primary)] text-slate-100">
       <div className="ambient-bg" />
-      <div className="editor-shell relative grid h-full w-full grid-cols-1 gap-3 p-2.5 md:p-3 lg:gap-4 lg:p-4 xl:p-5">
+      <div className="editor-shell relative grid h-full w-full grid-cols-1 gap-2 p-2 md:p-2.5 lg:gap-3 lg:p-3">
         <aside className={`panel-premium editor-sidebar flex h-full min-h-0 flex-col ${sidebarExpanded ? 'p-6' : 'p-4'}`}>
           <div className="border-b border-white/10 pb-5">
             <div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-indigo-500 font-bold text-slate-950">✂</div><div><p className="text-lg font-semibold">Clipper AI</p><p className="text-xs tracking-[0.18em] text-slate-400">Creative OS</p></div></div>
@@ -79,8 +79,8 @@ export default function Home() {
           <div className="mt-4 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3"><div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-600/60">AM</div><div><p className="text-sm">Ana Martins</p><p className="text-xs text-slate-400">Founder</p></div></div></>}
         </aside>
 
-        <section className="editor-main min-w-0 flex-1 space-y-3 overflow-y-auto pr-1 lg:space-y-4 xl:space-y-5">
-          <header className="panel-premium px-6 py-5">
+        <section className="editor-main min-w-0 flex min-h-0 flex-col gap-2 overflow-hidden lg:gap-3">
+          <header className="panel-premium shrink-0 px-5 py-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Workspace / Campaigns / Q2</p>
@@ -97,7 +97,7 @@ export default function Home() {
           <TimelineTracks />
         </section>
 
-        <section className="editor-right min-w-0 space-y-3 overflow-y-auto pr-1 lg:space-y-4 xl:space-y-5">
+        <section className="editor-right min-w-0 min-h-0 space-y-2 overflow-y-auto pr-1 lg:space-y-3">
           <ClipResultsPanel />
           <InspectorPanel />
         </section>
