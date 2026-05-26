@@ -12,6 +12,13 @@ from app.services.social_metadata_service import generate_social_metadata
 from app.services.ai_local_service import generate_clip_metadata
 from app.data.timeline_state import set_timeline_state, save_timeline_state_for_analysis
 from app.services.analysis_cache_service import load_analysis_cache, save_analysis_cache
+from app.services.chunk_processing_service import (
+    analyze_chunks_parallel,
+    is_long_video,
+    merge_chunk_analysis,
+    resolve_chunk_duration,
+    split_video_into_chunks,
+)
 
 
 def process_video(video_path, original_video_path=None, proxy_video_path=None, output_dir="app/clips", render_mode="ai_tracking", dual_region_config=None, min_clip_length=30, max_clip_length=90, max_clips=25, min_score=0.45, overlap_tolerance=0.6, step_logger=None):
@@ -27,17 +34,39 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
         print("[PROXY GENERATED]")
     print("[PROXY ACTIVE]")
 
-    log("[STEP 5 - TRANSCRIPTION START]")
-    transcription = transcribe_video(proxy_video_path)
-    log("[STEP 6 - TRANSCRIPTION FINISH]")
-
     analysis_id = os.path.basename(output_dir.rstrip("/"))
-    cached = load_analysis_cache(analysis_id)
-    if cached:
-        hooks = cached.get("hooks", [])
+    if is_long_video(proxy_video_path):
+        print("[LONG VIDEO MODE ACTIVE]")
+        print("[STREAM PROCESSING ACTIVE]")
+        print("[PROGRESSIVE CLIPS ACTIVE]")
+        chunk_duration = resolve_chunk_duration()
+        chunks = split_video_into_chunks(proxy_video_path, output_dir, chunk_duration)
+        chunk_analysis = analyze_chunks_parallel(
+            chunks,
+            analysis_id=analysis_id,
+            min_clip_length=min_clip_length,
+            max_clip_length=max_clip_length,
+            max_clips=max_clips,
+            min_score=min_score,
+            overlap_tolerance=overlap_tolerance,
+            on_chunk_complete=lambda item: print(f"[NEW CLIPS STREAMED] chunk={item.get('chunk_id')}")
+        )
+        merged = merge_chunk_analysis(chunk_analysis, output_dir)
+        transcription = {"segments": merged["segments"], "speaker_segments": []}
+        hooks = merged["hooks"]
     else:
-        hooks = detect_hooks(transcription, min_duration=min_clip_length, max_duration=max_clip_length, max_clips=max_clips, min_score=min_score, overlap_tolerance=overlap_tolerance)
-        save_analysis_cache(analysis_id, {"hooks": hooks, "face_boxes": [], "scene_changes": [], "crop_regions": [], "viral_scores": [h.get("viral_score", 0) for h in hooks], "hook_timestamps": [{"start": h.get("start"), "end": h.get("end")} for h in hooks], "tracking_regions": []})
+        log("[STEP 5 - TRANSCRIPTION START]")
+        transcription = transcribe_video(proxy_video_path)
+        log("[STEP 6 - TRANSCRIPTION FINISH]")
+        cached = load_analysis_cache(analysis_id)
+        if cached:
+            hooks = cached.get("hooks", [])
+        else:
+            hooks = detect_hooks(transcription, min_duration=min_clip_length, max_duration=max_clip_length, max_clips=max_clips, min_score=min_score, overlap_tolerance=overlap_tolerance)
+            save_analysis_cache(analysis_id, {"hooks": hooks, "face_boxes": [], "scene_changes": [], "crop_regions": [], "viral_scores": [h.get("viral_score", 0) for h in hooks], "hook_timestamps": [{"start": h.get("start"), "end": h.get("end")} for h in hooks], "tracking_regions": []})
+
+    hooks = sorted(hooks, key=lambda h: h.get("viral_score", 0), reverse=True)
+    print("[TOP CLIPS PRIORITIZED]")
 
     print("[LOW FPS ANALYSIS ENABLED]")
     print("[ANALYSIS FPS] 3")
@@ -49,7 +78,7 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
     broll_engine = BRollEngine()
     generated_clips, timeline_broll, timeline_cuts = [], [], []
 
-    for index, hook in enumerate(hooks):
+    for index, hook in enumerate(hooks[:5] + hooks[5:10] + hooks[10:]):
         raw_clip_path = cut_clip(source_video_path, hook["start"], hook["end"], f"raw_clip_{index}.mp4", output_dir=output_dir)
         generated_clips.append({"raw_clip_path": raw_clip_path, "clip_path": raw_clip_path, "final_clip": raw_clip_path, **hook, "title_suggestion": "", "caption_suggestion": "", "description_suggestion": "", "hashtags": [], "emotion": "neutro", "category": "curiosidade", "viral_reason": "", "title_options": [], "broll_timeline": []})
         timeline_cuts.append({"id": f"cut-{index}", "label": f"Cut {index + 1}", "start": hook["start"], "end": hook["start"] + 0.1})
