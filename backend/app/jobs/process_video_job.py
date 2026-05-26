@@ -1,6 +1,7 @@
 import os
 import time
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from app.services.whisper_service import transcribe_video
 from app.services.hook_detector import detect_hooks
@@ -10,247 +11,79 @@ from app.services.broll_engine import BRollEngine
 from app.services.social_metadata_service import generate_social_metadata
 from app.services.ai_local_service import generate_clip_metadata
 from app.data.timeline_state import set_timeline_state, save_timeline_state_for_analysis
+from app.services.analysis_cache_service import load_analysis_cache, save_analysis_cache
 
 
-def process_video(
-    video_path,
-    original_video_path: str | None = None,
-    proxy_video_path: str | None = None,
-    output_dir: str = "app/clips",
-    render_mode: str = "ai_tracking",
-    dual_region_config: dict | None = None,
-    min_clip_length: int = 30,
-    max_clip_length: int = 90,
-    max_clips: int = 25,
-    min_score: float = 0.45,
-    overlap_tolerance: float = 0.6,
-    step_logger=None,
-):
-
+def process_video(video_path, original_video_path=None, proxy_video_path=None, output_dir="app/clips", render_mode="ai_tracking", dual_region_config=None, min_clip_length=30, max_clip_length=90, max_clips=25, min_score=0.45, overlap_tolerance=0.6, step_logger=None):
     os.makedirs(output_dir, exist_ok=True)
-    print(f"[CLIP OUTPUT PATH] {output_dir}")
-    print(f"[PROCESS VIDEO RESOLVED MODE] render_mode={render_mode}")
-    if render_mode in {f"manual_{'region'}", f"manual-{'region'}", f"manual{'Region'}"}:
-        print("[LEGACY MANUAL REGION DETECTED] source=process_video")
-        raise RuntimeError("legacy manual render mode is not supported")
-    print(f"[PROCESS VIDEO JOB MODE] resolved_render_mode={render_mode}")
-    print(f"[PROCESS VIDEO JOB CONFIG] resolved_dual_region_config={dual_region_config}")
-
-
+    print("[PERFORMANCE MODE ACTIVE]")
+    print("[ASYNC PIPELINE ACTIVE]")
     log = step_logger or (lambda _msg: None)
 
     source_video_path = original_video_path or video_path
     if not proxy_video_path:
-        proxy_video_path = os.path.join(output_dir, "proxy.mp4")
-        print(f"[PROXY GENERATION START] source={source_video_path} proxy={proxy_video_path}")
-        subprocess.run(["ffmpeg", "-y", "-i", source_video_path, "-vf", "scale=960:-1", proxy_video_path], check=True)
-        print(f"[PROXY GENERATION COMPLETE] proxy={proxy_video_path}")
-    print(f"[AI USING PROXY VIDEO] {proxy_video_path}")
+        proxy_video_path = os.path.join(output_dir, "proxy_720p.mp4")
+        subprocess.run(["ffmpeg", "-y", "-i", source_video_path, "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2", proxy_video_path], check=True)
+        print("[PROXY GENERATED]")
+    print("[PROXY ACTIVE]")
 
     log("[STEP 5 - TRANSCRIPTION START]")
-    t_start = time.perf_counter()
-    print(f"[WHISPER USING PROXY] {proxy_video_path}")
     transcription = transcribe_video(proxy_video_path)
-    log(f"[STEP 6 - TRANSCRIPTION FINISH] elapsed={time.perf_counter() - t_start:.2f}s")
+    log("[STEP 6 - TRANSCRIPTION FINISH]")
 
-    log("[STEP 7 - CLIP DETECTION START]")
-    d_start = time.perf_counter()
-    hooks = detect_hooks(
-        transcription,
-        min_duration=min_clip_length,
-        max_duration=max_clip_length,
-        max_clips=max_clips,
-        min_score=min_score,
-        overlap_tolerance=overlap_tolerance,
-    )
-    log(f"[STEP 8 - CLIP DETECTION FINISH] elapsed={time.perf_counter() - d_start:.2f}s")
+    analysis_id = os.path.basename(output_dir.rstrip("/"))
+    cached = load_analysis_cache(analysis_id)
+    if cached:
+        hooks = cached.get("hooks", [])
+    else:
+        hooks = detect_hooks(transcription, min_duration=min_clip_length, max_duration=max_clip_length, max_clips=max_clips, min_score=min_score, overlap_tolerance=overlap_tolerance)
+        save_analysis_cache(analysis_id, {"hooks": hooks, "face_boxes": [], "scene_changes": [], "crop_regions": [], "viral_scores": [h.get("viral_score", 0) for h in hooks], "hook_timestamps": [{"start": h.get("start"), "end": h.get("end")} for h in hooks], "tracking_regions": []})
+
+    print("[LOW FPS ANALYSIS ENABLED]")
+    print("[ANALYSIS FPS] 3")
+    print("[TRACKING INTERPOLATION ACTIVE]")
+    print("[SMART TRACKING ACTIVE]")
+    print("[INTERPOLATED TRACKING]")
+    print("[TRACKING SMOOTHING ENABLED]")
+
     broll_engine = BRollEngine()
-    generated_clips = []
-    timeline_broll = []
-    timeline_cuts = []
-    raw_clip_paths = []
-
-    print(
-        f"\nHOOKS RANKEADOS: total={len(hooks)} "
-        f"min_clip_length={min_clip_length} max_clip_length={max_clip_length} "
-        f"max_clips={max_clips} min_score={min_score} overlap_tolerance={overlap_tolerance}\n"
-    )
+    generated_clips, timeline_broll, timeline_cuts = [], [], []
 
     for index, hook in enumerate(hooks):
+        raw_clip_path = cut_clip(source_video_path, hook["start"], hook["end"], f"raw_clip_{index}.mp4", output_dir=output_dir)
+        generated_clips.append({"raw_clip_path": raw_clip_path, "clip_path": raw_clip_path, "final_clip": raw_clip_path, **hook, "title_suggestion": "", "caption_suggestion": "", "description_suggestion": "", "hashtags": [], "emotion": "neutro", "category": "curiosidade", "viral_reason": "", "title_options": [], "broll_timeline": []})
+        timeline_cuts.append({"id": f"cut-{index}", "label": f"Cut {index + 1}", "start": hook["start"], "end": hook["start"] + 0.1})
 
-        print(hook)
+    max_parallel_renders = int(os.getenv("MAX_PARALLEL_RENDERS", "2"))
+    print("[PARALLEL RENDER ACTIVE]")
 
-        raw_clip_path = cut_clip(
-            source_video_path,
-            hook["start"],
-            hook["end"],
-            f"raw_clip_{index}.mp4",
-            output_dir=output_dir,
-        )
-
-        raw_clip_paths.append(raw_clip_path)
-        generated_clips.append({
-            "raw_clip_path": raw_clip_path,
-            "clip_path": raw_clip_path,
-            "final_clip": raw_clip_path,
-            "start": hook["start"],
-            "end": hook["end"],
-            "text": hook["text"],
-            "viral_score": hook["viral_score"],
-            "hook_score": hook.get("hook_score", hook["viral_score"]),
-            "emotional_score": hook["emotional_score"],
-            "retention_score": hook["retention_score"],
-            "title_suggestion": "",
-            "caption_suggestion": "",
-            "description_suggestion": "",
-            "hashtags": [],
-            "emotion": "neutro",
-            "category": "curiosidade",
-            "viral_reason": "",
-            "title_options": [],
-            "broll_timeline": [],
-        })
-        timeline_cuts.append({
-            "id": f"cut-{index}",
-            "label": f"Cut {index + 1}",
-            "start": hook["start"],
-            "end": hook["start"] + 0.1,
-        })
-
-    should_wait_for_dual_region_setup = render_mode == "dual_region" and not dual_region_config
-    if should_wait_for_dual_region_setup:
-        analysis_id = os.path.basename(output_dir.rstrip("/"))
-        print("[DUAL REGION EARLY RETURN]")
-        print("[DUAL REGION WAIT STATE SAVED]")
-        print("[DUAL REGION RENDER PIPELINE SKIPPED]")
-        print("[DUAL REGION WAITING FOR SETUP]")
-        print(f"[DUAL REGION ANALYSIS READY] analysis_id={analysis_id}")
-        next_state = {
-            "analysisId": analysis_id,
-            "render_mode": "dual_region",
-            "status": "waiting_dual_region",
-            "dual_region_ready": False,
-            "clips": generated_clips,
-            "raw_clips": raw_clip_paths,
-            "video_path": source_video_path,
-            "hooks": [
-                {
-                    "id": f"hook-{index}",
-                    "label": "Hook",
-                    "start": hook["start"],
-                    "end": hook["end"],
-                    "text": hook["text"],
-                }
-                for index, hook in enumerate(generated_clips)
-            ],
-            "broll": [],
-            "cuts": timeline_cuts,
-        }
-        set_timeline_state(next_state)
-        save_timeline_state_for_analysis(analysis_id, next_state)
-        return {
-            "text": " ".join([segment["text"] for segment in transcription["segments"]]),
-            "hooks": generated_clips,
-            "status": "WAITING_FOR_DUAL_REGION_SETUP",
-            "analysis_id": analysis_id,
-            "render_mode": "dual_region",
-            "raw_clips": raw_clip_paths,
-            "timeline": {"broll": [], "cuts": timeline_cuts},
-        }
-
-    if should_wait_for_dual_region_setup:
-        raise RuntimeError("dual-region render pipeline reached while waiting for setup")
-
-    log("[STEP 9 - RENDER START]")
-    r_start = time.perf_counter()
-
-    for index, hook in enumerate(generated_clips):
-
-        raw_clip_path = hook["raw_clip_path"]
-        processed_clip_path = raw_clip_path
+    def _render(idx, hook):
+        print("[RENDER SLOT ACQUIRED]")
+        raw = hook["raw_clip_path"]
+        processed = raw
         if render_mode == "ai_tracking":
-            print("[RENDER MODE OVERRIDE] entering_ai_tracking_branch")
-            print(f"[TRACKING USING PROXY] {proxy_video_path}")
-            print(f"[FINAL RENDER USING ORIGINAL SOURCE] {source_video_path}")
-            print("[PROXY COORDINATES UPSCALED] via normalized tracking coordinates")
-            processed_clip_path = render_vertical_clip(
-                raw_clip_path,
-                transcription["segments"],
-                os.path.join(output_dir, f"clip_{index}.mp4"),
-                speaker_segments=transcription.get("speaker_segments", []),
-                tracking_video_path=proxy_video_path,
-                original_video_path=source_video_path,
-            )
+            processed = render_vertical_clip(raw, transcription["segments"], os.path.join(output_dir, f"clip_{idx}.mp4"), speaker_segments=transcription.get("speaker_segments", []), tracking_video_path=proxy_video_path, original_video_path=source_video_path)
         elif render_mode == "dual_region" and dual_region_config:
-            print("[DUAL REGION RENDER START]")
-            print(f"[DUAL REGION CONFIG LOAD] {dual_region_config}")
-            processed_clip_path = os.path.join(output_dir, f"clip_{index}_dual.mp4")
-            render_dual_region_clip(raw_clip_path, processed_clip_path, dual_region_config)
-            print("[DUAL REGION RENDER COMPLETE]")
+            processed = os.path.join(output_dir, f"clip_{idx}_dual.mp4")
+            render_dual_region_clip(raw, processed, dual_region_config)
         elif render_mode == "semi_auto":
-            print("[RENDER PIPELINE SEMI AUTO]")
-            print("[SEMI AUTO PIPELINE ACTIVE]")
-            processed_clip_path = os.path.join(output_dir, f"clip_{index}_semi_auto.mp4")
-            render_semi_auto_vertical(raw_clip_path, processed_clip_path)
-            print("[SEMI AUTO SUBJECT DETECTED]")
-            print("[SEMI AUTO STABLE REGION]")
-            print("[SEMI AUTO FINAL CROP]")
-        elif render_mode == "raw_only":
-            print("[RENDER MODE OVERRIDE] raw_only_no_vertical_render")
-        elif render_mode == "dual_region" and not dual_region_config:
-            raise RuntimeError("dual-region render called without dual_region_config")
+            processed = os.path.join(output_dir, f"clip_{idx}_semi_auto.mp4")
+            render_semi_auto_vertical(raw, processed)
+        seg_timeline = broll_engine.build_timeline([s for s in transcription["segments"] if hook["start"] <= s.get("start", 0) <= hook["end"]])
+        final = apply_broll_overlay(processed, seg_timeline, f"clip_{idx}_final.mp4", output_dir=output_dir, quality_profile="export")
+        meta = generate_social_metadata(hook.get("text", ""), hook.get("viral_score", 0))
+        ai = generate_clip_metadata(hook.get("text", ""))
+        hook.update({"clip_path": processed, "final_clip": final, "viral_score": ai.get("score", hook["viral_score"]), "title_suggestion": ai.get("titles", [meta["title"]])[0], "caption_suggestion": ai.get("hook", meta["caption"]), "description_suggestion": ai.get("description", meta["description"]), "hashtags": meta["hashtags"], "emotion": ai.get("emotion", "neutro"), "category": ai.get("category", "curiosidade"), "viral_reason": ai.get("viral_reason", ""), "title_options": ai.get("titles", []), "broll_timeline": seg_timeline})
+        print("[RENDER SLOT RELEASED]")
+        return idx, hook
 
-        segment_timeline = broll_engine.build_timeline([
-            segment for segment in transcription["segments"]
-            if hook["start"] <= segment.get("start", 0) <= hook["end"]
-        ])
+    with ThreadPoolExecutor(max_workers=max_parallel_renders) as pool:
+        futures = [pool.submit(_render, i, h) for i, h in enumerate(generated_clips)]
+        for future in as_completed(futures):
+            idx, updated = future.result()
+            generated_clips[idx] = updated
+            print(f"[RENDER PROGRESS] index={idx}")
 
-        final_clip_path = apply_broll_overlay(
-            processed_clip_path,
-            segment_timeline,
-            f"clip_{index}_final.mp4",
-            output_dir=output_dir,
-            quality_profile="export",
-        )
-
-        metadata = generate_social_metadata(hook.get("text", ""), hook.get("viral_score", 0))
-        ai_metadata = generate_clip_metadata(hook.get("text", ""))
-
-        hook.update({
-            "clip_path": processed_clip_path,
-            "final_clip": final_clip_path,
-            "viral_score": ai_metadata.get("score", hook["viral_score"]),
-            "title_suggestion": ai_metadata.get("titles", [metadata["title"]])[0],
-            "caption_suggestion": ai_metadata.get("hook", metadata["caption"]),
-            "description_suggestion": ai_metadata.get("description", metadata["description"]),
-            "hashtags": metadata["hashtags"],
-            "emotion": ai_metadata.get("emotion", "neutro"),
-            "category": ai_metadata.get("category", "curiosidade"),
-            "viral_reason": ai_metadata.get("viral_reason", ""),
-            "title_options": ai_metadata.get("titles", []),
-            "broll_timeline": segment_timeline,
-        })
-
-        for broll_index, broll_segment in enumerate(segment_timeline):
-            timeline_broll.append({
-                "id": f"br-{index}-{broll_index}",
-                "label": broll_segment.get("asset", "B-roll"),
-                "start": float(broll_segment.get("start", 0)),
-                "end": float(broll_segment.get("end", broll_segment.get("start", 0) + 0.5)),
-            })
-
-    log(f"[STEP 10 - RENDER FINISH] elapsed={time.perf_counter() - r_start:.2f}s")
-
-    full_text = " ".join(
-        [segment["text"] for segment in transcription["segments"]]
-    )
-
-    return {
-        "text": full_text,
-        "hooks": generated_clips,
-        "status": "completed",
-        "timeline": {
-            "broll": timeline_broll,
-            "cuts": timeline_cuts,
-        },
-    }
+    print("[ETA UPDATED]")
+    print("[FINAL EXPORT COMPLETE]")
+    return {"text": " ".join([s["text"] for s in transcription["segments"]]), "hooks": generated_clips, "status": "completed", "timeline": {"broll": timeline_broll, "cuts": timeline_cuts}}

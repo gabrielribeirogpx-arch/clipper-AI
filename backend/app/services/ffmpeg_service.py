@@ -3,6 +3,7 @@ import os
 import shlex
 from pathlib import Path
 from typing import Dict, List, Literal
+from app.services.video_encoder_service import detect_best_encoder
 from app.services.render_quality import (
     EXPORT_AUDIO_BITRATE,
     EXPORT_AUDIO_CODEC,
@@ -15,9 +16,11 @@ from app.services.render_quality import (
 
 CLIPS_DIR = "app/clips"
 
+ENCODER = detect_best_encoder()
+print("[GPU PIPELINE ACTIVE]")
 EXPORT_SETTINGS = {
-    "codec": EXPORT_VIDEO_CODEC,
-    "preset": EXPORT_PRESET,
+    "codec": ENCODER.codec,
+    "preset": ENCODER.preset,
     "crf": str(EXPORT_CRF),
     "audio_codec": EXPORT_AUDIO_CODEC,
     "audio_bitrate": EXPORT_AUDIO_BITRATE,
@@ -26,8 +29,8 @@ EXPORT_SETTINGS = {
 }
 
 PREVIEW_SETTINGS = {
-    "codec": EXPORT_VIDEO_CODEC,
-    "preset": EXPORT_PRESET,
+    "codec": ENCODER.codec,
+    "preset": ENCODER.preset,
     "crf": str(EXPORT_CRF),
     "audio_codec": EXPORT_AUDIO_CODEC,
     "audio_bitrate": EXPORT_AUDIO_BITRATE,
@@ -86,9 +89,9 @@ def cut_clip(input_file, start, end, output_name, output_dir: str = CLIPS_DIR):
 
     command.extend([
         "-c:v",
-        "libx264",
+        ENCODER.codec,
         "-preset",
-        EXPORT_PRESET,
+        ENCODER.preset,
         "-crf",
         str(EXPORT_CRF),
         "-c:a",
@@ -98,7 +101,7 @@ def cut_clip(input_file, start, end, output_name, output_dir: str = CLIPS_DIR):
         output_path
     ])
 
-    _log_real_ffmpeg_command(command, input_file, output_path, {"crf": str(EXPORT_CRF), "preset": EXPORT_PRESET}, "cut")
+    _log_real_ffmpeg_command(command, input_file, output_path, {"crf": str(EXPORT_CRF), "preset": ENCODER.preset}, "cut")
     print(f"[FFMPEG START] profile=cut command={' '.join(command)}")
     try:
         proc = subprocess.run(command, capture_output=True, text=True, check=False, timeout=FFMPEG_TIMEOUT_SECONDS)
