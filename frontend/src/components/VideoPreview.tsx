@@ -56,6 +56,14 @@ export function VideoPreview({ sectionRef }: { sectionRef?: RefObject<HTMLElemen
     console.log(resolvedVideoUrl);
   }, [resolvedVideoUrl]);
 
+
+  useEffect(() => {
+    console.log('[PLAYER STACK FIX ACTIVE]');
+    console.log('[CONTROLS MOVED BELOW PLAYER]');
+    console.log('[VIDEO DOMINANCE RESTORED]');
+    console.log('[TIMELINE HEIGHT REDUCED]');
+  }, []);
+
   useEffect(() => {
     if (isRegionSetup) {
       console.log('[REGION SETUP OVERLAY ENABLED]');
