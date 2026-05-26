@@ -64,15 +64,19 @@ export function VideoPreview({ sectionRef }: { sectionRef?: RefObject<HTMLElemen
     console.log('[EDITOR OVERLAY DISABLED]');
   }, [isRegionSetup]);
 
+  useEffect(() => {
+    console.log('[PLAYER RESPONSIVE SCALE]');
+  }, []);
+
   if (!mounted) return <div className="h-[760px] rounded-[2rem] border border-white/10 bg-white/5" />;
 
   return (
-    <motion.section ref={sectionRef} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="panel-premium relative w-full max-w-full overflow-hidden p-7">
+    <motion.section ref={sectionRef} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="panel-premium relative w-full max-w-full overflow-hidden p-4 lg:p-6 xl:p-7">
       <div className="pointer-events-none absolute inset-0"><div className="absolute -left-20 top-4 h-[24rem] w-[24rem] rounded-full bg-cyan-500/30 blur-[130px]" /></div>
       <div className="pointer-events-none absolute inset-0"><div className="absolute -right-20 bottom-0 h-[24rem] w-[24rem] rounded-full bg-violet-500/30 blur-[140px]" /></div>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_-10%,rgba(255,255,255,.18),transparent_38%),radial-gradient(circle_at_50%_110%,rgba(168,85,247,.24),transparent_48%)]" />
 
-      <div className="relative mx-auto w-full max-w-[1080px]">
+      <div className="relative w-full">
         <div className="rounded-[2.3rem] border border-white/20 bg-gradient-to-b from-[#1b1d2a] to-[#07080c] p-4 shadow-[0_24px_64px_rgba(0,0,0,.7),0_0_80px_rgba(34,211,238,.15)]">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div className="flex gap-2">
@@ -84,7 +88,7 @@ export function VideoPreview({ sectionRef }: { sectionRef?: RefObject<HTMLElemen
             <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-black">
               <div className="pointer-events-none absolute inset-0 z-20 bg-[linear-gradient(118deg,rgba(255,255,255,0.18)_0%,transparent_30%,transparent_70%,rgba(255,255,255,0.08)_100%)]" />
               <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,.22),transparent_38%)]" />
-              <div className="aspect-video relative">
+              <div className="relative aspect-video min-h-[240px] sm:min-h-[300px] md:min-h-[360px] lg:min-h-[420px]">
                 {resolvedVideoUrl ? (<video
                   key={resolvedVideoUrl}
                   ref={videoRef}
