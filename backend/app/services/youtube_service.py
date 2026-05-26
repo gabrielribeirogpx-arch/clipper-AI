@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import time
 
 COOKIES_PATH = os.getenv(
     "YTDLP_COOKIES_PATH",
@@ -98,6 +99,7 @@ def _resolve_ffmpeg_location() -> str | None:
 
 
 def download_youtube_video(youtube_url: str, start_time: str | None = None, end_time: str | None = None, video_quality: str = "1080p") -> str:
+    perf_start = time.perf_counter()
     output_template = os.path.join(UPLOAD_DIR, f"yt_{uuid.uuid4()}_%(id)s.%(ext)s")
     base_command = [
         sys.executable,
@@ -250,6 +252,7 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
             category="missing_output",
         )
     output_file = os.path.join(UPLOAD_DIR, matches[0])
+    print(f"[PERF] yt_download = {time.perf_counter() - perf_start:.1f}s")
 
     if ffmpeg_location:
         ffprobe_location = os.path.join(os.path.dirname(ffmpeg_location), "ffprobe")
