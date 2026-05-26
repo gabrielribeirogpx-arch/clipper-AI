@@ -1,6 +1,7 @@
 import os
 import time
 import subprocess
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from app.services.whisper_service import transcribe_video
@@ -20,6 +21,36 @@ from app.services.chunk_processing_service import (
     split_video_into_chunks,
 )
 from app.services.performance_profiler import PerformanceProfiler
+
+
+def _probe_audio_stream(video_path: str):
+    probe_cmd = [
+        "ffprobe",
+        "-v", "error",
+        "-select_streams", "a:0",
+        "-show_entries", "stream=codec_name,sample_rate",
+        "-of", "json",
+        video_path,
+    ]
+    proc = subprocess.run(probe_cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        print(f"[PROXY AUDIO PROBE ERROR] returncode={proc.returncode}")
+        return None
+    try:
+        data = json.loads(proc.stdout or "{}")
+    except json.JSONDecodeError:
+        return None
+    streams = data.get("streams", [])
+    return streams[0] if streams else None
+
+
+def _proxy_audio_is_whisper_safe(video_path: str) -> bool:
+    stream = _probe_audio_stream(video_path)
+    if not stream:
+        return False
+    codec = (stream.get("codec_name") or "").lower()
+    sample_rate = str(stream.get("sample_rate") or "")
+    return codec == "aac" and sample_rate == "16000"
 
 
 def process_video(video_path, original_video_path=None, proxy_video_path=None, output_dir="app/clips", render_mode="ai_tracking", dual_region_config=None, min_clip_length=30, max_clip_length=90, max_clips=25, min_score=0.45, overlap_tolerance=0.6, step_logger=None):
@@ -45,8 +76,10 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
         profiler.start_timer("proxy_generation")
         print("[GPU PROXY ACTIVE]")
         print("[NVENC PROXY GENERATION]")
+        print("[PROXY AUDIO FIX APPLIED]")
+        print("[PROXY AUDIO TRANSCODE ACTIVE]")
         proxy_cmd = [
-            "ffmpeg", "-y", "-hwaccel", "cuda", "-extra_hw_frames", "8",
+            "ffmpeg", "-y", "-hwaccel", "auto", "-threads", "4", "-extra_hw_frames", "8",
             "-i", source_video_path,
             "-map", "0:v:0",
             "-map", "0:a:0?",
@@ -56,23 +89,43 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
             "-tune", "ll",
             "-c:a", "aac",
             "-b:a", "128k",
+            "-ar", "16000",
+            "-ac", "1",
+            "-shortest",
             proxy_video_path,
         ]
         subprocess.run(proxy_cmd, check=True)
         profiler.end_timer("proxy_generation")
         print("[PROXY GENERATED]")
         print("[PROXY AUDIO PRESERVED]")
+
+    proxy_audio_stream = _probe_audio_stream(proxy_video_path)
+    whisper_audio_source = proxy_video_path
+    if proxy_audio_stream:
+        codec_name = (proxy_audio_stream.get("codec_name") or "").lower()
+        sample_rate = str(proxy_audio_stream.get("sample_rate") or "")
+        print("[PROXY AUDIO STREAM DETECTED]")
+        print(f"[PROXY AUDIO STREAM INFO] codec={codec_name} sample_rate={sample_rate}")
+        if _proxy_audio_is_whisper_safe(proxy_video_path):
+            print("[WHISPER SAFE PROXY READY]")
+        else:
+            print("[PROXY AUDIO VALIDATION FAILED] fallback=original")
+            whisper_audio_source = source_video_path
+    else:
+        print("[PROXY AUDIO MISSING] fallback=original")
+        whisper_audio_source = source_video_path
+
     print("[PROXY ACTIVE]")
 
     analysis_id = os.path.basename(output_dir.rstrip("/"))
-    print(f"[WHISPER AUDIO SOURCE = PROXY] {proxy_video_path}")
-    if is_long_video(proxy_video_path):
+    print(f"[WHISPER AUDIO SOURCE] {whisper_audio_source}")
+    if is_long_video(whisper_audio_source):
         print("[LONG VIDEO MODE ACTIVE]")
         print("[STREAM PROCESSING ACTIVE]")
         print("[PROGRESSIVE CLIPS ACTIVE]")
         chunk_duration = resolve_chunk_duration()
         profiler.start_timer("ffmpeg_extraction")
-        chunks = split_video_into_chunks(proxy_video_path, output_dir, chunk_duration)
+        chunks = split_video_into_chunks(whisper_audio_source, output_dir, chunk_duration)
         profiler.end_timer("ffmpeg_extraction")
         profiler.start_timer("whisper_transcription")
         chunk_analysis = analyze_chunks_parallel(
@@ -91,7 +144,7 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
         hooks = merged["hooks"]
     else:
         log("[STEP 5 - TRANSCRIPTION START]")
-        transcription = transcribe_video(proxy_video_path, profiler=profiler)
+        transcription = transcribe_video(whisper_audio_source, profiler=profiler)
         log("[STEP 6 - TRANSCRIPTION FINISH]")
         profiler.start_timer("cache_restore")
         cached = load_analysis_cache(analysis_id)
