@@ -29,11 +29,11 @@ export default function Home() {
   const heroRef = useRef<HTMLElement | null>(null);
   
   useEffect(() => {
-    console.log('[ROOT GRID REBUILT]');
-    console.log('[CENTER WORKSPACE DOMINANT]');
-    console.log('[PLAYER SECTION EXPANDED]');
-    console.log('[TIMELINE HEIGHT LOCKED]');
-    console.log('[FULL VIEWPORT WORKSTATION ACTIVE]');
+    console.log('[TRUE 16:9 PLAYER ACTIVE]');
+    console.log('[TIMELINE HEIGHT REDUCED]');
+    console.log('[WORKSPACE ROWS LOCKED]');
+    console.log('[TIMELINE OVERFLOW FIXED]');
+    console.log('[FINAL WORKSTATION PROPORTIONS ACTIVE]');
   }, []);
 
   useEffect(() => { void hydrateFromBackend(analysisId); }, [analysisId, hydrateFromBackend]);
