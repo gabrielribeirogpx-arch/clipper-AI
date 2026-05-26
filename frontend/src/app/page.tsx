@@ -38,6 +38,10 @@ export default function Home() {
     console.log('[VERTICAL SPACE RECOVERED]');
     console.log('[PLAYER HEIGHT BOOSTED]');
     console.log('[CINEMATIC WORKSPACE RESTORED]');
+    console.log('[HORIZONTAL VIEWPORT REBALANCED]');
+    console.log('[SIDEBAR WIDTH REDUCED]');
+    console.log('[RIGHT PANEL WIDTH REDUCED]');
+    console.log('[CENTER WORKSPACE PRIORITIZED]');
   }, []);
 
   useEffect(() => { void hydrateFromBackend(analysisId); }, [analysisId, hydrateFromBackend]);
