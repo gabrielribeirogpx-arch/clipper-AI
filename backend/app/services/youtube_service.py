@@ -19,9 +19,9 @@ UPLOAD_DIR = "app/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 logger = logging.getLogger(__name__)
 QUALITY_FORMATS = {
-    "720p": "bestvideo[height<=720]+bestaudio/best[height<=720]",
-    "1080p": "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
-    "4k": "bestvideo[height<=2160]+bestaudio/best[height<=2160]",
+    "720p": "bestvideo[vcodec*=avc1][height<=720]+bestaudio/best[ext=mp4]",
+    "1080p": "bestvideo[vcodec*=avc1][height<=1080]+bestaudio/best[ext=mp4]",
+    "4k": "bestvideo[vcodec*=avc1][height<=2160]+bestaudio/best[ext=mp4]",
 }
 
 YT_DLP_TIMEOUT_SECONDS = int(os.getenv("YT_DLP_TIMEOUT_SECONDS", "7200"))
@@ -120,6 +120,8 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
 
     normalized_quality = (video_quality or "1080p").strip().lower()
     quality_selector = QUALITY_FORMATS.get(normalized_quality, QUALITY_FORMATS["1080p"])
+    print("[AV1 DOWNLOAD BLOCKED]")
+    print("[H264 SOURCE PREFERRED]")
     print(f"[DOWNLOAD QUALITY SELECTED] {normalized_quality}")
     print(f"[YTDLP QUALITY FORMAT] {quality_selector}")
 

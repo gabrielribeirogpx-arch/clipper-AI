@@ -33,10 +33,19 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
     profiler.start_timer("total_pipeline")
 
     source_video_path = original_video_path or video_path
+    print("[PROXY-FIRST PIPELINE ACTIVE]")
+    print("[CLIP SOURCE = PROXY]")
     if not proxy_video_path:
-        profiler.start_timer("proxy_generation")
         proxy_video_path = os.path.join(output_dir, "proxy_720p.mp4")
-        subprocess.run(["ffmpeg", "-y", "-i", source_video_path, "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2", proxy_video_path], check=True)
+    if os.path.exists(proxy_video_path):
+        print("[PROXY CACHE HIT]")
+    else:
+        print("[PROXY CACHE MISS]")
+        profiler.start_timer("proxy_generation")
+        print("[GPU PROXY ACTIVE]")
+        print("[NVENC PROXY GENERATION]")
+        proxy_cmd = ["ffmpeg", "-y", "-hwaccel", "cuda", "-extra_hw_frames", "8", "-i", source_video_path, "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2", "-c:v", "h264_nvenc", "-preset", "p1", "-tune", "ll", "-an", proxy_video_path]
+        subprocess.run(proxy_cmd, check=True)
         profiler.end_timer("proxy_generation")
         print("[PROXY GENERATED]")
     print("[PROXY ACTIVE]")
@@ -101,12 +110,21 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
     broll_engine = BRollEngine()
     generated_clips, timeline_broll, timeline_cuts = [], [], []
 
-    for index, hook in enumerate(hooks[:5] + hooks[5:10] + hooks[10:]):
-        profiler.start_timer("clip_generation")
-        raw_clip_path = cut_clip(source_video_path, hook["start"], hook["end"], f"raw_clip_{index}.mp4", output_dir=output_dir)
-        profiler.end_timer("clip_generation")
-        generated_clips.append({"raw_clip_path": raw_clip_path, "clip_path": raw_clip_path, "final_clip": raw_clip_path, **hook, "title_suggestion": "", "caption_suggestion": "", "description_suggestion": "", "hashtags": [], "emotion": "neutro", "category": "curiosidade", "viral_reason": "", "title_options": [], "broll_timeline": []})
-        timeline_cuts.append({"id": f"cut-{index}", "label": f"Cut {index + 1}", "start": hook["start"], "end": hook["start"] + 0.1})
+    selected_hooks = hooks[:5] + hooks[5:10] + hooks[10:]
+    print("[PARALLEL CLIP GENERATION ACTIVE]")
+    max_parallel_clips = int(os.getenv("MAX_PARALLEL_CLIPS", "4"))
+    profiler.start_timer("clip_generation")
+    def _cut(index, hook):
+        raw_clip_path = cut_clip(proxy_video_path, hook["start"], hook["end"], f"raw_clip_{index}.mp4", output_dir=output_dir)
+        return index, hook, raw_clip_path
+    with ThreadPoolExecutor(max_workers=max_parallel_clips) as cut_pool:
+        cut_futures = [cut_pool.submit(_cut, index, hook) for index, hook in enumerate(selected_hooks)]
+        for future in as_completed(cut_futures):
+            index, hook, raw_clip_path = future.result()
+            generated_clips.append({"raw_clip_path": raw_clip_path, "clip_path": raw_clip_path, "final_clip": raw_clip_path, **hook, "title_suggestion": "", "caption_suggestion": "", "description_suggestion": "", "hashtags": [], "emotion": "neutro", "category": "curiosidade", "viral_reason": "", "title_options": [], "broll_timeline": []})
+            timeline_cuts.append({"id": f"cut-{index}", "label": f"Cut {index + 1}", "start": hook["start"], "end": hook["start"] + 0.1})
+    generated_clips = sorted(generated_clips, key=lambda c: int(str(c.get("raw_clip_path", "")).split("raw_clip_")[-1].split(".")[0]) if "raw_clip_" in str(c.get("raw_clip_path", "")) else 0)
+    profiler.end_timer("clip_generation")
 
     max_parallel_renders = int(os.getenv("MAX_PARALLEL_RENDERS", "2"))
     print("[PARALLEL RENDER ACTIVE]")
@@ -144,6 +162,7 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
 
     print("[ETA UPDATED]")
     print("[FINAL EXPORT COMPLETE]")
+    print("[FINAL PIPELINE OPTIMIZED]")
     profiler.end_timer("total_pipeline")
     profiler.set_metric("yt_download", 0.0)
     profiler.set_metric("scene_detection", 0.0)
