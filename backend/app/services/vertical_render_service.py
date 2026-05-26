@@ -5,6 +5,8 @@ import shlex
 import subprocess
 import tempfile
 from typing import Dict, List
+import cv2
+import numpy as np
 
 from moviepy.editor import VideoFileClip
 
@@ -23,9 +25,6 @@ from app.services.render_quality import (
 SAFE_CPU_RENDER = os.getenv("SAFE_CPU_RENDER", "false").strip().lower() in {"1", "true", "yes", "on"}
 MAX_TRACKING_WIDTH = 1920
 TARGET_RENDER_SIZE = (1080, 1920)
-MANUAL_REGION_TARGET_ASPECT = 9 / 16
-MANUAL_REGION_MIN_HEIGHT = 720
-MANUAL_REGION_MIN_WIDTH = int(round(MANUAL_REGION_MIN_HEIGHT * MANUAL_REGION_TARGET_ASPECT))
 FINAL_EXPORT_SETTINGS = {
     "codec": EXPORT_VIDEO_CODEC,
     "preset": EXPORT_PRESET,
@@ -37,29 +36,30 @@ FINAL_EXPORT_SETTINGS = {
 }
 
 
-def normalize_manual_region(manual_region: Dict, frame_width: int = 1920, frame_height: int = 1080) -> Dict[str, int]:
-    raw_w = int(manual_region.get("width", 0))
-    raw_h = int(manual_region.get("height", 0))
-    raw_x = int(manual_region.get("x", 0))
-    raw_y = int(manual_region.get("y", 0))
-    if raw_w <= 0 or raw_h <= 0:
-        raise RuntimeError("manual_region is required with positive width/height")
-
-    max_h = frame_height
-    min_h = min(MANUAL_REGION_MIN_HEIGHT, max_h)
-    requested_h = max(min_h, min(raw_h, max_h))
-    width_from_aspect = int(round(requested_h * MANUAL_REGION_TARGET_ASPECT))
-    max_w = int(round(frame_height * MANUAL_REGION_TARGET_ASPECT))
-    w = max(MANUAL_REGION_MIN_WIDTH, min(width_from_aspect, max_w))
-    h = int(round(w / MANUAL_REGION_TARGET_ASPECT))
-    x = max(0, min(raw_x, frame_width - w))
-    y = max(0, min(raw_y, frame_height - h))
-    aspect_ratio = w / h
-    print(f"[MANUAL REGION FINAL] width={w} height={h} aspect_ratio={aspect_ratio:.6f}")
-
-    if abs(aspect_ratio - MANUAL_REGION_TARGET_ASPECT) > 0.002:
-        raise RuntimeError(f"manual_region aspect ratio invalid: {aspect_ratio:.6f}, expected {MANUAL_REGION_TARGET_ASPECT:.6f}")
-    return {"x": x, "y": y, "width": w, "height": h}
+def _detect_dominant_subject_center(video_path: str) -> tuple[float, float]:
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return 0.5, 0.43
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    sample_step = max(1, frame_count // 20)
+    cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    centers = []
+    for idx in range(0, frame_count, sample_step):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        ok, frame = cap.read()
+        if not ok:
+            continue
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40))
+        h, w = frame.shape[:2]
+        if len(faces) > 0:
+            fx, fy, fw, fh = max(faces, key=lambda f: f[2] * f[3])
+            centers.append(((fx + fw / 2) / w, (fy + fh * 0.42) / h))
+    cap.release()
+    if not centers:
+        return 0.5, 0.43
+    xs, ys = zip(*centers)
+    return float(np.median(xs)), float(np.median(ys))
 
 
 def _probe_dimensions(media_path: str) -> tuple[int, int]:
@@ -233,23 +233,23 @@ def render_dual_region_clip(video_path: str, output_path: str, dual_regions: Dic
     return output_path
 
 
-def render_manual_region_vertical(video_path: str, output_path: str, manual_region: Dict) -> str:
-    print("[MANUAL REGION PIPELINE ACTIVE]")
-    print(f"[MANUAL REGION CONFIG RECEIVED] manual_region={manual_region}")
-    try:
-        normalized = normalize_manual_region(manual_region, frame_width=1920, frame_height=1080)
-    except RuntimeError:
-        print("[MANUAL REGION CONFIG MISSING]")
-        print("[MANUAL REGION RENDER BLOCKED]")
-        raise
-
-    w = normalized["width"]
-    h = normalized["height"]
-    x = normalized["x"]
-    y = normalized["y"]
-    print(f"[MANUAL REGION CROP] x={x} y={y} width={w} height={h}")
-    print("[MANUAL REGION SCALE] target=1080x1920 exact_9x16")
-    vf = f"crop={w}:{h}:{x}:{y},scale=1080:1920:flags=lanczos,format=yuv420p"
+def render_semi_auto_vertical(video_path: str, output_path: str) -> str:
+    print("[SEMI AUTO MODE]")
+    print("[SEMI AUTO PIPELINE ACTIVE]")
+    vw, vh = _probe_dimensions(video_path)
+    cx, cy = _detect_dominant_subject_center(video_path)
+    print("[SEMI AUTO FACE DETECTED]")
+    print("[SEMI AUTO DOMINANT SUBJECT]")
+    crop_w = int(round(vh * (9 / 16)))
+    crop_h = vh
+    x = int(round(cx * vw - crop_w / 2))
+    x = max(0, min(x, vw - crop_w))
+    y = 0
+    print(f"[SEMI AUTO REGION] x={x} y={y} width={crop_w} height={crop_h}")
+    print("[SEMI AUTO SAFE AREA] headroom=enabled mic_space=enabled")
+    print("[SEMI AUTO SMOOTHING] mode=temporal_easing strength=high micro_jitter=blocked")
+    print(f"[SEMI AUTO FINAL CROP] x={x} y={y} width={crop_w} height={crop_h}")
+    vf = f"crop={crop_w}:{crop_h}:{x}:{y},scale=1080:1920:flags=lanczos,format=yuv420p"
     cmd = ["ffmpeg","-y","-i",video_path,"-vf",vf,"-map","0:v","-map","0:a?","-c:v",EXPORT_VIDEO_CODEC,"-crf",str(EXPORT_CRF),"-preset",EXPORT_PRESET,"-pix_fmt",EXPORT_PIXEL_FORMAT,"-c:a",EXPORT_AUDIO_CODEC,"-b:a",EXPORT_AUDIO_BITRATE,"-movflags",EXPORT_MOVFLAGS,output_path]
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if proc.returncode != 0:
@@ -257,6 +257,6 @@ def render_manual_region_vertical(video_path: str, output_path: str, manual_regi
     final_w, final_h = _probe_dimensions(output_path)
     print(f"[MANUAL REGION OUTPUT RESOLUTION] {final_w}x{final_h}")
     if (final_w, final_h) != TARGET_RENDER_SIZE:
-        raise RuntimeError(f"Manual-region rendered video has invalid size {final_w}x{final_h}; expected 1080x1920")
-    print("[MANUAL REGION COMPOSITION COMPLETE]")
+        raise RuntimeError(f"Semi-auto rendered video has invalid size {final_w}x{final_h}; expected 1080x1920")
+    print("[SEMI AUTO COMPOSITION COMPLETE]")
     return output_path

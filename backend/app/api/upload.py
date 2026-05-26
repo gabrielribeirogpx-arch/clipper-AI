@@ -68,17 +68,13 @@ async def process_youtube_ingest_job(job_id: str, body: dict, output_dir: str) -
         print(f"[BACKEND RECEIVED RENDER MODE] source=ingest_youtube render_mode={render_mode}")
         print(f"[PROCESS VIDEO JOB MODE] ingest_request_render_mode={render_mode}")
         print(f"[PROCESS VIDEO JOB MODE] ingest_processing_render_mode={process_render_mode}")
-        ingest_manual_region_config = body.get("manual_region_config", body.get("manual_region"))
-        print(f"[INGEST RECEIVED MANUAL REGION] manual_region_config={ingest_manual_region_config}")
         print(f"[PROCESS VIDEO JOB CONFIG] ingest_request_dual_region_config={body.get('dual_region_config')}")
-        print(f"[JOB PAYLOAD MANUAL REGION] manual_region_config={ingest_manual_region_config}")
         transcription = await asyncio.to_thread(
             process_video,
             filepath,
             output_dir=output_dir,
             render_mode=process_render_mode,
             dual_region_config=body.get('dual_region_config'),
-            manual_region=ingest_manual_region_config,
             min_clip_length=int(body.get("min_clip_length", 30)),
             max_clip_length=int(body.get("max_clip_length", 90)),
             max_clips=25,
@@ -163,10 +159,6 @@ async def ingest_youtube(request: Request):
     job_id = str(uuid.uuid4())
     body = payload.model_dump()
     body["youtube_url"] = youtube_url
-    body["manual_region_config"] = body.get("manual_region_config", body.get("manual_region"))
-    if body.get("render_mode") == "manual_region" and not body.get("manual_region_config"):
-        raise HTTPException(status_code=400, detail="manual_region_config is required when render_mode is manual_region")
-    print(f"[JOB PAYLOAD MANUAL REGION] ingest_youtube manual_region_config={body.get('manual_region_config')}")
     create_job(job_id, analysis_id)
     asyncio.create_task(process_youtube_ingest_job(job_id, body, output_dir))
     return {"success": True, "job_id": job_id, "analysis_id": analysis_id, "status": "queued"}
