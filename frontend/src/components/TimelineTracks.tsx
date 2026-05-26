@@ -59,11 +59,11 @@ export const TimelineTracks = memo(function TimelineTracks() {
   }, [duration, pxPerSecond, rulerStep]);
 
 
-  if (!mounted) return <div className="h-[240px] rounded-[2rem] border border-white/10 bg-white/5" />;
+  if (!mounted) return <div className="h-[220px] rounded-[2rem] border border-white/10 bg-white/5" />;
 
   return (
-    <section className="panel-premium editor-timeline-section min-h-0 w-full p-3">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <section className="panel-premium editor-timeline-section min-h-0 w-full p-2">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-200">Cinematic Timeline</p>
         <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#0a1122]/88 px-4 py-2">
           <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-300">Zoom {zoom.toFixed(1)}x</span>
@@ -73,7 +73,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
 
       <div
         ref={containerRef}
-        className="timeline-scrollbar relative h-[190px] w-full overflow-x-auto overflow-y-auto rounded-2xl border border-white/10 bg-[#050912] p-3 shadow-[inset_0_2px_22px_rgba(0,0,0,.55)]"
+        className="timeline-scrollbar relative h-[165px] min-h-0 w-full overflow-x-auto overflow-y-hidden rounded-2xl border border-white/10 bg-[#050912] p-2 shadow-[inset_0_2px_22px_rgba(0,0,0,.55)]"
         onClick={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
           const timelineX = e.clientX - rect.left + e.currentTarget.scrollLeft;
@@ -85,8 +85,8 @@ export const TimelineTracks = memo(function TimelineTracks() {
           setCurrentTime(pixelsToSeconds(e.clientX - rect.left + e.currentTarget.scrollLeft, pxPerSecond));
         }}
       >
-        <div style={{ width: Math.max(secondsToPixels(duration, pxPerSecond), 1000) }} className="relative min-w-full">
-          <div className="relative mb-4 h-14 overflow-hidden rounded-xl border border-white/10 bg-[#0b1324]">
+        <div style={{ width: Math.max(secondsToPixels(duration, pxPerSecond), 1000) }} className="relative min-w-full min-h-0">
+          <div className="relative mb-2 h-12 overflow-hidden rounded-xl border border-white/10 bg-[#0b1324]">
             <div className="absolute inset-0 opacity-50 [background-image:linear-gradient(to_right,rgba(148,163,184,.2)_1px,transparent_1px)]" style={{ backgroundSize: `${pxPerSecond / 2}px 100%` }} />
             {markers.map((marker) => (
               <div key={marker.time} className="pointer-events-none absolute inset-y-0" style={{ left: marker.left }}>
@@ -101,7 +101,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
             <div className="ml-0.5 h-[calc(100%-0.75rem)] w-[3px] rounded-full bg-rose-400 shadow-[0_0_20px_rgba(251,113,133,.95),0_0_56px_rgba(251,113,133,.6)]" />
           </div>
 
-          <div className="grid gap-3">
+          <div className="grid gap-2">
             {(Object.keys(tracks) as TrackType[]).map((name) => {
               const rowHeight = TRACK_HEIGHT + 16;
 
