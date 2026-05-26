@@ -29,10 +29,11 @@ export default function Home() {
   const heroRef = useRef<HTMLElement | null>(null);
   
   useEffect(() => {
-    console.log('[FINAL VISUAL REFINEMENT ACTIVE]');
-    console.log('[VIDEO AREA EXPANDED]');
-    console.log('[TIMELINE DENSITY REDUCED]');
-    console.log('[PLAYER CARD COMPACTED]');
+    console.log('[TRUE RESPONSIVE VIEWPORT ACTIVE]');
+    console.log('[16:9 PLAYER LOCKED]');
+    console.log('[TIMELINE HEIGHT LOCKED]');
+    console.log('[VIEWPORT DISTRIBUTION FIXED]');
+    console.log('[OVERFLOW CONFLICTS REMOVED]');
   }, []);
 
   useEffect(() => { void hydrateFromBackend(analysisId); }, [analysisId, hydrateFromBackend]);
@@ -85,9 +86,11 @@ export default function Home() {
           <TimelineTracks />
         </section>
 
-        <section className="editor-right min-h-0 min-w-0 space-y-2">
-          <ClipResultsPanel />
-          <InspectorPanel />
+        <section className="editor-right min-h-0 min-w-0">
+          <div className="grid h-full min-h-0 grid-rows-2 gap-2">
+            <ClipResultsPanel />
+            <div className="min-h-0 overflow-y-auto"><InspectorPanel /></div>
+          </div>
         </section>
       </div>
     </main>
