@@ -149,6 +149,7 @@ async def upload_video(
 @router.post("/ingest/youtube")
 async def ingest_youtube(request: Request):
     body = await request.json()
+    print(f"[INGEST RAW REQUEST BODY] {body}")
     payload = YoutubeIngestRequest.model_validate(body)
     youtube_url = (payload.youtube_url or "").strip()
     if not youtube_url:
@@ -163,6 +164,8 @@ async def ingest_youtube(request: Request):
     body = payload.model_dump()
     body["youtube_url"] = youtube_url
     body["manual_region_config"] = body.get("manual_region_config", body.get("manual_region"))
+    if body.get("render_mode") == "manual_region" and not body.get("manual_region_config"):
+        raise HTTPException(status_code=400, detail="manual_region_config is required when render_mode is manual_region")
     print(f"[JOB PAYLOAD MANUAL REGION] ingest_youtube manual_region_config={body.get('manual_region_config')}")
     create_job(job_id, analysis_id)
     asyncio.create_task(process_youtube_ingest_job(job_id, body, output_dir))
