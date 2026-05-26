@@ -70,36 +70,46 @@ def _log_output_stats(output_file: str) -> None:
         print(f"[REAL OUTPUT BITRATE] {_probe_bitrate(output_file)}")
 
 
-def cut_clip(input_file, start, end, output_name, output_dir: str = CLIPS_DIR):
+def cut_clip(input_file, start, end, output_name, output_dir: str = CLIPS_DIR, prefer_stream_copy: bool = True):
 
     os.makedirs(output_dir, exist_ok=True)
     output_path = f"{output_dir}/{output_name}"
 
+    print("[FAST SEEK ENABLED]")
+    print("[PRE-INPUT SEEK ACTIVE]")
+    print("[SMART REMUX ACTIVE]")
     command = [
         "ffmpeg",
         "-y",
-        "-i",
-        input_file,
         "-ss",
         str(start),
         "-to",
         str(end),
+        "-i",
+        input_file,
+        "-avoid_negative_ts",
+        "make_zero",
+        "-fflags",
+        "+genpts",
     ]
 
-
-    command.extend([
-        "-c:v",
-        ENCODER.codec,
-        "-preset",
-        ENCODER.preset,
-        "-crf",
-        str(EXPORT_CRF),
-        "-c:a",
-        "aac",
-        "-b:a",
-        EXPORT_AUDIO_BITRATE,
-        output_path
-    ])
+    if prefer_stream_copy:
+        print("[STREAM COPY ENABLED]")
+        command.extend(["-c", "copy", output_path])
+    else:
+        command.extend([
+            "-c:v",
+            ENCODER.codec,
+            "-preset",
+            ENCODER.preset,
+            "-crf",
+            str(EXPORT_CRF),
+            "-c:a",
+            "aac",
+            "-b:a",
+            EXPORT_AUDIO_BITRATE,
+            output_path
+        ])
 
     _log_real_ffmpeg_command(command, input_file, output_path, {"crf": str(EXPORT_CRF), "preset": ENCODER.preset}, "cut")
     print(f"[FFMPEG START] profile=cut command={' '.join(command)}")
