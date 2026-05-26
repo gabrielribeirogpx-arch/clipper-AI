@@ -39,18 +39,33 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
         proxy_video_path = os.path.join(output_dir, "proxy_720p.mp4")
     if os.path.exists(proxy_video_path):
         print("[PROXY CACHE HIT]")
+        print("[PROXY AUDIO PRESERVED]")
     else:
         print("[PROXY CACHE MISS]")
         profiler.start_timer("proxy_generation")
         print("[GPU PROXY ACTIVE]")
         print("[NVENC PROXY GENERATION]")
-        proxy_cmd = ["ffmpeg", "-y", "-hwaccel", "cuda", "-extra_hw_frames", "8", "-i", source_video_path, "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2", "-c:v", "h264_nvenc", "-preset", "p1", "-tune", "ll", "-an", proxy_video_path]
+        proxy_cmd = [
+            "ffmpeg", "-y", "-hwaccel", "cuda", "-extra_hw_frames", "8",
+            "-i", source_video_path,
+            "-map", "0:v:0",
+            "-map", "0:a:0?",
+            "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2",
+            "-c:v", "h264_nvenc",
+            "-preset", "p1",
+            "-tune", "ll",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            proxy_video_path,
+        ]
         subprocess.run(proxy_cmd, check=True)
         profiler.end_timer("proxy_generation")
         print("[PROXY GENERATED]")
+        print("[PROXY AUDIO PRESERVED]")
     print("[PROXY ACTIVE]")
 
     analysis_id = os.path.basename(output_dir.rstrip("/"))
+    print(f"[WHISPER AUDIO SOURCE = PROXY] {proxy_video_path}")
     if is_long_video(proxy_video_path):
         print("[LONG VIDEO MODE ACTIVE]")
         print("[STREAM PROCESSING ACTIVE]")
