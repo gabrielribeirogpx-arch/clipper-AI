@@ -8,7 +8,7 @@ from app.data.timeline_state import (
     save_timeline_state_for_analysis,
 )
 from app.schemas.timeline import TimelineUpdateRequest
-from app.services.vertical_render_service import render_dual_region_clip, render_manual_region_vertical
+from app.services.vertical_render_service import normalize_manual_region, render_dual_region_clip, render_manual_region_vertical
 
 router = APIRouter(prefix="/timeline", tags=["timeline"])
 
@@ -173,22 +173,26 @@ def render_manual_region_final(payload: ManualRegionRenderRequest):
         print('[MANUAL REGION CONFIG MISSING]')
         print('[MANUAL REGION RENDER BLOCKED]')
         raise HTTPException(status_code=400, detail='manual_region is required for manual_region render')
+    try:
+        normalized_region = normalize_manual_region(payload.manual_region)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     state = get_timeline_state()
-    print(f"[RENDER PIPELINE MANUAL REGION] payload_manual_region={payload.manual_region}")
+    print(f"[RENDER PIPELINE MANUAL REGION] payload_manual_region={normalized_region}")
     clips = state.get('clips', [])
     updated_clips = []
     for index, clip in enumerate(clips):
         raw_clip_path = _to_filesystem_path(clip.get('raw_clip_path') or clip.get('clip_path'))
         manual_clip_path = raw_clip_path.with_name(f"clip_{index}_manual.mp4")
-        render_manual_region_vertical(str(raw_clip_path), str(manual_clip_path), payload.manual_region)
+        render_manual_region_vertical(str(raw_clip_path), str(manual_clip_path), normalized_region)
         updated = {**clip}
         updated['clip_path'] = _to_media_url(manual_clip_path)
         updated['final_video'] = _to_media_url(manual_clip_path)
         updated_clips.append(updated)
     state['clips'] = updated_clips
     state['render_mode'] = 'manual_region'
-    state['manual_region'] = payload.manual_region
-    state['manual_region_config'] = payload.manual_region
+    state['manual_region'] = normalized_region
+    state['manual_region_config'] = normalized_region
     set_timeline_state(state)
     save_timeline_state_for_analysis(state.get("analysisId"), state)
     return {'status': 'rendered', 'clips': updated_clips, 'analysis_id': payload.analysis_id}
