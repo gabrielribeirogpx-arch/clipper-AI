@@ -73,10 +73,12 @@ export function VideoPreview() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_-10%,rgba(255,255,255,.18),transparent_38%),radial-gradient(circle_at_50%_110%,rgba(168,85,247,.24),transparent_48%)]" />
 
       <div className="relative mx-auto w-full max-w-[1080px]">
-        <div className="rounded-[2.3rem] border border-white/20 bg-gradient-to-b from-[#1f2937] to-[#040507] p-4 shadow-[0_0_90px_rgba(34,211,238,.3),0_0_130px_rgba(168,85,247,.22),0_50px_120px_rgba(0,0,0,.7)]">
-          <div className="mb-3 flex gap-2">
+        <div className="rounded-[2.3rem] border border-white/20 bg-gradient-to-b from-[#1b1d2a] to-[#07080c] p-4 shadow-[0_24px_64px_rgba(0,0,0,.7),0_0_80px_rgba(34,211,238,.15)]">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex gap-2">
             <button className={`rounded-lg px-3 py-1 text-sm ${clipRenderMode === 'ai_tracking' ? 'bg-cyan-400 text-black' : 'bg-white/10'}`} onClick={() => setClipRenderMode('ai_tracking')}>AI Tracking</button>
             <button className={`rounded-lg px-3 py-1 text-sm ${clipRenderMode === 'dual_region' ? 'bg-cyan-400 text-black' : 'bg-white/10'}`} onClick={() => setClipRenderMode('dual_region')}>Dual Region</button>
+          </div><div className="flex items-center gap-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 px-3 py-1 text-xs text-cyan-200"><span className="h-2 w-2 rounded-full bg-cyan-300 animate-pulse"/>AI Processing</div>
           </div>
           <div className="rounded-[1.9rem] border border-white/15 bg-black/95 p-2.5">
             <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-black">
