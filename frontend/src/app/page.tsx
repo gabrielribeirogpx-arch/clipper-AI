@@ -54,8 +54,8 @@ export default function Home() {
   return (
     <main className="relative h-screen w-full overflow-hidden bg-[var(--bg-primary)] text-slate-100">
       <div className="ambient-bg" />
-      <div className="editor-shell relative grid h-full w-full gap-2 p-2 [grid-template-columns:220px_minmax(0,1fr)_320px]">
-        <aside className="panel-premium editor-sidebar flex h-full min-h-0 w-[220px] flex-none flex-col p-4">
+      <div className="editor-shell relative grid h-full w-full gap-3 p-3">
+        <aside className="panel-premium editor-sidebar hidden h-full min-h-0 flex-col p-3 md:flex lg:p-4">
           <div className="border-b border-white/10 pb-5">
             <div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-indigo-500 font-bold text-slate-950">✂</div><div><p className="text-lg font-semibold">Clipper AI</p><p className="text-xs tracking-[0.18em] text-slate-400">Creative OS</p></div></div>
           </div>
@@ -66,17 +66,17 @@ export default function Home() {
           <div className="mt-3 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3"><div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-600/60">AM</div><div><p className="text-sm">Ana Martins</p><p className="text-xs text-slate-400">Founder</p></div></div></>
         </aside>
 
-        <section className="editor-main flex h-full min-h-0 min-w-0 flex-col gap-2 overflow-hidden">
-          <header className="panel-premium shrink-0 px-5 py-3">
+        <section className="editor-main flex h-full min-h-0 min-w-0 flex-col gap-3 overflow-hidden">
+          <header className="panel-premium shrink-0 px-4 py-3 lg:px-5">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Workspace / Campaigns / Q2</p>
-                <h1 className="mt-1 text-2xl font-semibold tracking-tight">Clipper Launch Campaign</h1>
+                <h1 className="mt-1 text-xl font-semibold tracking-tight lg:text-2xl">Clipper Launch Campaign</h1>
               </div>
               <div className="flex items-center gap-2">
                 <span className="premium-chip px-3 py-1 text-xs text-cyan-200">AI Online</span>
-                <button className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm">Feedback</button>
-                <button onClick={handleExport} className="rounded-xl bg-gradient-to-r from-cyan-300 to-indigo-300 px-5 py-2.5 text-sm font-semibold text-slate-950">Export</button>
+                <button className="hidden rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm md:inline-flex">Feedback</button>
+                <button onClick={handleExport} className="rounded-xl bg-gradient-to-r from-cyan-300 to-indigo-300 px-4 py-2 text-sm font-semibold text-slate-950 lg:px-5 lg:py-2.5">Exportar</button>
               </div>
             </div>
           </header>
@@ -84,7 +84,7 @@ export default function Home() {
           <TimelineTracks />
         </section>
 
-        <section className="editor-right min-h-0 w-[320px] min-w-0 flex-none space-y-2 overflow-y-auto pr-1">
+        <section className="editor-right hidden min-h-0 min-w-0 space-y-3 overflow-y-auto xl:flex xl:flex-col">
           <ClipResultsPanel />
           <InspectorPanel />
         </section>
