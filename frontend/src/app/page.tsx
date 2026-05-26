@@ -34,6 +34,10 @@ export default function Home() {
     console.log('[TIMELINE HEIGHT LOCKED]');
     console.log('[VIEWPORT DISTRIBUTION FIXED]');
     console.log('[OVERFLOW CONFLICTS REMOVED]');
+    console.log('[HEADER HEIGHT COMPACTED]');
+    console.log('[VERTICAL SPACE RECOVERED]');
+    console.log('[PLAYER HEIGHT BOOSTED]');
+    console.log('[CINEMATIC WORKSPACE RESTORED]');
   }, []);
 
   useEffect(() => { void hydrateFromBackend(analysisId); }, [analysisId, hydrateFromBackend]);
@@ -69,16 +73,16 @@ export default function Home() {
         </aside>
 
         <section className="editor-main">
-          <header className="panel-premium editor-topbar px-4 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Workspace / Campaigns / Q2</p>
-                <h1 className="mt-1 text-xl font-semibold tracking-tight lg:text-2xl">Clipper Launch Campaign</h1>
+          <header className="panel-premium editor-topbar px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-[10px] uppercase tracking-[0.14em] text-slate-400">Workspace / Campaigns / Q2</p>
+                <h1 className="truncate text-lg font-semibold leading-tight tracking-tight lg:text-xl">Clipper Launch Campaign</h1>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="premium-chip px-3 py-1 text-xs text-cyan-200">AI Online</span>
-                <button className="hidden rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm md:inline-flex">Feedback</button>
-                <button onClick={handleExport} className="rounded-xl bg-gradient-to-r from-cyan-300 to-indigo-300 px-4 py-2 text-sm font-semibold text-slate-950 lg:px-5 lg:py-2.5">Exportar</button>
+              <div className="flex items-center gap-1.5">
+                <span className="premium-chip px-2 py-0.5 text-[11px] text-cyan-200">AI Online</span>
+                <button className="hidden rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs md:inline-flex">Feedback</button>
+                <button onClick={handleExport} className="rounded-lg bg-gradient-to-r from-cyan-300 to-indigo-300 px-3 py-1.5 text-xs font-semibold text-slate-950 lg:px-4 lg:py-2">Exportar</button>
               </div>
             </div>
           </header>
