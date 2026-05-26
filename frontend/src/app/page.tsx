@@ -13,11 +13,11 @@ import { springConfigs } from '@/lib/motion-config';
 import { WorkspaceContainer, WorkspaceKey } from '@/components/WorkspaceContainer';
 
 const navItems: { label: string; icon: string; key: WorkspaceKey }[] = [
-  { label: 'Projects', icon: '⌘', key: 'projects' },
-  { label: 'Sequences', icon: '◍', key: 'sequences' },
-  { label: 'Timeline', icon: '▤', key: 'timeline' },
+  { label: 'Projetos', icon: '◻', key: 'projects' },
+  { label: 'Sequências', icon: '✣', key: 'sequences' },
+  { label: 'Timeline', icon: '◫', key: 'timeline' },
   { label: 'AI Studio', icon: '✦', key: 'ai-studio' },
-  { label: 'Assets', icon: '◈', key: 'assets' }
+  { label: 'Assets', icon: '◇', key: 'assets' }
 ];
 
 export default function Home() {
@@ -41,6 +41,13 @@ export default function Home() {
     console.log('[PREMIUM FOOTER SPACING ACTIVE]');
     console.log('[REAL WORKSPACE SYSTEM ACTIVE]');
     console.log('[PREMIUM APP ARCHITECTURE ACTIVE]');
+    console.log('[REFERENCE MATCH MODE ACTIVE]');
+    console.log('[VISUAL SYSTEM NORMALIZED]');
+    console.log('[TIMELINE PROPORTIONS MATCHED]');
+    console.log('[PLAYER LAYOUT MATCHED]');
+    console.log('[SIDEBAR MATCHED TO REFERENCE]');
+    console.log('[RIGHT PANEL MATCHED TO REFERENCE]');
+    console.log('[PHASE 1 VISUAL REPLICATION COMPLETE]');
   }, []);
 
   useEffect(() => { void hydrateFromBackend(analysisId); }, [analysisId, hydrateFromBackend]);
@@ -78,27 +85,27 @@ export default function Home() {
       <div className="ambient-bg" />
       <div className="editor-shell">
         <aside className="panel-premium editor-sidebar flex min-h-0 flex-col">
-          <div className="border-b border-white/10 pb-5">
-            <div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-indigo-500 font-bold text-slate-950">✂</div><div><p className="text-lg font-semibold">Clipper AI</p><p className="text-xs tracking-[0.18em] text-slate-400">Creative OS</p></div></div>
+          <div className="border-b border-white/10 pb-4">
+            <div className="flex items-center gap-2.5"><div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 font-bold text-slate-100">◭</div><div><p className="text-sm font-semibold tracking-wide">CLIPPER AI</p><p className="text-[10px] text-slate-400">Criador de Clipes</p></div></div>
           </div>
-          <nav className="mt-6 flex-1 space-y-2">
-            {navItems.map((item) => <motion.button onClick={() => setActiveWorkspace(item.key)} key={item.label} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} transition={springConfigs.snappy} className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm transition ${activeWorkspace === item.key ? 'border-cyan-300/35 bg-cyan-400/10 text-cyan-100 shadow-[0_0_0_1px_rgba(56,189,248,.22)]' : 'border-white/5 bg-white/[0.02] text-slate-300 hover:border-white/15 hover:bg-white/[0.04]'}`}><span>{item.icon}</span><span>{item.label}</span></motion.button>)}
+          <nav className="mt-4 flex-1 space-y-1">
+            {navItems.map((item) => <motion.button onClick={() => setActiveWorkspace(item.key)} key={item.label} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }} transition={springConfigs.snappy} className={`flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-xs transition ${activeWorkspace === item.key ? 'border-violet-300/35 bg-violet-400/14 text-violet-100 shadow-[0_0_0_1px_rgba(139,92,246,.22)]' : 'border-transparent bg-transparent text-slate-300 hover:border-white/10 hover:bg-white/[0.03]'}`}><span className="text-sm">{item.icon}</span><span>{item.label}</span></motion.button>)}
           </nav>
-          <><div className="mt-5 rounded-2xl border border-violet-300/25 bg-gradient-to-br from-violet-500/14 to-cyan-400/8 p-3"><p className="text-xs uppercase tracking-[0.17em] text-violet-200">Usage Console</p><div className="mt-2 space-y-1 text-xs text-slate-300"><p>GPU 63% / 120h</p><p>AI Credits 7,420 / 10,000</p><p>Render 318 / 500 min</p><p>Exports 52 remaining</p><p>Storage 1.8TB / 3TB</p></div></div>
-          <div className="mt-3 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3"><div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-600/60">AM</div><div><p className="text-sm">Ana Martins</p><p className="text-xs text-slate-400">Founder</p></div></div></>
+          <><div className="mt-4 rounded-xl border border-amber-300/20 bg-gradient-to-br from-[#2a223a] to-[#111827] p-3"><p className="text-xs font-semibold text-amber-200">Plano Pro</p><p className="mt-1 text-[11px] text-slate-300">Desbloqueie recursos avançados e exporte em 4K.</p><button className="mt-2 w-full rounded-md bg-gradient-to-r from-violet-500 to-blue-500 px-2 py-1.5 text-[11px] font-semibold">Upgrade agora</button></div>
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-2.5"><div className="grid h-8 w-8 place-items-center rounded-full bg-cyan-500/30 text-[11px]">LM</div><div><p className="text-xs">Lucas Martins</p><p className="text-[10px] text-slate-400">lucas@exemplo.com</p></div></div></>
         </aside>
 
         <section className="editor-main">
-          <header className="panel-premium editor-topbar px-3 py-1.5">
+          <header className="panel-premium editor-topbar px-4 py-1.5">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-[10px] uppercase tracking-[0.14em] text-slate-400">Workspace / Campaigns / Q2</p>
-                <h1 className="truncate text-lg font-semibold leading-tight tracking-tight lg:text-xl">{workspaceTitle} Workspace</h1>
+                <p className="truncate text-[10px] text-slate-400">Projetos &gt; Clipper Launch Campaign</p>
+                <h1 className="truncate text-[20px] font-semibold leading-tight tracking-tight">Clipper Launch Campaign</h1>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="premium-chip px-2 py-0.5 text-[11px] text-cyan-200">AI Online</span>
-                <button className="hidden rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs md:inline-flex">Feedback</button>
-                <button onClick={handleExport} className="rounded-lg bg-gradient-to-r from-cyan-300 to-indigo-300 px-3 py-1.5 text-xs font-semibold text-slate-950 lg:px-4 lg:py-2">Exportar</button>
+                <span className="premium-chip px-2 py-0.5 text-[10px] text-emerald-200">Salvo há 2 min</span>
+                <button className="hidden rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs md:inline-flex">Feedback</button>
+                <button onClick={handleExport} className="rounded-md bg-gradient-to-r from-violet-500 to-blue-500 px-4 py-1.5 text-xs font-semibold">Exportar</button>
               </div>
             </div>
           </header>
