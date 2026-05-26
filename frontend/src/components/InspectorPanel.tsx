@@ -18,7 +18,7 @@ export function InspectorPanel() {
   if (!selected) return <div className="rounded-[2rem] border border-white/12 bg-white/[0.05] p-6">Selecione um bloco.</div>;
 
   return (
-    <div className="rounded-[2.1rem] border border-white/15 bg-[#101a2e]/72 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,.12),0_35px_90px_rgba(0,0,0,.5)] backdrop-blur-3xl">
+    <div className="panel-premium p-5">
       <h3 className="mb-5 text-sm font-semibold uppercase tracking-[0.24em] text-slate-200">Inspector</h3>
       <div className="space-y-4 rounded-2xl border border-white/10 bg-[#0b1224]/80 p-4">
         <label className="block text-xs uppercase tracking-[0.12em] text-slate-400">Texto</label>

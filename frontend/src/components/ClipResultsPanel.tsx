@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { GeneratedClip, useTimelineStore } from '@/store/timelineStore';
 
 const rankBadge = (score: number) => {
@@ -13,12 +14,18 @@ function ClipCard({ clip }: { clip: GeneratedClip }) {
   const { selectClip, selectedClipId } = useTimelineStore();
   const selected = selectedClipId === clip.id;
 
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   return (
-    <button
+    <motion.button whileHover={{ y: -4, scale: 1.01 }} transition={{ type: 'spring', stiffness: 280, damping: 22 }}
+      onHoverStart={() => videoRef.current?.play()}
+      onHoverEnd={() => { if (videoRef.current) { videoRef.current.pause(); videoRef.current.currentTime = 0; } }}
       onClick={() => selectClip(clip.id)}
       className={`w-full rounded-2xl border p-4 text-left transition ${selected ? 'border-cyan-300/60 bg-cyan-500/10' : 'border-white/10 bg-[#0a1122]/80 hover:border-white/30'}`}
     >
-      <video src={`http://localhost:8000${clip.final_video}`} muted className="mb-3 aspect-video w-full rounded-xl border border-white/10 object-cover" />
+      <div className="relative mb-3 overflow-hidden rounded-2xl">
+        <video ref={videoRef} src={`http://localhost:8000${clip.final_video}`} muted loop playsInline className="aspect-video w-full object-cover transition duration-500" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-white/5" />
+      </div>
       <div className="mb-2 flex items-center justify-between">
         <p className="text-sm font-semibold text-white">{clip.label}</p>
         <span className="text-xs text-cyan-200">{rankBadge(clip.viral_score)}</span>
@@ -40,7 +47,7 @@ function ClipCard({ clip }: { clip: GeneratedClip }) {
           <p className="mt-3 text-cyan-200">{clip.hashtags.join(' ')}</p>
         )}
       </div>
-    </button>
+    </motion.button>
   );
 }
 
@@ -49,7 +56,7 @@ export function ClipResultsPanel() {
   const clips = useMemo(() => generatedClips, [generatedClips]);
 
   return (
-    <div className="rounded-[2.1rem] border border-white/15 bg-[#101a2e]/72 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,.12),0_35px_90px_rgba(0,0,0,.5)]">
+    <div className="panel-premium p-5">
       <h3 className="mb-5 text-sm font-semibold uppercase tracking-[0.24em] text-slate-200">AI Viral Clips</h3>
       <div className="grid max-h-[560px] gap-4 overflow-auto pr-1">
         {clips.map((clip) => <ClipCard key={clip.id} clip={clip} />)}
