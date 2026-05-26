@@ -13,8 +13,8 @@ import { springConfigs } from '@/lib/motion-config';
 import { WorkspaceContainer, WorkspaceKey } from '@/components/WorkspaceContainer';
 
 const navItems: { label: string; icon: string; key: WorkspaceKey }[] = [
-  { label: 'Projects', icon: '⌘', key: 'projects' },
-  { label: 'Sequences', icon: '◍', key: 'sequences' },
+  { label: 'Projetos', icon: '⌘', key: 'projects' },
+  { label: 'Sequências', icon: '◍', key: 'sequences' },
   { label: 'Timeline', icon: '▤', key: 'timeline' },
   { label: 'AI Studio', icon: '✦', key: 'ai-studio' },
   { label: 'Assets', icon: '◈', key: 'assets' }
@@ -92,11 +92,11 @@ export default function Home() {
           <header className="panel-premium editor-topbar px-3 py-1.5">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-[10px] uppercase tracking-[0.14em] text-slate-400">Workspace / Campaigns / Q2</p>
-                <h1 className="truncate text-lg font-semibold leading-tight tracking-tight lg:text-xl">{workspaceTitle} Workspace</h1>
+                <p className="truncate text-[10px] uppercase tracking-[0.14em] text-slate-400">Projetos &gt; Clipper Launch Campaign</p>
+                <h1 className="truncate text-lg font-semibold leading-tight tracking-tight lg:text-xl">Clipper Launch Campaign</h1>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="premium-chip px-2 py-0.5 text-[11px] text-cyan-200">AI Online</span>
+                <span className="premium-chip px-2 py-0.5 text-[11px] text-cyan-200">Sala há 2 min</span>
                 <button className="hidden rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs md:inline-flex">Feedback</button>
                 <button onClick={handleExport} className="rounded-lg bg-gradient-to-r from-cyan-300 to-indigo-300 px-3 py-1.5 text-xs font-semibold text-slate-950 lg:px-4 lg:py-2">Exportar</button>
               </div>
