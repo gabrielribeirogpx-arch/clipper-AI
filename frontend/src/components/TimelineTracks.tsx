@@ -59,7 +59,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
   }, [duration, pxPerSecond, rulerStep]);
 
 
-  if (!mounted) return <div className="h-[180px] rounded-[2rem] border border-white/10 bg-white/5" />;
+  if (!mounted) return <div className="h-[220px] rounded-[2rem] border border-white/10 bg-white/5" />;
 
   return (
     <section className="panel-premium editor-timeline-section min-h-0 w-full p-1.5">
@@ -73,7 +73,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
 
       <div
         ref={containerRef}
-        className="timeline-scrollbar relative h-[128px] min-h-0 w-full overflow-x-auto overflow-y-hidden rounded-lg border border-white/10 bg-[#050912] p-1.5 shadow-[inset_0_2px_22px_rgba(0,0,0,.55)]"
+        className="timeline-scrollbar relative h-[168px] min-h-0 w-full overflow-x-auto overflow-y-hidden rounded-lg border border-white/10 bg-[#050912] p-1.5 shadow-[inset_0_2px_22px_rgba(0,0,0,.55)]"
         onClick={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
           const timelineX = e.clientX - rect.left + e.currentTarget.scrollLeft;
