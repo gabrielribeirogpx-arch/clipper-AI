@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { renderManualRegionFinal } from '@/lib/api';
 import { useTimelineStore, type RegionBox } from '@/store/timelineStore';
@@ -40,7 +40,7 @@ export default function ManualRegionPage() {
   const { analysis_id } = useParams<{ analysis_id: string }>();
   const { videoUrl, analysisId, hydrateFromBackend, manualRegion, setManualRegion, setClipRenderMode } = useTimelineStore();
 
-  const playerRef = useRef<HTMLDivElement | null>(null);
+  const editorViewportRef = useRef<HTMLDivElement | null>(null);
   const sourceVideoRef = useRef<HTMLVideoElement | null>(null);
   const isDraggingRef = useRef(false);
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -62,6 +62,24 @@ export default function ManualRegionPage() {
   const previewVideoScale = fitScaleToFinal * previewScale;
   const previewOffsetX = (-normalizedRegion.x * fitScaleToFinal + composeOffsetX) * previewScale;
   const previewOffsetY = (-normalizedRegion.y * fitScaleToFinal + composeOffsetY) * previewScale;
+  const editorVideoRect = useMemo(() => {
+    const viewport = editorViewportRef.current;
+    if (!viewport) {
+      return { left: 0, top: 0, width: 0, height: 0 };
+    }
+    const viewportWidth = viewport.clientWidth;
+    const viewportHeight = viewport.clientHeight;
+    const videoAspect = activeVideoWidth / activeVideoHeight;
+    const viewportAspect = viewportWidth / viewportHeight;
+    if (videoAspect > viewportAspect) {
+      const width = viewportWidth;
+      const height = width / videoAspect;
+      return { left: 0, top: (viewportHeight - height) / 2, width, height };
+    }
+    const height = viewportHeight;
+    const width = height * videoAspect;
+    return { left: (viewportWidth - width) / 2, top: 0, width, height };
+  }, [activeVideoHeight, activeVideoWidth]);
 
   useEffect(() => {
     if (analysis_id && analysisId !== analysis_id) {
@@ -118,6 +136,20 @@ export default function ManualRegionPage() {
     });
   }, [activeVideoHeight, activeVideoWidth, fitScaleToFinal, normalizedRegion, previewOffsetX, previewOffsetY, previewScale, previewVideoScale, previewAspect, regionAspect]);
 
+  useEffect(() => {
+    console.log('[EDITOR VIDEO FIT]', { objectFit: 'contain' });
+    console.log('[EDITOR VIDEO DIMENSIONS]', {
+      sourceWidth: activeVideoWidth,
+      sourceHeight: activeVideoHeight,
+      renderedWidth: editorVideoRect.width,
+      renderedHeight: editorVideoRect.height,
+    });
+    console.log('[EDITOR VIDEO TRANSFORM]', { transform: 'none' });
+    console.log('[PREVIEW VIDEO TRANSFORM]', {
+      transform: `translate3d(${previewOffsetX}px, ${previewOffsetY}px, 0) scale(${previewVideoScale})`,
+    });
+  }, [activeVideoHeight, activeVideoWidth, editorVideoRect.height, editorVideoRect.width, previewOffsetX, previewOffsetY, previewVideoScale]);
+
   const startDrag = (e: React.PointerEvent, mode: DragState['mode']) => {
     e.preventDefault();
     e.stopPropagation();
@@ -127,9 +159,8 @@ export default function ManualRegionPage() {
   };
 
   const onMove = (e: React.PointerEvent) => {
-    if (!dragState || !playerRef.current) return;
-    const rect = playerRef.current.getBoundingClientRect();
-    const dxPx = (e.clientX - dragState.x) * (activeVideoWidth / rect.width);
+    if (!dragState || !editorViewportRef.current || editorVideoRect.width === 0) return;
+    const dxPx = (e.clientX - dragState.x) * (activeVideoWidth / editorVideoRect.width);
 
     if (dragState.mode === 'move') {
       const next = {
@@ -224,43 +255,81 @@ export default function ManualRegionPage() {
           </div>
         </div>
         <div
-          ref={playerRef}
+          ref={editorViewportRef}
           onPointerMove={onMove}
           onPointerUp={onUp}
           onPointerCancel={onUp}
-          className='relative overflow-hidden rounded-xl border border-white/20'
+          className='relative rounded-xl border border-white/20'
+          style={{ transform: 'none' }}
         >
-          {videoUrl ? <video ref={sourceVideoRef} src={videoUrl} className='aspect-video w-full object-contain' controls /> : <div className='grid aspect-video place-items-center'>Sem vídeo</div>}
+          {videoUrl ? (
+            <div className='relative aspect-video w-full bg-black'>
+              <video ref={sourceVideoRef} src={videoUrl} className='absolute inset-0 h-full w-full object-contain' controls />
+              <div
+                className='pointer-events-none absolute bg-black/55'
+                style={{
+                  left: `${editorVideoRect.left}px`,
+                  top: `${editorVideoRect.top}px`,
+                  width: `${editorVideoRect.width}px`,
+                  height: `${(normalizedRegion.y / activeVideoHeight) * editorVideoRect.height}px`,
+                }}
+              />
+              <div
+                className='pointer-events-none absolute bg-black/55'
+                style={{
+                  left: `${editorVideoRect.left}px`,
+                  top: `${editorVideoRect.top + ((normalizedRegion.y + normalizedRegion.height) / activeVideoHeight) * editorVideoRect.height}px`,
+                  width: `${editorVideoRect.width}px`,
+                  height: `${editorVideoRect.height - ((normalizedRegion.y + normalizedRegion.height) / activeVideoHeight) * editorVideoRect.height}px`,
+                }}
+              />
+              <div
+                className='pointer-events-none absolute bg-black/55'
+                style={{
+                  left: `${editorVideoRect.left}px`,
+                  top: `${editorVideoRect.top + (normalizedRegion.y / activeVideoHeight) * editorVideoRect.height}px`,
+                  width: `${(normalizedRegion.x / activeVideoWidth) * editorVideoRect.width}px`,
+                  height: `${(normalizedRegion.height / activeVideoHeight) * editorVideoRect.height}px`,
+                }}
+              />
+              <div
+                className='pointer-events-none absolute bg-black/55'
+                style={{
+                  left: `${editorVideoRect.left + ((normalizedRegion.x + normalizedRegion.width) / activeVideoWidth) * editorVideoRect.width}px`,
+                  top: `${editorVideoRect.top + (normalizedRegion.y / activeVideoHeight) * editorVideoRect.height}px`,
+                  width: `${editorVideoRect.width - ((normalizedRegion.x + normalizedRegion.width) / activeVideoWidth) * editorVideoRect.width}px`,
+                  height: `${(normalizedRegion.height / activeVideoHeight) * editorVideoRect.height}px`,
+                }}
+              />
 
-          <div
-            className='pointer-events-none absolute bg-black/55'
-            style={{ inset: 0, clipPath: `polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, ${normalizedRegion.x / activeVideoWidth * 100}% ${normalizedRegion.y / activeVideoHeight * 100}%, ${((normalizedRegion.x + normalizedRegion.width) / activeVideoWidth) * 100}% ${normalizedRegion.y / activeVideoHeight * 100}%, ${((normalizedRegion.x + normalizedRegion.width) / activeVideoWidth) * 100}% ${((normalizedRegion.y + normalizedRegion.height) / activeVideoHeight) * 100}%, ${normalizedRegion.x / activeVideoWidth * 100}% ${((normalizedRegion.y + normalizedRegion.height) / activeVideoHeight) * 100}%, ${normalizedRegion.x / activeVideoWidth * 100}% ${normalizedRegion.y / activeVideoHeight * 100}%)` }}
-          />
-
-          <div
-            onPointerDown={(e) => startDrag(e, 'move')}
-            className='absolute cursor-grab border-2 border-cyan-300 bg-cyan-400/20 active:cursor-grabbing'
-            style={{
-              left: `${(normalizedRegion.x / activeVideoWidth) * 100}%`,
-              top: `${(normalizedRegion.y / activeVideoHeight) * 100}%`,
-              width: `${(normalizedRegion.width / activeVideoWidth) * 100}%`,
-              height: `${(normalizedRegion.height / activeVideoHeight) * 100}%`,
-            }}
-          >
-            <div className='pointer-events-none absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-cyan-200/80' />
-            <div
-              className='pointer-events-none absolute left-1/2 top-0 h-full -translate-x-1/2 border-x border-dashed border-cyan-100/80'
-              style={{ width: `${SAFE_AREA_WIDTH_RATIO * 100}%` }}
-            />
-            <button
-              type='button'
-              aria-label='Resize 9:16 region'
-              onPointerDown={(e) => startDrag(e, 'resize')}
-              className='absolute -right-3 bottom-3 h-6 w-6 rounded-full border border-cyan-100 bg-cyan-300 text-black shadow-lg'
-            >
-              ↔
-            </button>
-          </div>
+              <div
+                onPointerDown={(e) => startDrag(e, 'move')}
+                className='absolute cursor-grab border-2 border-cyan-300 bg-cyan-400/20 active:cursor-grabbing'
+                style={{
+                  left: `${editorVideoRect.left + (normalizedRegion.x / activeVideoWidth) * editorVideoRect.width}px`,
+                  top: `${editorVideoRect.top + (normalizedRegion.y / activeVideoHeight) * editorVideoRect.height}px`,
+                  width: `${(normalizedRegion.width / activeVideoWidth) * editorVideoRect.width}px`,
+                  height: `${(normalizedRegion.height / activeVideoHeight) * editorVideoRect.height}px`,
+                }}
+              >
+                <div className='pointer-events-none absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-cyan-200/80' />
+                <div
+                  className='pointer-events-none absolute left-1/2 top-0 h-full -translate-x-1/2 border-x border-dashed border-cyan-100/80'
+                  style={{ width: `${SAFE_AREA_WIDTH_RATIO * 100}%` }}
+                />
+                <button
+                  type='button'
+                  aria-label='Resize 9:16 region'
+                  onPointerDown={(e) => startDrag(e, 'resize')}
+                  className='absolute -right-3 bottom-3 h-6 w-6 rounded-full border border-cyan-100 bg-cyan-300 text-black shadow-lg'
+                >
+                  ↔
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className='grid aspect-video place-items-center'>Sem vídeo</div>
+          )}
         </div>
 
         <button onClick={confirm} className='mt-4 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-black'>
