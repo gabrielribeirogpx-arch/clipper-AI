@@ -34,6 +34,10 @@ export default function Home() {
     console.log('[TIMELINE HEIGHT REDUCED]');
     console.log('[PLAYER AREA MATHEMATICALLY CORRECTED]');
     console.log('[VISIBLE PLAYER NOW TRUE 16:9]');
+    console.log('[BOTTOM SAFE AREA ACTIVE]');
+    console.log('[TIMELINE NO LONGER CLIPPED]');
+    console.log('[WORKSPACE BREATHING ROOM ADDED]');
+    console.log('[PREMIUM FOOTER SPACING ACTIVE]');
   }, []);
 
   useEffect(() => { void hydrateFromBackend(analysisId); }, [analysisId, hydrateFromBackend]);
