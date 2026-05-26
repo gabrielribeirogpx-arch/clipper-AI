@@ -42,7 +42,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
   const cursorLeft = secondsToPixels(currentTime, pxPerSecond);
 
   useEffect(() => {
-    console.log('[TIMELINE FORCED INTO VIEWPORT]');
+    console.log('[TIMELINE HEIGHT FIXED]');
   }, []);
 
   const rulerStep = useMemo(() => getRulerStep(zoom), [zoom]);
@@ -59,10 +59,10 @@ export const TimelineTracks = memo(function TimelineTracks() {
   }, [duration, pxPerSecond, rulerStep]);
 
 
-  if (!mounted) return <div className="h-[clamp(220px,30vh,320px)] rounded-[2rem] border border-white/10 bg-white/5" />;
+  if (!mounted) return <div className="h-[240px] rounded-[2rem] border border-white/10 bg-white/5" />;
 
   return (
-    <section className="panel-premium min-h-0 w-full shrink-0 p-4">
+    <section className="panel-premium min-h-0 w-full shrink-0 basis-[240px] p-3">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-200">Cinematic Timeline</p>
         <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#0a1122]/88 px-4 py-2">
@@ -73,7 +73,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
 
       <div
         ref={containerRef}
-        className="timeline-scrollbar relative h-[clamp(220px,30vh,330px)] w-full overflow-x-auto overflow-y-auto rounded-2xl border border-white/10 bg-[#050912] p-3 shadow-[inset_0_2px_22px_rgba(0,0,0,.55)]"
+        className="timeline-scrollbar relative h-[190px] w-full overflow-x-auto overflow-y-auto rounded-2xl border border-white/10 bg-[#050912] p-3 shadow-[inset_0_2px_22px_rgba(0,0,0,.55)]"
         onClick={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
           const timelineX = e.clientX - rect.left + e.currentTarget.scrollLeft;
