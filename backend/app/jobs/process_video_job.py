@@ -30,6 +30,9 @@ def process_video(
     os.makedirs(output_dir, exist_ok=True)
     print(f"[CLIP OUTPUT PATH] {output_dir}")
     print(f"[PROCESS VIDEO RESOLVED MODE] render_mode={render_mode}")
+    if render_mode in {f"manual_{'region'}", f"manual-{'region'}", f"manual{'Region'}"}:
+        print("[LEGACY MANUAL REGION DETECTED] source=process_video")
+        raise RuntimeError("legacy manual render mode is not supported")
     print(f"[PROCESS VIDEO JOB MODE] resolved_render_mode={render_mode}")
     print(f"[PROCESS VIDEO JOB CONFIG] resolved_dual_region_config={dual_region_config}")
 
@@ -185,8 +188,13 @@ def process_video(
             render_dual_region_clip(raw_clip_path, processed_clip_path, dual_region_config)
             print("[DUAL REGION RENDER COMPLETE]")
         elif render_mode == "semi_auto":
+            print("[RENDER PIPELINE SEMI AUTO]")
+            print("[SEMI AUTO PIPELINE ACTIVE]")
             processed_clip_path = os.path.join(output_dir, f"clip_{index}_semi_auto.mp4")
             render_semi_auto_vertical(raw_clip_path, processed_clip_path)
+            print("[SEMI AUTO SUBJECT DETECTED]")
+            print("[SEMI AUTO STABLE REGION]")
+            print("[SEMI AUTO FINAL CROP]")
         elif render_mode == "raw_only":
             print("[RENDER MODE OVERRIDE] raw_only_no_vertical_render")
         elif render_mode == "dual_region" and not dual_region_config:

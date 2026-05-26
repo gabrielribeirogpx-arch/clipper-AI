@@ -120,7 +120,7 @@ export type IngestStatus = { status: string; progress: number; step: string; ana
 export type IngestJobState = IngestStatus & { job_id: string; finished: boolean };
 
 export async function ingestYouTubeJob(payload: YouTubeIngestRequest): Promise<IngestJobResponse> {
-  console.log('[FRONTEND MANUAL REGION SENT]', { semi_auto_config: payload.semi_auto_config, render_mode: payload.render_mode });
+  console.log('[FRONTEND SEMI AUTO SENT]', { semi_auto_config: payload.semi_auto_config, render_mode: payload.render_mode });
   const response = await fetch(`${API_BASE}/ingest/youtube`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   if (!response.ok) throw new Error("YouTube ingestion failed");
   return response.json() as Promise<IngestJobResponse>;
@@ -152,12 +152,12 @@ export async function renderDualRegionFinal(payload: { analysis_id: string; rend
   return response.json();
 }
 
-export async function renderManualRegionFinal(payload: { analysis_id: string; render_mode: "semi_auto"; semi_auto: unknown }) {
+export async function renderSemiAutoFinal(payload: { analysis_id: string; render_mode: "semi_auto"; semi_auto: unknown }) {
   const response = await fetch(`${API_BASE}/timeline/render-semi-auto`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error('Manual region render failed');
+  if (!response.ok) throw new Error('Semi auto render failed');
   return response.json();
 }

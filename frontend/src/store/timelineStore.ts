@@ -84,7 +84,7 @@ type TimelineState = {
   moveBlock: (track: TrackType, id: string, start: number, end: number) => void;
   setClipRenderMode: (mode: ClipRenderMode) => void;
   setDualRegions: (regions: DualRegions, options?: { persist?: boolean }) => void;
-  setManualRegion: (region: RegionBox, options?: { persist?: boolean }) => void;
+  setSemiAutoRegion: (region: RegionBox, options?: { persist?: boolean }) => void;
 };
 
 const clampTime = (value: number, duration: number) => Math.min(Math.max(value, 0), duration);
@@ -214,11 +214,11 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       }
       return { dualRegions };
     }),
-  setManualRegion: (semiAuto, options) =>
+  setSemiAutoRegion: (semiAuto, options) =>
     set((state) => {
       const shouldPersist = options?.persist ?? true;
       if (shouldPersist) {
-        console.log('[MANUAL REGION CONFIG SAVE]', { source: 'setManualRegion', semi_auto: semiAuto });
+        console.log('[SEMI AUTO CONFIG SAVE]', { source: 'setSemiAutoRegion', semi_auto: semiAuto });
         void fetch('http://localhost:8000/timeline/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: state.clipRenderMode, dual_regions: state.dualRegions, semi_auto: semiAuto }) });
       }
       return { semiAuto };
@@ -254,7 +254,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
         regionB: data.dual_regions.regionB,
       });
     }
-    if (data.semi_auto) console.log('[MANUAL REGION CONFIG HYDRATED]', { analysis_id: backendAnalysisId, semi_auto: data.semi_auto });
+    if (data.semi_auto) console.log('[SEMI AUTO CONFIG HYDRATED]', { analysis_id: backendAnalysisId, semi_auto: data.semi_auto });
     const currentAnalysisId = get().analysisId;
     const hasPersistedRenderMode = typeof data.render_mode === 'string' && data.render_mode.length > 0;
     const hasAvailableClips = generatedClips.length > 0;
