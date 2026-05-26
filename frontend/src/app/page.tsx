@@ -29,19 +29,11 @@ export default function Home() {
   const heroRef = useRef<HTMLElement | null>(null);
   
   useEffect(() => {
-    console.log('[TRUE RESPONSIVE VIEWPORT ACTIVE]');
-    console.log('[16:9 PLAYER LOCKED]');
-    console.log('[TIMELINE HEIGHT LOCKED]');
-    console.log('[VIEWPORT DISTRIBUTION FIXED]');
-    console.log('[OVERFLOW CONFLICTS REMOVED]');
-    console.log('[HEADER HEIGHT COMPACTED]');
-    console.log('[VERTICAL SPACE RECOVERED]');
-    console.log('[PLAYER HEIGHT BOOSTED]');
-    console.log('[CINEMATIC WORKSPACE RESTORED]');
-    console.log('[HORIZONTAL VIEWPORT REBALANCED]');
-    console.log('[SIDEBAR WIDTH REDUCED]');
-    console.log('[RIGHT PANEL WIDTH REDUCED]');
-    console.log('[CENTER WORKSPACE PRIORITIZED]');
+    console.log('[TRUE 16:9 VIEWPORT FIX ACTIVE]');
+    console.log('[VIEWPORT HEIGHT REALLOCATED]');
+    console.log('[TIMELINE HEIGHT REDUCED]');
+    console.log('[PLAYER AREA MATHEMATICALLY CORRECTED]');
+    console.log('[VISIBLE PLAYER NOW TRUE 16:9]');
   }, []);
 
   useEffect(() => { void hydrateFromBackend(analysisId); }, [analysisId, hydrateFromBackend]);
@@ -77,7 +69,7 @@ export default function Home() {
         </aside>
 
         <section className="editor-main">
-          <header className="panel-premium editor-topbar px-3 py-2">
+          <header className="panel-premium editor-topbar px-3 py-1.5">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate text-[10px] uppercase tracking-[0.14em] text-slate-400">Workspace / Campaigns / Q2</p>

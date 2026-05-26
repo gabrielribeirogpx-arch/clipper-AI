@@ -62,8 +62,8 @@ export const TimelineTracks = memo(function TimelineTracks() {
   if (!mounted) return <div className="h-[160px] rounded-[2rem] border border-white/10 bg-white/5" />;
 
   return (
-    <section className="panel-premium editor-timeline-section min-h-0 w-full p-1">
-      <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
+    <section className="panel-premium editor-timeline-section min-h-0 w-full p-0.5">
+      <div className="mb-0.5 flex flex-wrap items-center justify-between gap-1">
         <p className="text-xs font-semibold uppercase tracking-[0.26em] text-slate-200">Cinematic Timeline</p>
         <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#0a1122]/88 px-2 py-1">
           <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-300">Zoom {zoom.toFixed(1)}x</span>
@@ -73,7 +73,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
 
       <div
         ref={containerRef}
-        className="timeline-scrollbar relative h-[128px] min-h-0 w-full overflow-x-auto overflow-y-hidden rounded-lg border border-white/10 bg-[#050912] p-1 shadow-[inset_0_2px_22px_rgba(0,0,0,.55)]"
+        className="timeline-scrollbar relative h-[130px] min-h-0 w-full overflow-x-auto overflow-y-hidden rounded-lg border border-white/10 bg-[#050912] p-0.5 shadow-[inset_0_2px_22px_rgba(0,0,0,.55)]"
         onClick={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
           const timelineX = e.clientX - rect.left + e.currentTarget.scrollLeft;
