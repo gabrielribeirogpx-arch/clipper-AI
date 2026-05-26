@@ -17,7 +17,7 @@ const trackStyles: Record<TrackType, string> = {
     'from-fuchsia-500/88 via-purple-400/84 to-fuchsia-300/72 border-fuchsia-100/55 shadow-[0_12px_30px_rgba(217,70,239,.34)]'
 };
 
-const TRACK_HEIGHT = 58;
+const TRACK_HEIGHT = 26;
 
 const formatTime = (seconds: number) => {
   const total = Math.max(0, Math.floor(seconds));
@@ -42,7 +42,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
   const cursorLeft = secondsToPixels(currentTime, pxPerSecond);
 
   useEffect(() => {
-    console.log('[TIMELINE HEIGHT REDUCED TO 160PX]');
+    console.log('[TIMELINE HEIGHT REDUCED TO 192PX]');
   }, []);
 
   const rulerStep = useMemo(() => getRulerStep(zoom), [zoom]);
@@ -62,9 +62,9 @@ export const TimelineTracks = memo(function TimelineTracks() {
   if (!mounted) return <div className="h-[160px] rounded-[2rem] border border-white/10 bg-white/5" />;
 
   return (
-    <section className="panel-premium editor-timeline-section min-h-0 w-full p-0.5">
-      <div className="mb-0.5 flex flex-wrap items-center justify-between gap-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.26em] text-slate-200">Cinematic Timeline</p>
+    <section className="panel-premium editor-timeline-section min-h-0 w-full p-1.5">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200">Linha do tempo cinemática</p>
         <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#0a1122]/88 px-2 py-1">
           <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-300">Zoom {zoom.toFixed(1)}x</span>
           <input type="range" min={0.5} max={3} step={0.1} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="timeline-zoom-slider w-[clamp(9rem,20vw,14rem)]" />
@@ -73,7 +73,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
 
       <div
         ref={containerRef}
-        className="timeline-scrollbar relative h-[130px] min-h-0 w-full overflow-x-auto overflow-y-hidden rounded-lg border border-white/10 bg-[#050912] p-0.5 shadow-[inset_0_2px_22px_rgba(0,0,0,.55)]"
+        className="timeline-scrollbar relative h-[154px] min-h-0 w-full overflow-x-auto overflow-y-hidden rounded-lg border border-white/10 bg-[#050912] p-1 shadow-[inset_0_2px_22px_rgba(0,0,0,.55)]"
         onClick={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
           const timelineX = e.clientX - rect.left + e.currentTarget.scrollLeft;
@@ -101,13 +101,13 @@ export const TimelineTracks = memo(function TimelineTracks() {
             <div className="ml-0.5 h-[calc(100%-0.75rem)] w-[3px] rounded-full bg-rose-400 shadow-[0_0_20px_rgba(251,113,133,.95),0_0_56px_rgba(251,113,133,.6)]" />
           </div>
 
-          <div className="grid gap-1.5">
+          <div className="grid gap-1">
             {(Object.keys(tracks) as TrackType[]).map((name) => {
               const rowHeight = TRACK_HEIGHT + 8;
 
               return (
-                <div key={name} className="grid grid-cols-[minmax(96px,clamp(6rem,12vw,10rem))_1fr] gap-2">
-                  <div className="flex items-center rounded-lg border border-white/10 bg-white/[0.03] px-2.5 lg:px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300">
+                <div key={name} className="grid grid-cols-[92px_1fr] gap-1.5">
+                  <div className="flex items-center rounded-md border border-white/10 bg-white/[0.03] px-2 text-[9px] font-semibold uppercase tracking-[0.15em] text-slate-300">
                     {name}
                   </div>
                   <div className="relative overflow-hidden rounded-lg border border-white/10 bg-[#0b1324]/95" style={{ height: rowHeight }}>
@@ -127,7 +127,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
                               const deltaSec = pixelsToSeconds(info.offset.x, pxPerSecond);
                               moveBlock(name, block.id, block.start + deltaSec, block.end + deltaSec);
                             }}
-                            className={`absolute top-1.5 flex h-[52px] items-center rounded-lg border bg-gradient-to-r px-3 text-xs font-semibold text-white ${trackStyles[name]} ${
+                            className={`absolute top-1 flex h-[24px] items-center rounded-md border bg-gradient-to-r px-2 text-[10px] font-medium text-white ${trackStyles[name]} ${
                               name === 'hooks' ? 'ring-1 ring-rose-200/70' : ''
                             }`}
                             style={{ left: secondsToPixels(block.start, pxPerSecond), width: secondsToPixels(block.end - block.start, pxPerSecond) }}

@@ -76,20 +76,20 @@ export function VideoPreview({ sectionRef }: { sectionRef?: RefObject<HTMLElemen
   if (!mounted) return <div className="editor-player-card rounded-[2rem] border border-white/10 bg-white/5" />;
 
   return (
-    <motion.section ref={sectionRef} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="panel-premium editor-player-card relative w-full">
+    <motion.section ref={sectionRef} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="panel-premium editor-player-card relative w-full p-2">
       <div className="pointer-events-none absolute inset-0"><div className="absolute -left-20 top-4 h-[24rem] w-[24rem] rounded-full bg-cyan-500/30 blur-[130px]" /></div>
       <div className="pointer-events-none absolute inset-0"><div className="absolute -right-20 bottom-0 h-[24rem] w-[24rem] rounded-full bg-violet-500/30 blur-[140px]" /></div>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_-10%,rgba(255,255,255,.18),transparent_38%),radial-gradient(circle_at_50%_110%,rgba(168,85,247,.24),transparent_48%)]" />
 
       <div className="editor-video-area relative">
-        <div className="editor-video-frame rounded-[1.4rem] border border-white/15 bg-gradient-to-b from-[#1b1d2a] to-[#07080c] p-[0.35rem] shadow-[0_24px_64px_rgba(0,0,0,.7),0_0_80px_rgba(34,211,238,.15)]">
-          <div className="mb-1 flex items-center justify-between gap-1.5">
+        <div className="editor-video-frame rounded-[14px] border border-violet-400/40 bg-gradient-to-b from-[#0c1222] to-[#060a14] p-[0.28rem] shadow-[0_22px_60px_rgba(0,0,0,.72),0_0_34px_rgba(139,92,246,.35)]">
+          <div className="mb-1 flex items-center justify-start gap-1.5">
             <div className="flex gap-2">
             <button className={`rounded-lg px-2.5 py-0.5 text-xs ${clipRenderMode === 'ai_tracking' ? 'bg-cyan-400 text-black' : 'bg-white/10'}`} onClick={() => setClipRenderMode('ai_tracking')}>AI Tracking</button>
             <button className={`rounded-lg px-2.5 py-0.5 text-xs ${clipRenderMode === 'dual_region' ? 'bg-cyan-400 text-black' : 'bg-white/10'}`} onClick={() => setClipRenderMode('dual_region')}>Dual Region</button>
-          </div><div className="flex items-center gap-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-0.5 text-[10px] text-cyan-200"><span className="h-2 w-2 rounded-full bg-cyan-300 animate-pulse"/>AI Processing</div>
           </div>
-          <div className="rounded-[1.2rem] border border-white/15 bg-black/95 p-[0.35rem]">
+          </div>
+          <div className="rounded-[12px] border border-violet-300/40 bg-black/95 p-[0.35rem]">
             <div className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-black">
               <div className="pointer-events-none absolute inset-0 z-20 bg-[linear-gradient(118deg,rgba(255,255,255,0.18)_0%,transparent_30%,transparent_70%,rgba(255,255,255,0.08)_100%)]" />
               <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,.22),transparent_38%)]" />
@@ -114,7 +114,7 @@ export function VideoPreview({ sectionRef }: { sectionRef?: RefObject<HTMLElemen
                     console.log('VIDEO READY');
                   }}
                   onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
-                />) : (<div className="grid h-full w-full place-items-center text-slate-300"><span className="leading-none">Nenhum clip real disponível ainda.</span></div>)}
+                />) : (<div className="grid h-full w-full place-items-center text-slate-300"><div className="text-center"><p className="text-sm font-medium">Nenhum clip real disponível ainda.</p><p className="mt-1 text-xs text-slate-400">Faça upload ou gere clips com IA para começar.</p></div></div>)}
                 {clipRenderMode === 'dual_region' && isRegionSetup === true && (
                   <div
                     className="absolute inset-0 z-30"
@@ -145,8 +145,8 @@ export function VideoPreview({ sectionRef }: { sectionRef?: RefObject<HTMLElemen
           <button className="rounded bg-white/10 px-2 py-1" onClick={() => setDualRegions({ regionA: { x: 120, y: 120, width: 1680, height: 420 }, regionB: { x: 120, y: 580, width: 1680, height: 420 } })}>Reaction</button>
         </div>}
 
-        <div className="editor-player-controls mt-1 flex items-center gap-1.5 rounded-[0.95rem] border border-white/10 bg-[#0a1122]/82 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,.1)] backdrop-blur-xl">
-          <button onClick={() => setPlaying(!isPlaying)} className="rounded-xl bg-gradient-to-r from-cyan-300 to-violet-400 px-4 py-1.5 text-xs font-bold text-slate-950 shadow-[0_0_28px_rgba(34,211,238,.4)]">{isPlaying ? 'Pause' : 'Play'}</button>
+        <div className="editor-player-controls mt-1 flex items-center gap-2 rounded-[10px] border border-white/10 bg-[#0a1122]/82 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,.1)] backdrop-blur-xl">
+          <button onClick={() => setPlaying(!isPlaying)} className="rounded-md bg-gradient-to-r from-violet-500 to-blue-500 px-3 py-1 text-[11px] font-bold">▶</button>
           <div className="h-2 flex-1 rounded-full bg-white/10 p-[2px]">
             <div className="h-full rounded-full bg-gradient-to-r from-cyan-300 to-violet-400 shadow-[0_0_24px_rgba(34,211,238,.45)]" style={{ width: `${Math.min((currentTime / Math.max(duration, 0.1)) * 100, 100)}%` }} />
           </div>

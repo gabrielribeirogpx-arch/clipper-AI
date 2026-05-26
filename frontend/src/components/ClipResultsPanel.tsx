@@ -56,11 +56,15 @@ export function ClipResultsPanel() {
   const clips = useMemo(() => generatedClips, [generatedClips]);
 
   return (
-    <div className="panel-premium flex min-h-0 flex-col p-5">
-      <h3 className="mb-5 text-sm font-semibold uppercase tracking-[0.24em] text-slate-200">AI Insights Panel</h3>
-      <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto pr-1">
+    <div className="panel-premium flex min-h-0 flex-col p-3">
+      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200">✦ AI Viral Clips</h3>
+      <div className="mb-3 space-y-2">
+        <div className="rounded-lg border border-white/10 bg-[#0a1122]/80 px-2.5 py-2 text-xs text-slate-400">Descreva o momento ideal...</div>
+        <button className="w-full rounded-lg bg-gradient-to-r from-violet-500 to-blue-500 px-3 py-2 text-xs font-semibold">Gerar sugestões</button>
+      </div>
+      <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1">
         {clips.map((clip) => <ClipCard key={clip.id} clip={clip} />)}
-        {!clips.length && <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">No generated clips yet.</div>}
+        {!clips.length && <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-slate-300">Sem clips analisados.</div>}
       </div>
     </div>
   );
