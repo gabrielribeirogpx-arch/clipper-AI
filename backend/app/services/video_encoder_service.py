@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import platform
+import shutil
 import subprocess
 from dataclasses import dataclass
 
@@ -13,36 +15,59 @@ class EncoderSelection:
 
 
 def _cmd_exists(cmd: str) -> bool:
-    proc = subprocess.run(["bash", "-lc", f"command -v {cmd}"], capture_output=True, text=True, check=False)
-    return proc.returncode == 0
+    return shutil.which(cmd) is not None
 
 
-def _ffmpeg_has_encoder(name: str) -> bool:
-    proc = subprocess.run(["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True, check=False)
-    return proc.returncode == 0 and name in (proc.stdout or "")
+def _load_ffmpeg_encoders() -> str:
+    try:
+        proc = subprocess.run(
+            ["ffmpeg", "-encoders"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode == 0:
+            print("[FFMPEG ENCODERS LOADED]")
+            return proc.stdout or ""
+    except Exception as exc:
+        print(f"[FFMPEG ENCODERS LOAD ERROR] {exc}")
+    return ""
+
+
+def _ffmpeg_has_encoder(encoders_text: str, name: str) -> bool:
+    return name in encoders_text
 
 
 def detect_best_encoder() -> EncoderSelection:
+    print("[GPU DETECTION START]")
+
     force_cpu = os.getenv("FORCE_CPU_ENCODER", "false").strip().lower() in {"1","true","yes","on"}
     if force_cpu:
-        print("[CPU FALLBACK] forced=true")
+        print("[CPU FALLBACK ACTIVE] forced=true")
         print("[ENCODER SELECTED] codec=libx264 preset=fast")
         return EncoderSelection(codec="libx264", preset="fast", gpu="cpu")
 
-    if _ffmpeg_has_encoder("h264_nvenc") and _cmd_exists("nvidia-smi"):
-        print("[GPU DETECTED] vendor=nvidia")
-        print("[NVENC ACTIVE]")
-        print("[ENCODER SELECTED] codec=h264_nvenc preset=p4")
-        return EncoderSelection(codec="h264_nvenc", preset="p4", gpu="nvidia")
-    if _ffmpeg_has_encoder("h264_amf"):
-        print("[GPU DETECTED] vendor=amd")
-        print("[ENCODER SELECTED] codec=h264_amf preset=balanced")
-        return EncoderSelection(codec="h264_amf", preset="balanced", gpu="amd")
-    if _ffmpeg_has_encoder("h264_qsv"):
-        print("[GPU DETECTED] vendor=intel")
-        print("[ENCODER SELECTED] codec=h264_qsv preset=fast")
-        return EncoderSelection(codec="h264_qsv", preset="fast", gpu="intel")
+    try:
+        if platform.system().lower() == "windows":
+            print("[WINDOWS GPU DETECTION]")
 
-    print("[CPU FALLBACK] reason=no_hw_encoder")
+        encoders = _load_ffmpeg_encoders()
+
+        if _ffmpeg_has_encoder(encoders, "h264_nvenc") and _cmd_exists("nvidia-smi"):
+            print("[NVENC AVAILABLE]")
+            print("[ENCODER SELECTED] codec=h264_nvenc preset=p4")
+            return EncoderSelection(codec="h264_nvenc", preset="p4", gpu="nvidia")
+
+        if _ffmpeg_has_encoder(encoders, "h264_amf"):
+            print("[ENCODER SELECTED] codec=h264_amf preset=balanced")
+            return EncoderSelection(codec="h264_amf", preset="balanced", gpu="amd")
+
+        if _ffmpeg_has_encoder(encoders, "h264_qsv"):
+            print("[ENCODER SELECTED] codec=h264_qsv preset=fast")
+            return EncoderSelection(codec="h264_qsv", preset="fast", gpu="intel")
+    except Exception as exc:
+        print(f"[GPU DETECTION ERROR] {exc}")
+
+    print("[CPU FALLBACK ACTIVE] reason=no_hw_encoder")
     print("[ENCODER SELECTED] codec=libx264 preset=fast")
     return EncoderSelection(codec="libx264", preset="fast", gpu="cpu")
