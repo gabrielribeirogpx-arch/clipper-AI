@@ -64,14 +64,11 @@ export function VideoPreview({ sectionRef }: { sectionRef?: RefObject<HTMLElemen
     console.log('[EDITOR OVERLAY DISABLED]');
   }, [isRegionSetup]);
 
-  useEffect(() => {
-    console.log('[PLAYER DOMINANT MODE]');
-  }, []);
 
   if (!mounted) return <div className="editor-player-card rounded-[2rem] border border-white/10 bg-white/5" />;
 
   return (
-    <motion.section ref={sectionRef} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="panel-premium editor-player-card relative w-full overflow-hidden">
+    <motion.section ref={sectionRef} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="panel-premium editor-player-card relative w-full">
       <div className="pointer-events-none absolute inset-0"><div className="absolute -left-20 top-4 h-[24rem] w-[24rem] rounded-full bg-cyan-500/30 blur-[130px]" /></div>
       <div className="pointer-events-none absolute inset-0"><div className="absolute -right-20 bottom-0 h-[24rem] w-[24rem] rounded-full bg-violet-500/30 blur-[140px]" /></div>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_-10%,rgba(255,255,255,.18),transparent_38%),radial-gradient(circle_at_50%_110%,rgba(168,85,247,.24),transparent_48%)]" />
@@ -140,7 +137,7 @@ export function VideoPreview({ sectionRef }: { sectionRef?: RefObject<HTMLElemen
           <button className="rounded bg-white/10 px-2 py-1" onClick={() => setDualRegions({ regionA: { x: 120, y: 120, width: 1680, height: 420 }, regionB: { x: 120, y: 580, width: 1680, height: 420 } })}>Reaction</button>
         </div>}
 
-        <div className="mt-3 flex items-center gap-4 rounded-[1.1rem] border border-white/10 bg-[#0a1122]/76 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,.1)] backdrop-blur-xl">
+        <div className="editor-player-controls mt-3 flex items-center gap-3 rounded-[1.1rem] border border-white/10 bg-[#0a1122]/76 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,.1)] backdrop-blur-xl">
           <button onClick={() => setPlaying(!isPlaying)} className="rounded-xl bg-gradient-to-r from-cyan-300 to-violet-400 px-7 py-3 text-sm font-bold text-slate-950 shadow-[0_0_28px_rgba(34,211,238,.4)]">{isPlaying ? 'Pause' : 'Play'}</button>
           <div className="h-3 flex-1 rounded-full bg-white/10 p-[2px]">
             <div className="h-full rounded-full bg-gradient-to-r from-cyan-300 to-violet-400 shadow-[0_0_24px_rgba(34,211,238,.45)]" style={{ width: `${Math.min((currentTime / Math.max(duration, 0.1)) * 100, 100)}%` }} />

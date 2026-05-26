@@ -29,11 +29,11 @@ export default function Home() {
   const heroRef = useRef<HTMLElement | null>(null);
   
   useEffect(() => {
-    console.log('[TRUE 16:9 PLAYER ACTIVE]');
-    console.log('[TIMELINE HEIGHT REDUCED]');
-    console.log('[WORKSPACE ROWS LOCKED]');
-    console.log('[TIMELINE OVERFLOW FIXED]');
-    console.log('[FINAL WORKSTATION PROPORTIONS ACTIVE]');
+    console.log('[EDITOR LAYOUT REBUILT FROM SCRATCH]');
+    console.log('[VIDEO PLAYER DOMINANT]');
+    console.log('[CONTROLS POSITION FIXED]');
+    console.log('[TIMELINE COMPACT MODE]');
+    console.log('[GRID HIERARCHY SIMPLIFIED]');
   }, []);
 
   useEffect(() => { void hydrateFromBackend(analysisId); }, [analysisId, hydrateFromBackend]);
@@ -56,8 +56,8 @@ export default function Home() {
   return (
     <main className="relative h-screen w-full overflow-hidden bg-[var(--bg-primary)] text-slate-100">
       <div className="ambient-bg" />
-      <div className="editor-shell relative grid h-full w-full">
-        <aside className="panel-premium editor-sidebar hidden h-full min-h-0 flex-col p-3 md:flex lg:p-4">
+      <div className="editor-shell">
+        <aside className="panel-premium editor-sidebar flex min-h-0 flex-col">
           <div className="border-b border-white/10 pb-5">
             <div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-cyan-400 to-indigo-500 font-bold text-slate-950">✂</div><div><p className="text-lg font-semibold">Clipper AI</p><p className="text-xs tracking-[0.18em] text-slate-400">Creative OS</p></div></div>
           </div>
@@ -68,8 +68,8 @@ export default function Home() {
           <div className="mt-3 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3"><div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-600/60">AM</div><div><p className="text-sm">Ana Martins</p><p className="text-xs text-slate-400">Founder</p></div></div></>
         </aside>
 
-        <section className="editor-main h-full min-h-0 min-w-0 overflow-hidden">
-          <header className="panel-premium editor-topbar px-4 py-3 lg:px-5">
+        <section className="editor-main">
+          <header className="panel-premium editor-topbar px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Workspace / Campaigns / Q2</p>
@@ -86,7 +86,7 @@ export default function Home() {
           <TimelineTracks />
         </section>
 
-        <section className="editor-right hidden min-h-0 min-w-0 space-y-3 overflow-y-auto xl:flex xl:flex-col">
+        <section className="editor-right min-h-0 min-w-0 space-y-2">
           <ClipResultsPanel />
           <InspectorPanel />
         </section>
