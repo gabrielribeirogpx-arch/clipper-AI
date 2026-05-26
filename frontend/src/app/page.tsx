@@ -25,6 +25,8 @@ export default function Home() {
   const searchParams = useSearchParams();
   const hydrateFromBackend = useTimelineStore((state) => state.hydrateFromBackend);
   const selectedClipId = useTimelineStore((state) => state.selectedClipId);
+  const hasHydratedFromBackend = useTimelineStore((state) => state.hasHydratedFromBackend);
+  const isHydratingFromBackend = useTimelineStore((state) => state.isHydratingFromBackend);
   const analysisId = searchParams.get('analysis_id');
   const heroRef = useRef<HTMLElement | null>(null);
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceKey>('timeline');
@@ -65,7 +67,9 @@ export default function Home() {
   }, [activeWorkspace]);
 
   const workspaceTitle = useMemo(() => navItems.find((item) => item.key === activeWorkspace)?.label ?? 'Timeline', [activeWorkspace]);
-  if (!mounted) return <main className="h-screen overflow-hidden bg-[#05070f]" />;
+  if (!mounted || (analysisId && (!hasHydratedFromBackend || isHydratingFromBackend))) {
+    return <main className="h-screen overflow-hidden bg-[#05070f]" />;
+  }
 
   const handleExport = async () => {
     if (!selectedClipId) return;
