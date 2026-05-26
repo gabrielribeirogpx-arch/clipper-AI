@@ -58,10 +58,10 @@ export function VideoPreview({ sectionRef }: { sectionRef?: RefObject<HTMLElemen
 
 
   useEffect(() => {
-    console.log('[TRUE 16:9 VISUAL FIX ACTIVE]');
-    console.log('[TIMELINE HEIGHT REDUCED TO 160PX]');
-    console.log('[PLAYER HEIGHT DOMINANCE RESTORED]');
-    console.log('[HEIGHT COLLAPSE REMOVED]');
+    console.log('[FINAL CINEMATIC POLISH ACTIVE]');
+    console.log('[PLAYER SIDE PADDING REDUCED]');
+    console.log('[EMPTY STATE CENTERED]');
+    console.log('[PREMIUM VISUAL BALANCE COMPLETE]');
   }, []);
 
   useEffect(() => {
@@ -82,14 +82,14 @@ export function VideoPreview({ sectionRef }: { sectionRef?: RefObject<HTMLElemen
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_-10%,rgba(255,255,255,.18),transparent_38%),radial-gradient(circle_at_50%_110%,rgba(168,85,247,.24),transparent_48%)]" />
 
       <div className="editor-video-area relative">
-        <div className="editor-video-frame rounded-[1.4rem] border border-white/15 bg-gradient-to-b from-[#1b1d2a] to-[#07080c] p-0.5 shadow-[0_24px_64px_rgba(0,0,0,.7),0_0_80px_rgba(34,211,238,.15)]">
+        <div className="editor-video-frame rounded-[1.4rem] border border-white/15 bg-gradient-to-b from-[#1b1d2a] to-[#07080c] p-[0.35rem] shadow-[0_24px_64px_rgba(0,0,0,.7),0_0_80px_rgba(34,211,238,.15)]">
           <div className="mb-1 flex items-center justify-between gap-1.5">
             <div className="flex gap-2">
             <button className={`rounded-lg px-2.5 py-0.5 text-xs ${clipRenderMode === 'ai_tracking' ? 'bg-cyan-400 text-black' : 'bg-white/10'}`} onClick={() => setClipRenderMode('ai_tracking')}>AI Tracking</button>
             <button className={`rounded-lg px-2.5 py-0.5 text-xs ${clipRenderMode === 'dual_region' ? 'bg-cyan-400 text-black' : 'bg-white/10'}`} onClick={() => setClipRenderMode('dual_region')}>Dual Region</button>
           </div><div className="flex items-center gap-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-0.5 text-[10px] text-cyan-200"><span className="h-2 w-2 rounded-full bg-cyan-300 animate-pulse"/>AI Processing</div>
           </div>
-          <div className="rounded-[1.2rem] border border-white/15 bg-black/95 p-0.5">
+          <div className="rounded-[1.2rem] border border-white/15 bg-black/95 p-[0.35rem]">
             <div className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-black">
               <div className="pointer-events-none absolute inset-0 z-20 bg-[linear-gradient(118deg,rgba(255,255,255,0.18)_0%,transparent_30%,transparent_70%,rgba(255,255,255,0.08)_100%)]" />
               <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,.22),transparent_38%)]" />
@@ -114,7 +114,7 @@ export function VideoPreview({ sectionRef }: { sectionRef?: RefObject<HTMLElemen
                     console.log('VIDEO READY');
                   }}
                   onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
-                />) : (<div className="flex h-full items-center justify-center text-slate-300">Nenhum clip real disponível ainda.</div>)}
+                />) : (<div className="grid h-full w-full place-items-center text-slate-300"><span className="leading-none">Nenhum clip real disponível ainda.</span></div>)}
                 {clipRenderMode === 'dual_region' && isRegionSetup === true && (
                   <div
                     className="absolute inset-0 z-30"
