@@ -3,6 +3,7 @@
 import { useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { GeneratedClip, useTimelineStore } from '@/store/timelineStore';
+import { desktopBridge } from '@/lib/desktopBridge';
 
 const rankBadge = (score: number) => {
   if (score >= 85) return '🔥 Top Viral';
@@ -46,6 +47,11 @@ function ClipCard({ clip }: { clip: GeneratedClip }) {
         {!!clip.hashtags?.length && (
           <p className="mt-3 text-cyan-200">{clip.hashtags.join(' ')}</p>
         )}
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+        <button onClick={(e) => { e.stopPropagation(); void desktopBridge.openFolder(clip.final_video); }} className="rounded-md border border-white/15 px-2 py-1">Open Folder</button>
+        <button onClick={(e) => { e.stopPropagation(); window.open(`http://localhost:8000${clip.final_video}`, '_blank'); }} className="rounded-md border border-white/15 px-2 py-1">Open Clip</button>
+        <button onClick={(e) => { e.stopPropagation(); void navigator.clipboard.writeText(clip.final_video); }} className="rounded-md border border-white/15 px-2 py-1">Copy Path</button>
       </div>
     </motion.button>
   );
