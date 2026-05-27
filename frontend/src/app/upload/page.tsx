@@ -133,6 +133,8 @@ export default function UploadPage() {
   const semiAutoConfig = useTimelineStore((state) => state.semiAuto);
   const exportDirectory = useExportSettingsStore((state) => state.export_directory);
   const chooseExportFolder = useExportSettingsStore((state) => state.chooseExportFolder);
+  const folderPickerUnsupported = useExportSettingsStore((state) => state.folderPickerUnsupported);
+  const dismissFolderPickerUnsupported = useExportSettingsStore((state) => state.dismissFolderPickerUnsupported);
   const initializeExportSettings = useExportSettingsStore((state) => state.initialize);
 
   const resolveRedirectTarget = (analysisId: string, frontendRequestedMode: 'ai_tracking' | 'dual_region' | 'semi_auto' | 'raw_only', backendReturnedMode?: 'ai_tracking' | 'dual_region' | 'semi_auto' | 'raw_only') => {
@@ -612,13 +614,21 @@ export default function UploadPage() {
           </div>
 
           <input value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)} placeholder="https://youtube.com/live/..." className="rounded-lg bg-slate-900 px-3 py-2 text-sm" />
-          <div className="rounded-xl border border-white/10 bg-slate-900/80 p-3">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Save clips to:</p>
-            <p className="truncate text-sm text-cyan-200">{exportDirectory}</p>
-            <button type="button" onClick={() => void chooseExportFolder()} className="mt-3 rounded-lg border border-cyan-300/30 px-3 py-1.5 text-xs text-cyan-100">
-              Choose Save Folder
+          <div className="rounded-xl border border-cyan-300/20 bg-slate-950/80 p-4 shadow-[0_0_30px_rgba(34,211,238,.08)]">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">📁 Save clips to:</p>
+            <p className="mt-1 truncate text-sm text-cyan-200">{exportDirectory}</p>
+            <button type="button" onClick={() => void chooseExportFolder()} className="mt-3 rounded-lg border border-cyan-300/30 px-3 py-1.5 text-xs text-cyan-100 transition hover:bg-cyan-300/10">
+              Change Folder
             </button>
           </div>
+          {folderPickerUnsupported && (
+            <div className="rounded-2xl border border-violet-300/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-100" role="status">
+              <p>Desktop folder picker disponível na versão desktop do Clipper AI.</p>
+              <button type="button" onClick={dismissFolderPickerUnsupported} className="mt-2 text-xs underline">
+                Entendi
+              </button>
+            </div>
+          )}
           <YouTubeRangeSelector duration={MAX_YOUTUBE_DURATION_SECONDS} start={startSeconds} end={endSeconds} onStart={setStartSeconds} onEnd={setEndSeconds} />
           <button type="button" onClick={handleAnalyzeYoutube} className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold transition hover:bg-violet-400">
             Analyze YouTube livestream
