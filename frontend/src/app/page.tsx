@@ -5,14 +5,12 @@ import { TimelineTracks } from '@/components/TimelineTracks';
 import { VideoPreview } from '@/components/VideoPreview';
 import { ClipResultsPanel } from '@/components/ClipResultsPanel';
 import { useTimelineStore } from '@/store/timelineStore';
-import { exportClip } from '@/lib/api';
 import { desktopBridge } from '@/lib/desktopBridge';
 import { useMounted } from '@/hooks/useMounted';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { springConfigs } from '@/lib/motion-config';
 import { WorkspaceContainer, WorkspaceKey } from '@/components/WorkspaceContainer';
-import { useExportSettingsStore } from '@/store/exportSettingsStore';
 
 const navItems: { label: string; icon: string; key: WorkspaceKey }[] = [
   { label: 'Projetos', icon: '◻', key: 'projects' },
@@ -30,12 +28,7 @@ export default function Home() {
   const hasHydratedFromBackend = useTimelineStore((state) => state.hasHydratedFromBackend);
   const isHydratingFromBackend = useTimelineStore((state) => state.isHydratingFromBackend);
   const generatedClips = useTimelineStore((state) => state.generatedClips);
-  const renderQueue = useTimelineStore((state) => state.renderQueue);
-  const addRenderJob = useTimelineStore((state) => state.addRenderJob);
-  const updateRenderJob = useTimelineStore((state) => state.updateRenderJob);
-  const exportDirectory = useExportSettingsStore((state) => state.export_directory);
-  const initializeExportSettings = useExportSettingsStore((state) => state.initialize);
-  const chooseExportFolder = useExportSettingsStore((state) => state.chooseExportFolder);
+  const exportDirectory = '~/Videos/ClipperAI';
   const [toast, setToast] = useState<string | null>(null);
   const analysisId = searchParams.get('analysis_id');
   const heroRef = useRef<HTMLElement | null>(null);
@@ -63,7 +56,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => { void hydrateFromBackend(analysisId); }, [analysisId, hydrateFromBackend]);
-  useEffect(() => { void initializeExportSettings(); console.log('[RENDER QUEUE ACTIVE]'); }, [initializeExportSettings]);
+  useEffect(() => { console.log('[AI RESULTS DASHBOARD ACTIVE]'); console.log('[EXPORT FLOW REMOVED]'); console.log('[SIMPLE CREATOR MODE ENABLED]'); }, []);
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 2400);
@@ -87,36 +80,6 @@ export default function Home() {
     return <main className="h-screen overflow-hidden bg-[#05070f]" />;
   }
 
-  const handleExport = async () => {
-    if (!selectedClipId) return;
-    const clip = generatedClips.find((item) => item.id === selectedClipId);
-    const outputIndex = renderQueue.length + 1;
-    const fileName = `clip_${String(outputIndex).padStart(3, '0')}.mp4`;
-    const jobId = `job-${Date.now()}`;
-    const outputPath = `${exportDirectory}/${fileName}`;
-    addRenderJob({
-      id: jobId,
-      clipName: clip?.label ?? 'Clip',
-      state: 'queued',
-      progress: 0,
-      duration: clip?.duration ?? 0,
-      encoder: 'H.264 NVENC',
-      renderSpeed: '0.0x',
-      outputPath,
-    });
-    updateRenderJob(jobId, { state: 'processing', progress: 10, renderSpeed: '0.8x' });
-    const data = await exportClip(selectedClipId);
-    if (data.success && data.download_url) {
-      updateRenderJob(jobId, { progress: 75, renderSpeed: '1.4x' });
-      const downloadUrl = `http://localhost:8000${data.download_url}`;
-      await desktopBridge.saveFile(fileName, downloadUrl, exportDirectory);
-      updateRenderJob(jobId, { state: 'completed', progress: 100, renderSpeed: '1.9x', outputPath });
-      setToast(`Render concluído • ${fileName}`);
-      console.log('[CLIP AUTO SAVED]', { outputPath });
-    }
-    await hydrateFromBackend();
-  };
-
   return (
     <main className="relative h-screen w-full overflow-hidden bg-[var(--bg-primary)] text-slate-100">
       <div className="ambient-bg" />
@@ -137,20 +100,19 @@ export default function Home() {
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate text-[10px] text-slate-400">Projetos &gt; Clipper Launch Campaign</p>
-                <h1 className="truncate text-[20px] font-semibold leading-tight tracking-tight">Clipper Launch Campaign</h1>
+                <h1 className="truncate text-[20px] font-semibold leading-tight tracking-tight">AI Results Dashboard</h1>
               </div>
               <div className="flex items-center gap-2">
                 <span className="premium-chip px-2 py-0.5 text-[10px] text-emerald-200">Salvo há 2 min</span>
                 <button className="hidden rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs md:inline-flex">Feedback</button>
                 <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] text-slate-200">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(16,185,129,.9)]" />
-                  <span>Auto Save Active</span>
+                  <span>Auto Clip Generation Active</span>
                   <span className="text-slate-500">•</span>
                   <span className="max-w-36 truncate text-slate-400">{exportDirectory}</span>
                 </div>
                 <button onClick={() => void desktopBridge.openFolder(exportDirectory)} className="rounded-full border border-white/10 px-3 py-1 text-[11px] text-slate-200 hover:border-white/25">Open Folder</button>
-                <button onClick={() => void chooseExportFolder()} className="rounded-full border border-white/10 px-3 py-1 text-[11px] text-slate-200 hover:border-white/25">Choose Export Folder</button>
-                <button onClick={handleExport} className="rounded-full border border-violet-300/40 bg-violet-500/10 px-3 py-1 text-[11px] text-violet-100">Render Queue</button>
+                
               </div>
             </div>
           </header>
@@ -172,7 +134,7 @@ export default function Home() {
         <section className="editor-right min-h-0 min-w-0">
           <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-2">
             <ClipResultsPanel />
-            <div className="panel-premium rounded-2xl p-3"><p className="panel-title">Render Queue</p><div className="mt-2 space-y-2 text-xs">{renderQueue.slice(0, 5).map((job) => <div key={job.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-2"><div className="mb-1 flex items-center justify-between"><p className="text-slate-200">{job.clipName}</p><span className="text-[10px] uppercase tracking-wide text-slate-400">{job.state}</span></div><p className="text-[10px] text-slate-400">{job.encoder} • {job.renderSpeed} • {job.duration}s</p><div className="mt-1 h-1.5 rounded-full bg-white/10"><div className="h-full rounded-full bg-cyan-300/80" style={{ width: `${job.progress}%` }} /></div><p className="mt-1 truncate text-[10px] text-slate-500">{job.outputPath}</p></div>)}</div></div>
+            <div className="panel-premium rounded-2xl p-3"><p className="panel-title">Automatic Pipeline</p><p className="text-xs text-slate-300">Clips são gerados e salvos automaticamente durante o processamento. Sem render manual.</p></div>
           </div>
         </section>
       </div>

@@ -45,3 +45,4 @@ export const desktopBridge = {
 };
 
 console.log('[DESKTOP BRIDGE READY]');
+console.log('[AUTO SAVE PIPELINE ACTIVE]');

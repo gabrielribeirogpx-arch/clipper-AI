@@ -2,6 +2,7 @@ import os
 import time
 import subprocess
 import json
+import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from app.services.whisper_service import transcribe_video
@@ -53,10 +54,13 @@ def _proxy_audio_is_whisper_safe(video_path: str) -> bool:
     return codec == "aac" and sample_rate == "16000"
 
 
-def process_video(video_path, original_video_path=None, proxy_video_path=None, output_dir="app/clips", render_mode="ai_tracking", dual_region_config=None, min_clip_length=30, max_clip_length=90, max_clips=25, min_score=0.45, overlap_tolerance=0.6, step_logger=None):
+def process_video(video_path, original_video_path=None, proxy_video_path=None, output_dir="app/clips", render_mode="ai_tracking", dual_region_config=None, min_clip_length=30, max_clip_length=90, max_clips=25, min_score=0.45, overlap_tolerance=0.6, step_logger=None, auto_save_dir=None):
     os.makedirs(output_dir, exist_ok=True)
     print("[PERFORMANCE MODE ACTIVE]")
     print("[ASYNC PIPELINE ACTIVE]")
+    if auto_save_dir:
+        os.makedirs(auto_save_dir, exist_ok=True)
+        print("[AUTO SAVE PIPELINE ACTIVE]")
     log = step_logger or (lambda _msg: None)
 
     profiler = PerformanceProfiler(report_path=os.path.join(output_dir, "performance_report.json"))
@@ -214,6 +218,10 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
         profiler.start_timer("render")
         seg_timeline = broll_engine.build_timeline([s for s in transcription["segments"] if hook["start"] <= s.get("start", 0) <= hook["end"]])
         final = apply_broll_overlay(processed, seg_timeline, f"clip_{idx}_final.mp4", output_dir=output_dir, quality_profile="export")
+        if auto_save_dir:
+            autosave_path = os.path.join(auto_save_dir, os.path.basename(final))
+            shutil.copy2(final, autosave_path)
+            print(f"[CLIP AUTO SAVED] {autosave_path}")
         profiler.end_timer("render")
         meta = generate_social_metadata(hook.get("text", ""), hook.get("viral_score", 0))
         ai = generate_clip_metadata(hook.get("text", ""))

@@ -82,6 +82,7 @@ async def process_youtube_ingest_job(job_id: str, body: dict, output_dir: str) -
             overlap_tolerance=0.6,
             step_logger=lambda msg: print(msg),
             original_video_path=filepath,
+            auto_save_dir=body.get("save_folder"),
         )
 
         response_payload = _build_upload_response(transcription, str(uuid.uuid4()), filepath, render_mode=render_mode, video_quality=body.get("video_quality", "1080p"))
@@ -119,6 +120,7 @@ async def upload_video(
     output_folder: str | None = Form(default=None),
     render_mode: str = Form(default="ai_tracking"),
     video_quality: str = Form(default="1080p"),
+    save_folder: str | None = Form(default=None),
 ):
 
     file_id = str(uuid.uuid4())
@@ -138,7 +140,7 @@ async def upload_video(
     print(f"[PROCESS VIDEO JOB MODE] upload_request_render_mode={render_mode}")
     print(f"[PROCESS VIDEO JOB MODE] upload_processing_render_mode={process_render_mode}")
     print("[PROCESS VIDEO JOB CONFIG] upload_request_dual_region_config=None")
-    transcription = process_video(filepath, output_dir=output_dir, render_mode=process_render_mode, original_video_path=filepath)
+    transcription = process_video(filepath, output_dir=output_dir, render_mode=process_render_mode, original_video_path=filepath, auto_save_dir=save_folder)
     return _build_upload_response(transcription, file_id, filepath, render_mode=render_mode, video_quality=video_quality)
 
 
@@ -160,6 +162,8 @@ async def ingest_youtube(request: Request):
     body = payload.model_dump()
     body["youtube_url"] = youtube_url
     create_job(job_id, analysis_id)
+    if body.get("save_folder"):
+        print("[AUTO SAVE PIPELINE ACTIVE]")
     asyncio.create_task(process_youtube_ingest_job(job_id, body, output_dir))
     return {"success": True, "job_id": job_id, "analysis_id": analysis_id, "status": "queued"}
 

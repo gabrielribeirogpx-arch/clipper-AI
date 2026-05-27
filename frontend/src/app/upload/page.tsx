@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { ApiError, createIngestStream, getIngestJobState, getIngestStatus, ingestYouTubeJob, uploadVideo } from '@/lib/api';
 import { useUploadStore } from '@/store/uploadStore';
 import { useTimelineStore } from '@/store/timelineStore';
+import { useExportSettingsStore } from '@/store/exportSettingsStore';
 
 const MAX_SIZE = 1024 * 1024 * 1024;
 const MAX_YOUTUBE_DURATION_SECONDS = 6 * 60 * 60;
@@ -130,6 +131,9 @@ export default function UploadPage() {
   const resetForNewAnalysis = useTimelineStore((state) => state.resetForNewAnalysis);
   const hydrateFromBackend = useTimelineStore((state) => state.hydrateFromBackend);
   const semiAutoConfig = useTimelineStore((state) => state.semiAuto);
+  const exportDirectory = useExportSettingsStore((state) => state.export_directory);
+  const chooseExportFolder = useExportSettingsStore((state) => state.chooseExportFolder);
+  const initializeExportSettings = useExportSettingsStore((state) => state.initialize);
 
   const resolveRedirectTarget = (analysisId: string, frontendRequestedMode: 'ai_tracking' | 'dual_region' | 'semi_auto' | 'raw_only', backendReturnedMode?: 'ai_tracking' | 'dual_region' | 'semi_auto' | 'raw_only') => {
     const hydratedMode = useTimelineStore.getState().clipRenderMode;
@@ -211,7 +215,7 @@ export default function UploadPage() {
     store.setUploadedVideo({ name: file.name, size: file.size, type: file.type, previewUrl: URL.createObjectURL(file) });
     store.setUploadStatus('uploading');
     console.log('[UPLOAD SELECTED RENDER MODE]', { source: 'file_upload', renderMode });
-    const result = await uploadVideo(file, analysisName, store.setUploadProgress, renderMode, videoQuality).catch((e) => {
+    const result = await uploadVideo(file, analysisName, store.setUploadProgress, renderMode, videoQuality, exportDirectory).catch((e) => {
       store.setUploadStatus('error');
       throw e;
     });
@@ -473,6 +477,7 @@ export default function UploadPage() {
         max_clip_length: 90,
         render_mode: renderMode,
                 video_quality: videoQuality,
+        save_folder: exportDirectory,
       };
       console.log('[FRONTEND INGEST PAYLOAD]', ingestPayload);
       const job = await ingestYouTubeJob(ingestPayload);
@@ -484,6 +489,10 @@ export default function UploadPage() {
       setIsStartingYoutubeIngest(false);
     }
   };
+
+  useEffect(() => {
+    void initializeExportSettings();
+  }, [initializeExportSettings]);
 
   useEffect(() => {
     console.log('[UPLOAD CARD ACTIVE STATE]', {
@@ -603,6 +612,13 @@ export default function UploadPage() {
           </div>
 
           <input value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)} placeholder="https://youtube.com/live/..." className="rounded-lg bg-slate-900 px-3 py-2 text-sm" />
+          <div className="rounded-xl border border-white/10 bg-slate-900/80 p-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Save clips to:</p>
+            <p className="truncate text-sm text-cyan-200">{exportDirectory}</p>
+            <button type="button" onClick={() => void chooseExportFolder()} className="mt-3 rounded-lg border border-cyan-300/30 px-3 py-1.5 text-xs text-cyan-100">
+              Choose Save Folder
+            </button>
+          </div>
           <YouTubeRangeSelector duration={MAX_YOUTUBE_DURATION_SECONDS} start={startSeconds} end={endSeconds} onStart={setStartSeconds} onEnd={setEndSeconds} />
           <button type="button" onClick={handleAnalyzeYoutube} className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold transition hover:bg-violet-400">
             Analyze YouTube livestream

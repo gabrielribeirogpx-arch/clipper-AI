@@ -16,6 +16,7 @@ export type YouTubeIngestRequest = {
   youtube_url: string;
   analysis_name?: string;
   output_folder?: string;
+  save_folder?: string;
   start_time?: string;
   end_time?: string;
   min_clip_length?: number;
@@ -45,11 +46,13 @@ export function uploadVideo(
   onProgress?: (progress: number) => void,
   renderMode: RenderMode = "ai_tracking",
   videoQuality: '720p' | '1080p' | '4k' = '1080p',
+  saveFolder?: string,
 ): Promise<UploadResponse> {
   return new Promise((resolve, reject) => {
     const formData = new FormData();
     formData.append('file', file);
     if (analysisName?.trim()) formData.append('analysis_name', analysisName.trim());
+    if (saveFolder?.trim()) formData.append('save_folder', saveFolder.trim());
     formData.append('render_mode', renderMode);
     formData.append('video_quality', videoQuality);
 
