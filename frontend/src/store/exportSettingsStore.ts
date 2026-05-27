@@ -12,12 +12,15 @@ type ExportSettingsState = {
   setExportDirectory: (path: string) => void;
   setAutoSaveEnabled: (enabled: boolean) => void;
   chooseExportFolder: () => Promise<void>;
+  folderPickerUnsupported: boolean;
+  dismissFolderPickerUnsupported: () => void;
 };
 
 export const useExportSettingsStore = create<ExportSettingsState>()(persist((set, get) => ({
   export_directory: '~/Videos/ClipperAI',
   auto_save_enabled: true,
   initialized: false,
+  folderPickerUnsupported: false,
   initialize: async () => {
     if (get().initialized) return;
     const export_directory = await desktopBridge.getExportPath();
@@ -29,9 +32,13 @@ export const useExportSettingsStore = create<ExportSettingsState>()(persist((set
   setAutoSaveEnabled: (auto_save_enabled) => set({ auto_save_enabled }),
   chooseExportFolder: async () => {
     const selected = await desktopBridge.selectFolder(get().export_directory);
-    if (!selected) return;
-    set({ export_directory: selected });
+    if (!selected) {
+      set({ folderPickerUnsupported: !window.desktopAPI?.selectFolder && typeof window.showDirectoryPicker !== 'function' });
+      return;
+    }
+    set({ export_directory: selected.path, folderPickerUnsupported: false });
   },
+  dismissFolderPickerUnsupported: () => set({ folderPickerUnsupported: false }),
 }), {
   name: 'clipper-export-settings-store',
   partialize: (state) => ({

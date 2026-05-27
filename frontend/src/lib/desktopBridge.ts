@@ -10,6 +10,7 @@ type DesktopAPI = {
 declare global {
   interface Window {
     desktopAPI?: DesktopAPI;
+    showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>;
   }
 }
 
@@ -21,10 +22,35 @@ const fallbackExportPath = (): string => {
 };
 
 export const desktopBridge = {
-  async selectFolder(currentPath: string): Promise<string | null> {
-    if (window.desktopAPI?.selectFolder) return window.desktopAPI.selectFolder();
-    const selected = window.prompt('Choose Export Folder', currentPath);
-    return selected && selected.trim().length > 0 ? selected.trim() : null;
+  async selectFolder(currentPath: string): Promise<{ path: string; handleStored: boolean; native: boolean } | null> {
+    console.log('[FOLDER PICKER OPENED]', { currentPath });
+
+    if (window.desktopAPI?.selectFolder) {
+      const selected = await window.desktopAPI.selectFolder();
+      if (!selected) return null;
+      console.log('[FOLDER SELECTED]', { path: selected });
+      return { path: selected, handleStored: false, native: true };
+    }
+
+    if (typeof window.showDirectoryPicker !== 'function') return null;
+
+    console.log('[NATIVE DIRECTORY PICKER ACTIVE]');
+    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    const permission = await handle.queryPermission({ mode: 'readwrite' });
+    const path = handle.name;
+
+    let handleStored = false;
+    try {
+      localStorage.setItem('clipper.export.folderHandle', handle.name);
+      localStorage.setItem('clipper.export.folderPermission', permission);
+      handleStored = true;
+      console.log('[FOLDER HANDLE STORED]', { permission });
+    } catch (error) {
+      console.warn('[FOLDER HANDLE STORAGE FAILED]', error);
+    }
+
+    console.log('[FOLDER SELECTED]', { path });
+    return { path, handleStored, native: true };
   },
   async openFolder(path: string): Promise<void> {
     console.log('[OPEN EXPORT FOLDER]', { path });
