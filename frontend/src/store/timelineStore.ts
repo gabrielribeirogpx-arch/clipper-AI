@@ -27,8 +27,12 @@ export type TimelineBlock = ClipBlock;
 export type RenderJob = {
   id: string;
   clipName: string;
-  state: 'queued' | 'rendering' | 'completed' | 'failed';
+  state: 'queued' | 'processing' | 'completed' | 'failed';
   progress: number;
+  duration: number;
+  encoder: string;
+  renderSpeed: string;
+  outputPath: string;
 };
 
 export type GeneratedClip = {
@@ -87,6 +91,8 @@ type TimelineState = {
   setClipRenderMode: (mode: ClipRenderMode) => void;
   setDualRegions: (regions: DualRegions, options?: { persist?: boolean }) => void;
   setSemiAutoRegion: (region: RegionBox, options?: { persist?: boolean }) => void;
+  addRenderJob: (job: RenderJob) => void;
+  updateRenderJob: (jobId: string, patch: Partial<RenderJob>) => void;
 };
 
 const clampTime = (value: number, duration: number) => Math.min(Math.max(value, 0), duration);
@@ -113,10 +119,10 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
   selectedBlockId: null,
   tracks: { ...tracksSeed, effects: [] },
   renderQueue: [
-    { id: 'job-1', clipName: 'Clip 01', state: 'queued', progress: 0 },
-    { id: 'job-2', clipName: 'Clip 02', state: 'rendering', progress: 62 },
-    { id: 'job-3', clipName: 'Clip 03', state: 'completed', progress: 100 },
-    { id: 'job-4', clipName: 'Clip 04', state: 'failed', progress: 18 }
+    { id: 'job-1', clipName: 'Clip 01', state: 'queued', progress: 0, duration: 22, encoder: 'H.264 NVENC', renderSpeed: '0.0x', outputPath: '~/Videos/ClipperAI/clip_001.mp4' },
+    { id: 'job-2', clipName: 'Clip 02', state: 'processing', progress: 62, duration: 18, encoder: 'H.264 NVENC', renderSpeed: '1.3x', outputPath: '~/Videos/ClipperAI/clip_002.mp4' },
+    { id: 'job-3', clipName: 'Clip 03', state: 'completed', progress: 100, duration: 16, encoder: 'H.264 NVENC', renderSpeed: '1.8x', outputPath: '~/Videos/ClipperAI/clip_003.mp4' },
+    { id: 'job-4', clipName: 'Clip 04', state: 'failed', progress: 18, duration: 30, encoder: 'H.264 NVENC', renderSpeed: '0.5x', outputPath: '~/Videos/ClipperAI/clip_004.mp4' }
   ],
   generatedClips: [],
   selectedClipId: null,
@@ -227,6 +233,11 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       }
       return { semiAuto };
     }),
+  addRenderJob: (job) => set((state) => ({ renderQueue: [job, ...state.renderQueue] })),
+  updateRenderJob: (jobId, patch) =>
+    set((state) => ({
+      renderQueue: state.renderQueue.map((job) => (job.id === jobId ? { ...job, ...patch } : job)),
+    })),
   hydrateFromBackend: async (analysisIdHint) => {
     set({ isHydratingFromBackend: true });
     try {

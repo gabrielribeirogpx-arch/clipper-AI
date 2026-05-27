@@ -6,11 +6,13 @@ import { VideoPreview } from '@/components/VideoPreview';
 import { ClipResultsPanel } from '@/components/ClipResultsPanel';
 import { useTimelineStore } from '@/store/timelineStore';
 import { exportClip } from '@/lib/api';
+import { desktopBridge } from '@/lib/desktopBridge';
 import { useMounted } from '@/hooks/useMounted';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { springConfigs } from '@/lib/motion-config';
 import { WorkspaceContainer, WorkspaceKey } from '@/components/WorkspaceContainer';
+import { useExportSettingsStore } from '@/store/exportSettingsStore';
 
 const navItems: { label: string; icon: string; key: WorkspaceKey }[] = [
   { label: 'Projetos', icon: '◻', key: 'projects' },
@@ -27,6 +29,14 @@ export default function Home() {
   const selectedClipId = useTimelineStore((state) => state.selectedClipId);
   const hasHydratedFromBackend = useTimelineStore((state) => state.hasHydratedFromBackend);
   const isHydratingFromBackend = useTimelineStore((state) => state.isHydratingFromBackend);
+  const generatedClips = useTimelineStore((state) => state.generatedClips);
+  const renderQueue = useTimelineStore((state) => state.renderQueue);
+  const addRenderJob = useTimelineStore((state) => state.addRenderJob);
+  const updateRenderJob = useTimelineStore((state) => state.updateRenderJob);
+  const exportDirectory = useExportSettingsStore((state) => state.export_directory);
+  const initializeExportSettings = useExportSettingsStore((state) => state.initialize);
+  const chooseExportFolder = useExportSettingsStore((state) => state.chooseExportFolder);
+  const [toast, setToast] = useState<string | null>(null);
   const analysisId = searchParams.get('analysis_id');
   const heroRef = useRef<HTMLElement | null>(null);
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceKey>('timeline');
@@ -53,6 +63,12 @@ export default function Home() {
   }, []);
 
   useEffect(() => { void hydrateFromBackend(analysisId); }, [analysisId, hydrateFromBackend]);
+  useEffect(() => { void initializeExportSettings(); console.log('[RENDER QUEUE ACTIVE]'); }, [initializeExportSettings]);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 2400);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
 
   useEffect(() => {
@@ -73,13 +89,30 @@ export default function Home() {
 
   const handleExport = async () => {
     if (!selectedClipId) return;
+    const clip = generatedClips.find((item) => item.id === selectedClipId);
+    const outputIndex = renderQueue.length + 1;
+    const fileName = `clip_${String(outputIndex).padStart(3, '0')}.mp4`;
+    const jobId = `job-${Date.now()}`;
+    const outputPath = `${exportDirectory}/${fileName}`;
+    addRenderJob({
+      id: jobId,
+      clipName: clip?.label ?? 'Clip',
+      state: 'queued',
+      progress: 0,
+      duration: clip?.duration ?? 0,
+      encoder: 'H.264 NVENC',
+      renderSpeed: '0.0x',
+      outputPath,
+    });
+    updateRenderJob(jobId, { state: 'processing', progress: 10, renderSpeed: '0.8x' });
     const data = await exportClip(selectedClipId);
     if (data.success && data.download_url) {
+      updateRenderJob(jobId, { progress: 75, renderSpeed: '1.4x' });
       const downloadUrl = `http://localhost:8000${data.download_url}`;
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = downloadUrl.split('/').pop() ?? 'clip.mp4';
-      document.body.appendChild(link); link.click(); link.remove();
+      await desktopBridge.saveFile(fileName, downloadUrl, exportDirectory);
+      updateRenderJob(jobId, { state: 'completed', progress: 100, renderSpeed: '1.9x', outputPath });
+      setToast(`Render concluído • ${fileName}`);
+      console.log('[CLIP AUTO SAVED]', { outputPath });
     }
     await hydrateFromBackend();
   };
@@ -106,10 +139,18 @@ export default function Home() {
                 <p className="truncate text-[10px] text-slate-400">Projetos &gt; Clipper Launch Campaign</p>
                 <h1 className="truncate text-[20px] font-semibold leading-tight tracking-tight">Clipper Launch Campaign</h1>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <span className="premium-chip px-2 py-0.5 text-[10px] text-emerald-200">Salvo há 2 min</span>
                 <button className="hidden rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs md:inline-flex">Feedback</button>
-                <button onClick={handleExport} className="rounded-md bg-gradient-to-r from-violet-500 to-blue-500 px-4 py-1.5 text-xs font-semibold">Exportar</button>
+                <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] text-slate-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(16,185,129,.9)]" />
+                  <span>Auto Save Active</span>
+                  <span className="text-slate-500">•</span>
+                  <span className="max-w-36 truncate text-slate-400">{exportDirectory}</span>
+                </div>
+                <button onClick={() => void desktopBridge.openFolder(exportDirectory)} className="rounded-full border border-white/10 px-3 py-1 text-[11px] text-slate-200 hover:border-white/25">Open Folder</button>
+                <button onClick={() => void chooseExportFolder()} className="rounded-full border border-white/10 px-3 py-1 text-[11px] text-slate-200 hover:border-white/25">Choose Export Folder</button>
+                <button onClick={handleExport} className="rounded-full border border-violet-300/40 bg-violet-500/10 px-3 py-1 text-[11px] text-violet-100">Render Queue</button>
               </div>
             </div>
           </header>
@@ -131,10 +172,11 @@ export default function Home() {
         <section className="editor-right min-h-0 min-w-0">
           <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-2">
             <ClipResultsPanel />
-            <div className="panel-premium rounded-2xl p-3"><p className="panel-title">Plan usage</p><div className="space-y-2 text-xs"><p>GPU usage 63% / 120h</p><p>AI credits 7,420 / 10,000</p><p>Render minutes 318 / 500</p><p>Exports remaining 52</p><p>Storage 1.8TB / 3TB</p></div></div>
+            <div className="panel-premium rounded-2xl p-3"><p className="panel-title">Render Queue</p><div className="mt-2 space-y-2 text-xs">{renderQueue.slice(0, 5).map((job) => <div key={job.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-2"><div className="mb-1 flex items-center justify-between"><p className="text-slate-200">{job.clipName}</p><span className="text-[10px] uppercase tracking-wide text-slate-400">{job.state}</span></div><p className="text-[10px] text-slate-400">{job.encoder} • {job.renderSpeed} • {job.duration}s</p><div className="mt-1 h-1.5 rounded-full bg-white/10"><div className="h-full rounded-full bg-cyan-300/80" style={{ width: `${job.progress}%` }} /></div><p className="mt-1 truncate text-[10px] text-slate-500">{job.outputPath}</p></div>)}</div></div>
           </div>
         </section>
       </div>
+      {toast && <div className="pointer-events-none absolute right-6 top-6 rounded-xl border border-emerald-300/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">{toast}</div>}
     </main>
   );
 }
