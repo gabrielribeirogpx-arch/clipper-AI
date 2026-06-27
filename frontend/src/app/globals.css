@@ -47,3 +47,18 @@ body { background: var(--bg-primary); }
 .editor-player-controls { margin-top:8px; width:min(100%, calc((100dvh - var(--editor-header-height) - var(--editor-timeline-height) - var(--editor-safe-padding)) * 16 / 9)); flex:0 0 auto; }
 .editor-timeline-section { height:192px; min-height:192px; max-height:192px; overflow:hidden; }
 .editor-right { width:278px; flex-shrink:0; height:100%; min-height:0; overflow:hidden; padding:0 0.1rem 0.1rem 0; }
+
+@media (max-width: 1180px) {
+  .editor-shell { grid-template-columns:72px minmax(0,1fr) 260px; gap:8px; }
+  .editor-sidebar { width:72px; padding:.55rem; }
+  .editor-sidebar nav button span:last-child,
+  .editor-sidebar > div:first-child div div:last-child,
+  .editor-sidebar > div:not(:first-child):not(nav) { display:none; }
+}
+
+@media (max-width: 920px) {
+  .editor-shell { grid-template-columns:1fr; grid-template-rows:minmax(0,1fr) 320px; padding:8px; overflow:auto; }
+  .editor-sidebar { display:none; }
+  .editor-main { min-height:720px; }
+  .editor-right { width:100%; }
+}

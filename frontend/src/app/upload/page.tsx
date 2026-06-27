@@ -242,11 +242,6 @@ export default function UploadPage() {
         setTimeout(() => redirectToPostAnalyzeTarget(analysisId, renderMode, result.render_mode), 300);
       }
       if (result.status === 'processing') {
-        store.updateIngestState({ status: 'processing', analysisId: result.analysis_id });
-        console.log('[SEMI AUTO WAITING FOR SETUP]', { analysis_id: result.analysis_id, status: result.status });
-        setTimeout(() => redirectToPostAnalyzeTarget(result.analysis_id, renderMode, result.render_mode), 300);
-      }
-      if (result.status === 'processing') {
         store.updateIngestState({ status: 'processing', analysisId });
         console.log('[SEMI AUTO WAITING FOR SETUP]', { analysis_id: analysisId, status: result.status });
         setTimeout(() => redirectToPostAnalyzeTarget(analysisId, renderMode, result.render_mode), 300);

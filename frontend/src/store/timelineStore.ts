@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { getRenderState } from '@/lib/api';
+import { apiUrl, getRenderState, mediaUrl } from '@/lib/api';
 
 export type TrackType = 'broll' | 'hooks' | 'cuts' | 'effects';
 
@@ -166,7 +166,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       const nextVideoUrl = clip.final_video;
       return {
         selectedClipId: clipId,
-        videoUrl: `http://localhost:8000${nextVideoUrl}`,
+        videoUrl: mediaUrl(nextVideoUrl),
         duration: clip.duration,
         currentTime: clip.start,
       };
@@ -199,7 +199,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       };
       console.log('[RENDER MODE SAVE]', { source: 'moveBlock', render_mode: payload.render_mode });
       console.log('[DUAL REGION CONFIG SAVE]', { source: 'moveBlock', dual_regions: payload.dual_regions });
-      void fetch('http://localhost:8000/timeline/update', {
+      void fetch(apiUrl('/timeline/update'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -211,7 +211,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
     set((state) => {
       console.log('[RENDER MODE SAVE]', { source: 'setClipRenderMode', render_mode: clipRenderMode });
       console.log('[DUAL REGION CONFIG SAVE]', { source: 'setClipRenderMode', dual_regions: state.dualRegions });
-      void fetch('http://localhost:8000/timeline/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: clipRenderMode, dual_regions: state.dualRegions, semi_auto: state.semiAuto }) });
+      void fetch(apiUrl('/timeline/update'), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: clipRenderMode, dual_regions: state.dualRegions, semi_auto: state.semiAuto }) });
       return { clipRenderMode };
     }),
   setDualRegions: (dualRegions, options) =>
@@ -220,7 +220,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       if (shouldPersist) {
         console.log('[RENDER MODE SAVE]', { source: 'setDualRegions', render_mode: state.clipRenderMode });
         console.log('[DUAL REGION CONFIG SAVE]', { source: 'setDualRegions', dual_regions: dualRegions });
-        void fetch('http://localhost:8000/timeline/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: state.clipRenderMode, dual_regions: dualRegions, semi_auto: state.semiAuto }) });
+        void fetch(apiUrl('/timeline/update'), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: state.clipRenderMode, dual_regions: dualRegions, semi_auto: state.semiAuto }) });
       }
       return { dualRegions };
     }),
@@ -229,7 +229,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       const shouldPersist = options?.persist ?? true;
       if (shouldPersist) {
         console.log('[SEMI AUTO CONFIG SAVE]', { source: 'setSemiAutoRegion', semi_auto: semiAuto });
-        void fetch('http://localhost:8000/timeline/update', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: state.clipRenderMode, dual_regions: state.dualRegions, semi_auto: semiAuto }) });
+        void fetch(apiUrl('/timeline/update'), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ broll: state.tracks.broll, hooks: state.tracks.hooks, cuts: state.tracks.cuts, render_mode: state.clipRenderMode, dual_regions: state.dualRegions, semi_auto: semiAuto }) });
       }
       return { semiAuto };
     }),
@@ -246,8 +246,8 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       const data = await getRenderState(analysisIdHint);
     const mapTrack = (items: ClipBlock[] = [], track: TrackType) =>
       items.map((item) => ({ ...item, track }));
-    const previewVideoUrl = data.previewVideoUrl ? `http://localhost:8000${data.previewVideoUrl}` : null;
-    const exportVideoUrl = data.exportVideoUrl ? `http://localhost:8000${data.exportVideoUrl}` : null;
+    const previewVideoUrl = data.previewVideoUrl ? mediaUrl(data.previewVideoUrl) : null;
+    const exportVideoUrl = data.exportVideoUrl ? mediaUrl(data.exportVideoUrl) : null;
     const renderMode: RenderMode = data.renderMode === 'export' ? 'export' : 'preview';
     const generatedClips: GeneratedClip[] = (data.clips ?? [])
       .map((clip: GeneratedClip) => ({ ...clip }))
@@ -294,7 +294,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       previewVideoUrl,
       exportVideoUrl,
       videoUrl: selectedClip
-        ? `http://localhost:8000${selectedClip.final_video}`
+        ? mediaUrl(selectedClip.final_video)
         : renderMode === 'export' ? exportVideoUrl : previewVideoUrl,
       duration: selectedClip?.duration ?? data.duration ?? 0,
       currentTime: selectedClip?.start ?? 0,

@@ -17,7 +17,7 @@ const trackStyles: Record<TrackType, string> = {
     'from-fuchsia-500/88 via-purple-400/84 to-fuchsia-300/72 border-fuchsia-100/55 shadow-[0_12px_30px_rgba(217,70,239,.34)]'
 };
 
-const TRACK_HEIGHT = 26;
+const TRACK_HEIGHT = 34;
 
 const formatTime = (seconds: number) => {
   const total = Math.max(0, Math.floor(seconds));
@@ -35,11 +35,12 @@ const getRulerStep = (zoom: number) => {
 };
 
 export const TimelineTracks = memo(function TimelineTracks() {
-  const { duration, currentTime, tracks, setCurrentTime, moveBlock, selectBlock, zoom, setZoom } = useTimelineStore();
+  const { duration, currentTime, tracks, setCurrentTime, moveBlock, selectBlock, selectedBlockId, zoom, setZoom } = useTimelineStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const mounted = useMounted();
   const pxPerSecond = useMemo(() => 72 * zoom, [zoom]);
   const cursorLeft = secondsToPixels(currentTime, pxPerSecond);
+  const hasBlocks = Object.values(tracks).some((track) => track.length > 0);
 
   useEffect(() => {
     console.log('[TIMELINE HEIGHT REDUCED TO 192PX]');
@@ -73,7 +74,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
 
       <div
         ref={containerRef}
-        className="timeline-scrollbar relative h-[154px] min-h-0 w-full overflow-x-auto overflow-y-hidden rounded-lg border border-white/10 bg-[#050912] p-1 shadow-[inset_0_2px_22px_rgba(0,0,0,.55)]"
+        className="timeline-scrollbar relative h-[174px] min-h-0 w-full overflow-x-auto overflow-y-hidden rounded-lg border border-white/10 bg-[#050912] p-1 shadow-[inset_0_2px_22px_rgba(0,0,0,.55)]"
         onClick={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
           const timelineX = e.clientX - rect.left + e.currentTarget.scrollLeft;
@@ -86,7 +87,7 @@ export const TimelineTracks = memo(function TimelineTracks() {
         }}
       >
         <div style={{ width: Math.max(secondsToPixels(duration, pxPerSecond), 1000) }} className="relative min-w-full min-h-0">
-          <div className="relative mb-1.5 h-9 overflow-hidden rounded-lg border border-white/10 bg-[#0b1324]">
+          <div className="relative mb-1.5 h-10 overflow-hidden rounded-lg border border-white/10 bg-[#0b1324]">
             <div className="absolute inset-0 opacity-50 [background-image:linear-gradient(to_right,rgba(148,163,184,.2)_1px,transparent_1px)]" style={{ backgroundSize: `${pxPerSecond / 2}px 100%` }} />
             {markers.map((marker) => (
               <div key={marker.time} className="pointer-events-none absolute inset-y-0" style={{ left: marker.left }}>
@@ -101,9 +102,15 @@ export const TimelineTracks = memo(function TimelineTracks() {
             <div className="ml-0.5 h-[calc(100%-0.75rem)] w-[3px] rounded-full bg-rose-400 shadow-[0_0_20px_rgba(251,113,133,.95),0_0_56px_rgba(251,113,133,.6)]" />
           </div>
 
+          {!hasBlocks && (
+            <div className="absolute inset-x-4 bottom-5 z-20 grid h-24 place-items-center rounded-2xl border border-dashed border-slate-500/30 bg-slate-950/70 text-center text-xs text-slate-400">
+              <div><p className="font-semibold text-slate-200">Timeline vazia</p><p>Gere clips para popular hooks, cortes e B-roll.</p></div>
+            </div>
+          )}
+
           <div className="grid gap-1">
             {(Object.keys(tracks) as TrackType[]).map((name) => {
-              const rowHeight = TRACK_HEIGHT + 8;
+              const rowHeight = TRACK_HEIGHT + 10;
 
               return (
                 <div key={name} className="grid grid-cols-[92px_1fr] gap-1.5">
@@ -127,8 +134,8 @@ export const TimelineTracks = memo(function TimelineTracks() {
                               const deltaSec = pixelsToSeconds(info.offset.x, pxPerSecond);
                               moveBlock(name, block.id, block.start + deltaSec, block.end + deltaSec);
                             }}
-                            className={`absolute top-1 flex h-[24px] items-center rounded-md border bg-gradient-to-r px-2 text-[10px] font-medium text-white ${trackStyles[name]} ${
-                              name === 'hooks' ? 'ring-1 ring-rose-200/70' : ''
+                            className={`absolute top-1.5 flex h-[32px] items-center rounded-lg border bg-gradient-to-r px-2.5 text-[10px] font-semibold text-white ${trackStyles[name]} ${
+                              selectedBlockId === block.id ? 'ring-2 ring-cyan-200 shadow-[0_0_0_1px_rgba(255,255,255,.2),0_12px_34px_rgba(34,211,238,.28)]' : name === 'hooks' ? 'ring-1 ring-rose-200/70' : ''
                             }`}
                             style={{ left: secondsToPixels(block.start, pxPerSecond), width: secondsToPixels(block.end - block.start, pxPerSecond) }}
                           >
