@@ -1,5 +1,11 @@
 'use client';
 
+type FileSystemPermissionMode = { mode?: 'read' | 'readwrite' };
+
+type DirectoryHandleWithPermissions = FileSystemDirectoryHandle & {
+  queryPermission?: (descriptor?: FileSystemPermissionMode) => Promise<PermissionState>;
+};
+
 type DesktopAPI = {
   selectFolder?: () => Promise<string | null>;
   openFolder?: (path: string) => Promise<void>;
@@ -10,7 +16,7 @@ type DesktopAPI = {
 declare global {
   interface Window {
     desktopAPI?: DesktopAPI;
-    showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>;
+    showDirectoryPicker?: (options?: FileSystemPermissionMode) => Promise<DirectoryHandleWithPermissions>;
   }
 }
 
@@ -36,7 +42,7 @@ export const desktopBridge = {
 
     console.log('[NATIVE DIRECTORY PICKER ACTIVE]');
     const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
-    const permission = await handle.queryPermission({ mode: 'readwrite' });
+    const permission = handle.queryPermission ? await handle.queryPermission({ mode: 'readwrite' }) : 'prompt';
     const path = handle.name;
 
     let handleStored = false;

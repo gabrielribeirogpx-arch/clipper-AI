@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { renderDualRegionFinal } from '@/lib/api';
+import { apiUrl, renderDualRegionFinal } from '@/lib/api';
 import { useTimelineStore, type DualRegions, type RegionBox } from '@/store/timelineStore';
 
 type RegionKey = 'regionA' | 'regionB';
@@ -77,7 +77,7 @@ export default function RegionSetupPage() {
     };
     console.log('[DUAL REGION MODE PERSIST START]', { analysisId: finalAnalysisId });
     console.log('[TIMELINE UPDATE PAYLOAD]', payload);
-    void fetch('http://localhost:8000/timeline/update', {
+    void fetch(apiUrl('/timeline/update'), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

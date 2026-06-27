@@ -26,7 +26,15 @@ export type YouTubeIngestRequest = {
   video_quality?: '720p' | '1080p' | '4k';
 };
 
-const API_BASE = 'http://localhost:8000';
+export const API_BASE = (process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:8000');
+
+export const apiUrl = (path: string) => `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+
+export const mediaUrl = (path?: string | null) => {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+  return apiUrl(path);
+};
 
 export class ApiError extends Error {
   status: number;
@@ -57,7 +65,7 @@ export function uploadVideo(
     formData.append('video_quality', videoQuality);
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${API_BASE}/upload`);
+    xhr.open('POST', apiUrl('/upload'));
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && onProgress) {
@@ -80,19 +88,19 @@ export function uploadVideo(
 
 export async function getRenderState(analysisId?: string | null) {
   const query = analysisId ? `?analysis_id=${encodeURIComponent(analysisId)}` : '';
-  const response = await fetch(`${API_BASE}/timeline/render-state${query}`);
+  const response = await fetch(apiUrl(`/timeline/render-state${query}`));
   if (!response.ok) throw new Error('Failed to fetch render state');
   return response.json();
 }
 
 export async function getTimeline() {
-  const response = await fetch(`${API_BASE}/timeline`);
+  const response = await fetch(apiUrl('/timeline'));
   if (!response.ok) throw new Error('Failed to fetch timeline');
   return response.json();
 }
 
 export async function ingestYouTubeVideo(payload: YouTubeIngestRequest): Promise<UploadResponse> {
-  const response = await fetch(`${API_BASE}/ingest/youtube`, {
+  const response = await fetch(apiUrl('/ingest/youtube'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -108,7 +116,7 @@ export type ExportResponse = {
 };
 
 export async function exportClip(clipId: string): Promise<ExportResponse> {
-  const response = await fetch(`${API_BASE}/export`, {
+  const response = await fetch(apiUrl('/export'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ clip_id: clipId }),
@@ -124,29 +132,29 @@ export type IngestJobState = IngestStatus & { job_id: string; finished: boolean 
 
 export async function ingestYouTubeJob(payload: YouTubeIngestRequest): Promise<IngestJobResponse> {
   console.log('[FRONTEND SEMI AUTO SENT]', { semi_auto_config: payload.semi_auto_config, render_mode: payload.render_mode });
-  const response = await fetch(`${API_BASE}/ingest/youtube`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  const response = await fetch(apiUrl('/ingest/youtube'), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   if (!response.ok) throw new Error("YouTube ingestion failed");
   return response.json() as Promise<IngestJobResponse>;
 }
 
 export async function getIngestStatus(jobId: string): Promise<IngestStatus> {
-  const response = await fetch(`${API_BASE}/ingest/status/${jobId}`);
+  const response = await fetch(apiUrl(`/ingest/status/${jobId}`));
   if (!response.ok) throw new ApiError("Failed to fetch ingest status", response.status);
   return response.json() as Promise<IngestStatus>;
 }
 
 export function createIngestStream(jobId: string): EventSource {
-  return new EventSource(`${API_BASE}/ingest/stream/${jobId}`);
+  return new EventSource(apiUrl(`/ingest/stream/${jobId}`));
 }
 
 export async function getIngestJobState(jobId: string): Promise<IngestJobState> {
-  const response = await fetch(`${API_BASE}/ingest/job/${jobId}`);
+  const response = await fetch(apiUrl(`/ingest/job/${jobId}`));
   if (!response.ok) throw new ApiError('Failed to fetch ingest job state', response.status);
   return response.json() as Promise<IngestJobState>;
 }
 
 export async function renderDualRegionFinal(payload: { analysis_id: string; render_mode: "dual_region"; dual_region_config: unknown }) {
-  const response = await fetch(`${API_BASE}/timeline/render-dual-region`, {
+  const response = await fetch(apiUrl('/timeline/render-dual-region'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -156,7 +164,7 @@ export async function renderDualRegionFinal(payload: { analysis_id: string; rend
 }
 
 export async function renderSemiAutoFinal(payload: { analysis_id: string; render_mode: "semi_auto"; semi_auto: unknown }) {
-  const response = await fetch(`${API_BASE}/timeline/render-semi-auto`, {
+  const response = await fetch(apiUrl('/timeline/render-semi-auto'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

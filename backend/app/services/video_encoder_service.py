@@ -39,6 +39,8 @@ def _ffmpeg_has_encoder(encoders_text: str, name: str) -> bool:
 
 
 def detect_best_encoder() -> EncoderSelection:
+    # TODO(local-engine): keep GPU -> CPU fallback explicit for desktop/local engine builds;
+    # expose the selected encoder in diagnostics before cloud APIs are reduced to licensing/sync.
     print("[GPU DETECTION START]")
 
     force_cpu = os.getenv("FORCE_CPU_ENCODER", "false").strip().lower() in {"1","true","yes","on"}

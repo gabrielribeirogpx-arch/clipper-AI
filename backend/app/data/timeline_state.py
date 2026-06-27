@@ -6,6 +6,9 @@ from app.db import SessionLocal
 from app.models.timeline_state_model import TimelineRenderState
 
 
+# TODO(local-engine): this singleton keeps the current backend compatible, but it is risky for
+# concurrent users/analyses. Move full timeline persistence to per-analysis_id storage
+# before splitting the heavy local engine from the future cloud licensing/billing/sync API.
 timeline_state: dict[str, Any] = {
     "renderMode": "preview",
     "analysisId": None,
