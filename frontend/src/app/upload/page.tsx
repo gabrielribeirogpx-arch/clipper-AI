@@ -205,6 +205,13 @@ export default function UploadPage() {
   const isRealIngestActive = Boolean(store.activeJobId);
   const showUploadCard = isRealIngestActive || isStartingYoutubeIngest || isRealFileUploadActive;
   const uploadCardLabel = store.uploadStatus === 'uploading' ? 'Enviando vídeo...' : (store.processingStage ?? store.currentStep ?? 'Processing...');
+  const streamingStages = [
+    ['Download', store.uploadProgress >= 10],
+    ['Proxy / áudio / waveform', store.pipelineEvents.some((event) => event.stage === 'ingestion' && event.event === 'PIPELINE_STAGE_FINISHED')],
+    ['Transcrição', store.pipelineEvents.some((event) => event.stage === 'transcription' && event.event === 'PIPELINE_STAGE_FINISHED')],
+    ['Encontrando melhores momentos', store.pipelineEvents.some((event) => event.stage === 'fast_detection' && event.event === 'PIPELINE_STAGE_FINISHED')],
+    ['Gerando primeiros clips', store.editorReady || store.clips.length > 0],
+  ] as const;
   const validateFile = (file: File) => (['video/mp4', 'video/quicktime'].includes(file.type) ? (file.size > MAX_SIZE ? 'Arquivo maior que 1GB.' : null) : 'Somente MP4 ou MOV.');
 
   const processFile = async (file: File) => {
@@ -364,7 +371,7 @@ export default function UploadPage() {
       activeStreamJobIdRef.current = jobId;
 
       const onProgress = (event: MessageEvent) => {
-        const payload = JSON.parse(event.data) as { status: string; progress: number; step: string; clips?: Array<Record<string, unknown>>; analysis_id?: string; error?: { message?: string } };
+        const payload = JSON.parse(event.data) as { status: string; progress: number; step: string; clips?: Array<Record<string, unknown>>; analysis_id?: string; error?: { message?: string }; pipeline_event?: import('@/lib/api').PipelineEvent };
         store.setUploadProgress(payload.progress ?? 0);
         store.setProcessingStage(payload.step || 'Processing...');
         store.updateIngestState({
@@ -373,6 +380,7 @@ export default function UploadPage() {
           status: payload.status,
           clips: payload.clips,
           analysisId: payload.analysis_id ?? useUploadStore.getState().analysisId,
+          pipeline_event: payload.pipeline_event,
         });
 
         if (payload.status === 'waiting_dual_region') {
@@ -385,15 +393,13 @@ export default function UploadPage() {
             return;
           }
         }
-        if (payload.status === 'processing') {
+        if (payload.clips?.length && (payload.status === 'editor_ready' || payload.status === 'background_processing')) {
           const analysisId = payload.analysis_id ?? useUploadStore.getState().analysisId;
-          console.log('[SEMI AUTO WAITING FOR SETUP]', payload);
           if (analysisId && !dualRegionRedirectedRef.current) {
-            console.log('[SEMI AUTO REDIRECT]', analysisId);
-            console.log('[SEMI AUTO SETUP REQUIRED]', { analysis_id: analysisId });
+            void hydrateFromBackend(analysisId);
+            console.log('[EDITOR READY REDIRECT]', analysisId);
             dualRegionRedirectedRef.current = true;
             router.push(`/editor?analysis_id=${analysisId}`);
-            return;
           }
         }
 
@@ -643,11 +649,33 @@ export default function UploadPage() {
         )}
 
         {showUploadCard && (
-          <div className="mt-8 rounded-2xl border border-cyan-300/25 bg-cyan-500/5 p-5">
-            <p className="mb-3 text-cyan-100">{uploadCardLabel}</p>
+          <div className="mt-8 space-y-4 rounded-2xl border border-cyan-300/25 bg-cyan-500/5 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-cyan-100">{uploadCardLabel}</p>
+                {(store.editorReady || store.backgroundProcessing) && (
+                  <p className="mt-1 text-sm text-emerald-200">Você já pode editar enquanto continuamos processando.</p>
+                )}
+              </div>
+              <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200">{store.clips.length} clips</span>
+            </div>
             <div className="h-2 rounded-full bg-slate-800">
               <div className="h-2 rounded-full bg-gradient-to-r from-cyan-300 to-violet-500" style={{ width: `${store.uploadProgress}%` }} />
             </div>
+            <div className="grid gap-2 text-sm text-slate-200 sm:grid-cols-2">
+              {streamingStages.map(([label, done]) => (
+                <div key={label} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/15 px-3 py-2">
+                  <span className={done ? 'text-emerald-300' : 'text-slate-500'}>{done ? '✔' : '•'}</span>
+                  <span>{label}</span>
+                </div>
+              ))}
+            </div>
+            {store.backgroundProcessing && (
+              <div className="grid gap-2 text-xs text-cyan-100 sm:grid-cols-2">
+                <span className="rounded-xl bg-cyan-300/10 px-3 py-2">Gerando mais clips...</span>
+                <span className="rounded-xl bg-violet-300/10 px-3 py-2">IA gerando títulos em background...</span>
+              </div>
+            )}
           </div>
         )}
 

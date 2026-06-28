@@ -61,16 +61,42 @@ async def process_youtube_ingest_job(job_id: str, body: dict, output_dir: str) -
             body.get("video_quality", "1080p"),
         )
 
-        update_job(job_id, status="transcribing", progress=35, step="Transcribing audio")
-        update_job(job_id, status="detecting", progress=55, step="Detecting best clips")
-        update_job(job_id, status="rendering", progress=75, step="Rendering clips and metadata")
-
         render_mode = body.get("render_mode", "ai_tracking")
         process_render_mode = render_mode
         print(f"[BACKEND RECEIVED RENDER MODE] source=ingest_youtube render_mode={render_mode}")
         print(f"[PROCESS VIDEO JOB MODE] ingest_request_render_mode={render_mode}")
         print(f"[PROCESS VIDEO JOB MODE] ingest_processing_render_mode={process_render_mode}")
         print(f"[PROCESS VIDEO JOB CONFIG] ingest_request_dual_region_config={body.get('dual_region_config')}")
+        def _stream_event(event: dict) -> None:
+            event_type = event.get("event")
+            progress_by_event = {
+                "PIPELINE_STAGE_STARTED": 20,
+                "PIPELINE_STAGE_FINISHED": 45,
+                "FIRST_CLIP_READY": 82,
+                "EDITOR_READY": 85,
+                "BACKGROUND_PROCESSING": 90,
+                "CLIP_RENDERED": 92,
+                "METADATA_READY": 96,
+                "BACKGROUND_FINISHED": 99,
+            }
+            stage = event.get("stage") or event_type
+            status = "processing"
+            step = str(stage).replace("_", " ").title()
+            clips = None
+            if event.get("clip"):
+                current = get_job(job_id) or {}
+                raw_clips = current.get("_raw_clips", [])
+                raw_clips = [*raw_clips, event["clip"]]
+                clips = [_clip_response_item(hook, index) for index, hook in enumerate(raw_clips)]
+                update_job(job_id, _raw_clips=raw_clips)
+            if event_type == "FIRST_CLIP_READY":
+                status = "editor_ready"
+                step = "Editor available — generating more clips in background"
+            elif event_type == "BACKGROUND_PROCESSING":
+                status = "background_processing"
+                step = "Você já pode editar enquanto continuamos processando."
+            update_job(job_id, status=status, progress=progress_by_event.get(event_type, 50), step=step, clips=clips if clips is not None else (get_job(job_id) or {}).get("clips", []), pipeline_event=event)
+
         transcription = await asyncio.to_thread(
             process_video,
             filepath,
@@ -85,6 +111,7 @@ async def process_youtube_ingest_job(job_id: str, body: dict, output_dir: str) -
             step_logger=lambda msg: print(msg),
             original_video_path=filepath,
             auto_save_dir=body.get("save_folder"),
+            event_logger=_stream_event,
         )
 
         response_payload = _build_upload_response(transcription, str(uuid.uuid4()), filepath, render_mode=render_mode, video_quality=body.get("video_quality", "1080p"))
@@ -176,7 +203,7 @@ async def ingest_status(job_id: str):
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="job not found")
-    return {k: job.get(k) for k in ["status", "progress", "step", "analysis_id", "clips", "error"]}
+    return {k: job.get(k) for k in ["status", "progress", "step", "analysis_id", "clips", "error", "pipeline_event"]}
 
 
 @router.get("/ingest/job/{job_id}")
@@ -186,7 +213,7 @@ async def ingest_job_state(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="job not found")
     print(f"[JOB RESTORED] job_id={job_id}")
-    return {"job_id": job_id, **{k: job.get(k) for k in ["status", "progress", "step", "analysis_id", "clips", "finished", "error"]}}
+    return {"job_id": job_id, **{k: job.get(k) for k in ["status", "progress", "step", "analysis_id", "clips", "finished", "error", "pipeline_event"]}}
 
 
 @router.get("/ingest/stream/{job_id}")
@@ -200,7 +227,7 @@ async def ingest_stream(job_id: str):
         try:
             while True:
                 payload = await queue.get()
-                data = {k: payload.get(k) for k in ["status", "progress", "step", "analysis_id", "clips", "error"]}
+                data = {k: payload.get(k) for k in ["status", "progress", "step", "analysis_id", "clips", "error", "pipeline_event"]}
                 yield f"event: progress\ndata: {json.dumps(data)}\n\n"
                 if payload.get("status") in {"completed", "failed"}:
                     break

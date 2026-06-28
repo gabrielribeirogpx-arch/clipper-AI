@@ -54,197 +54,186 @@ def _proxy_audio_is_whisper_safe(video_path: str) -> bool:
     return codec == "aac" and sample_rate == "16000"
 
 
-def process_video(video_path, original_video_path=None, proxy_video_path=None, output_dir="app/clips", render_mode="ai_tracking", dual_region_config=None, min_clip_length=30, max_clip_length=90, max_clips=25, min_score=0.45, overlap_tolerance=0.6, step_logger=None, auto_save_dir=None):
+def _emit_pipeline_event(event_logger, event_type: str, analysis_id: str, started_at: float, clip_count: int = 0, **extra):
+    payload = {
+        "event": event_type,
+        "analysis_id": analysis_id,
+        "time": time.time(),
+        "clip_count": clip_count,
+        "total_time": round(time.perf_counter() - started_at, 3),
+        **extra,
+    }
+    print(f"[{event_type}] analysis_id={analysis_id} clips={clip_count} total_time={payload['total_time']}")
+    if event_logger:
+        event_logger(payload)
+
+
+def _run_ffprobe(video_path: str) -> dict:
+    cmd = ["ffprobe", "-v", "error", "-show_format", "-show_streams", "-of", "json", video_path]
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        return {"error": proc.stderr}
+    data = json.loads(proc.stdout or "{}")
+    video_stream = next((s for s in data.get("streams", []) if s.get("codec_type") == "video"), {})
+    return {
+        "duration": float(data.get("format", {}).get("duration") or 0),
+        "fps": video_stream.get("r_frame_rate"),
+        "width": video_stream.get("width"),
+        "height": video_stream.get("height"),
+    }
+
+
+def _generate_proxy(source_video_path: str, proxy_video_path: str, profiler: PerformanceProfiler) -> str:
+    if os.path.exists(proxy_video_path):
+        print("[PROXY CACHE HIT]")
+        return proxy_video_path
+    profiler.start_timer("proxy_generation")
+    print("[PROXY CACHE MISS]")
+    proxy_cmd = [
+        "ffmpeg", "-y", "-hwaccel", "auto", "-threads", "4", "-extra_hw_frames", "8",
+        "-i", source_video_path,
+        "-map", "0:v:0", "-map", "0:a:0?",
+        "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2",
+        "-c:v", "h264_nvenc", "-preset", "p1", "-tune", "ll",
+        "-c:a", "aac", "-b:a", "128k", "-ar", "16000", "-ac", "1", "-shortest",
+        proxy_video_path,
+    ]
+    subprocess.run(proxy_cmd, check=True)
+    profiler.end_timer("proxy_generation")
+    return proxy_video_path
+
+
+def _extract_audio(source_video_path: str, audio_path: str) -> str:
+    if os.path.exists(audio_path):
+        print("[AUDIO CACHE HIT]")
+        return audio_path
+    subprocess.run(["ffmpeg", "-y", "-i", source_video_path, "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", audio_path], check=False)
+    return audio_path
+
+
+def _generate_waveform(audio_or_video_path: str, waveform_path: str) -> str:
+    if os.path.exists(waveform_path):
+        print("[WAVEFORM CACHE HIT]")
+        return waveform_path
+    subprocess.run(["ffmpeg", "-y", "-i", audio_or_video_path, "-filter_complex", "aformat=channel_layouts=mono,showwavespic=s=1200x180", "-frames:v", "1", waveform_path], check=False)
+    return waveform_path
+
+
+def _detect_silence(audio_or_video_path: str) -> list[dict]:
+    proc = subprocess.run(["ffmpeg", "-i", audio_or_video_path, "-af", "silencedetect=noise=-30dB:d=0.35", "-f", "null", "-"], capture_output=True, text=True, check=False)
+    events = []
+    for line in (proc.stderr or "").splitlines():
+        if "silence_start" in line:
+            events.append({"type": "start", "time": line.rsplit(" ", 1)[-1]})
+        elif "silence_end" in line:
+            events.append({"type": "end", "raw": line})
+    return events
+
+
+def _detect_scene_changes(video_path: str) -> list[dict]:
+    proc = subprocess.run(["ffmpeg", "-i", video_path, "-vf", "select='gt(scene,0.35)',showinfo", "-f", "null", "-"], capture_output=True, text=True, check=False)
+    return [{"raw": line} for line in (proc.stderr or "").splitlines() if "pts_time" in line][:500]
+
+
+def _speech_timestamps(transcription: dict) -> list[dict]:
+    return [{"start": s.get("start", 0), "end": s.get("end", 0)} for s in transcription.get("segments", [])]
+
+
+def process_video(video_path, original_video_path=None, proxy_video_path=None, output_dir="app/clips", render_mode="ai_tracking", dual_region_config=None, min_clip_length=30, max_clip_length=90, max_clips=25, min_score=0.45, overlap_tolerance=0.6, step_logger=None, auto_save_dir=None, event_logger=None):
     os.makedirs(output_dir, exist_ok=True)
-    print("[PERFORMANCE MODE ACTIVE]")
-    print("[ASYNC PIPELINE ACTIVE]")
     if auto_save_dir:
         os.makedirs(auto_save_dir, exist_ok=True)
-        print("[AUTO SAVE PIPELINE ACTIVE]")
     log = step_logger or (lambda _msg: None)
-
+    started_at = time.perf_counter()
+    analysis_id = os.path.basename(output_dir.rstrip("/"))
+    fast_pipeline = os.getenv("FAST_PIPELINE", "true").lower() in {"1", "true", "yes", "on"}
+    first_batch_size = 5 if fast_pipeline else min(10, max_clips)
     profiler = PerformanceProfiler(report_path=os.path.join(output_dir, "performance_report.json"))
     profiler.record_gpu_info()
     profiler.start_timer("total_pipeline")
-
     source_video_path = original_video_path or video_path
-    print("[PROXY-FIRST PIPELINE ACTIVE]")
-    print("[CLIP SOURCE = PROXY]")
-    if not proxy_video_path:
-        proxy_video_path = os.path.join(output_dir, "proxy_720p.mp4")
-    if os.path.exists(proxy_video_path):
-        print("[PROXY CACHE HIT]")
-        print("[PROXY AUDIO PRESERVED]")
-    else:
-        print("[PROXY CACHE MISS]")
-        profiler.start_timer("proxy_generation")
-        print("[GPU PROXY ACTIVE]")
-        print("[NVENC PROXY GENERATION]")
-        print("[PROXY AUDIO FIX APPLIED]")
-        print("[PROXY AUDIO TRANSCODE ACTIVE]")
-        proxy_cmd = [
-            "ffmpeg", "-y", "-hwaccel", "auto", "-threads", "4", "-extra_hw_frames", "8",
-            "-i", source_video_path,
-            "-map", "0:v:0",
-            "-map", "0:a:0?",
-            "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2",
-            "-c:v", "h264_nvenc",
-            "-preset", "p1",
-            "-tune", "ll",
-            "-c:a", "aac",
-            "-b:a", "128k",
-            "-ar", "16000",
-            "-ac", "1",
-            "-shortest",
-            proxy_video_path,
-        ]
-        subprocess.run(proxy_cmd, check=True)
-        profiler.end_timer("proxy_generation")
-        print("[PROXY GENERATED]")
-        print("[PROXY AUDIO PRESERVED]")
+    proxy_video_path = proxy_video_path or os.path.join(output_dir, "proxy_720p.mp4")
+    audio_path = os.path.join(output_dir, "audio_16k.wav")
+    waveform_path = os.path.join(output_dir, "waveform.png")
+    cache = load_analysis_cache(analysis_id) or {}
 
-    proxy_audio_stream = _probe_audio_stream(proxy_video_path)
-    whisper_audio_source = proxy_video_path
-    if proxy_audio_stream:
-        codec_name = (proxy_audio_stream.get("codec_name") or "").lower()
-        sample_rate = str(proxy_audio_stream.get("sample_rate") or "")
-        print("[PROXY AUDIO STREAM DETECTED]")
-        print(f"[PROXY AUDIO STREAM INFO] codec={codec_name} sample_rate={sample_rate}")
-        if _proxy_audio_is_whisper_safe(proxy_video_path):
-            print("[WHISPER SAFE PROXY READY]")
+    _emit_pipeline_event(event_logger, "PIPELINE_STAGE_STARTED", analysis_id, started_at, stage="ingestion")
+    with ThreadPoolExecutor(max_workers=4) as ingest_pool:
+        futures = {
+            "probe": ingest_pool.submit(_run_ffprobe, source_video_path),
+            "proxy": ingest_pool.submit(_generate_proxy, source_video_path, proxy_video_path, profiler),
+            "audio": ingest_pool.submit(_extract_audio, source_video_path, audio_path),
+            "waveform": ingest_pool.submit(_generate_waveform, source_video_path, waveform_path),
+        }
+        ingest_results = {name: future.result() for name, future in futures.items()}
+    _emit_pipeline_event(event_logger, "PIPELINE_STAGE_FINISHED", analysis_id, started_at, stage="ingestion")
+
+    whisper_audio_source = proxy_video_path if _proxy_audio_is_whisper_safe(proxy_video_path) else source_video_path
+    _emit_pipeline_event(event_logger, "PIPELINE_STAGE_STARTED", analysis_id, started_at, stage="transcription")
+    with ThreadPoolExecutor(max_workers=4) as analysis_pool:
+        silence_future = analysis_pool.submit(lambda: cache.get("silence") or _detect_silence(audio_path if os.path.exists(audio_path) else whisper_audio_source))
+        scene_future = analysis_pool.submit(lambda: cache.get("scene_changes") or _detect_scene_changes(proxy_video_path))
+        if cache.get("transcription"):
+            transcription = cache["transcription"]
+            print("[TRANSCRIPTION CACHE HIT]")
         else:
-            print("[PROXY AUDIO VALIDATION FAILED] fallback=original")
-            whisper_audio_source = source_video_path
+            log("[STEP 5 - TRANSCRIPTION START]")
+            transcription = transcribe_video(whisper_audio_source, profiler=profiler)
+            log("[STEP 6 - TRANSCRIPTION FINISH]")
+        silence = silence_future.result()
+        scene_changes = scene_future.result()
+    speech = cache.get("speech_timestamps") or _speech_timestamps(transcription)
+    _emit_pipeline_event(event_logger, "PIPELINE_STAGE_FINISHED", analysis_id, started_at, stage="transcription")
+
+    _emit_pipeline_event(event_logger, "PIPELINE_STAGE_STARTED", analysis_id, started_at, stage="fast_detection")
+    if cache.get("hooks"):
+        hooks = cache["hooks"]
+        print("[HOOK CACHE HIT]")
     else:
-        print("[PROXY AUDIO MISSING] fallback=original")
-        whisper_audio_source = source_video_path
-
-    print("[PROXY ACTIVE]")
-
-    analysis_id = os.path.basename(output_dir.rstrip("/"))
-    print(f"[WHISPER AUDIO SOURCE] {whisper_audio_source}")
-    if is_long_video(whisper_audio_source):
-        print("[LONG VIDEO MODE ACTIVE]")
-        print("[STREAM PROCESSING ACTIVE]")
-        print("[PROGRESSIVE CLIPS ACTIVE]")
-        chunk_duration = resolve_chunk_duration()
-        profiler.start_timer("ffmpeg_extraction")
-        chunks = split_video_into_chunks(whisper_audio_source, output_dir, chunk_duration)
-        profiler.end_timer("ffmpeg_extraction")
-        profiler.start_timer("whisper_transcription")
-        chunk_analysis = analyze_chunks_parallel(
-            chunks,
-            analysis_id=analysis_id,
-            min_clip_length=min_clip_length,
-            max_clip_length=max_clip_length,
-            max_clips=max_clips,
-            min_score=min_score,
-            overlap_tolerance=overlap_tolerance,
-            on_chunk_complete=lambda item: print(f"[NEW CLIPS STREAMED] chunk={item.get('chunk_id')}")
-        )
-        profiler.end_timer("whisper_transcription")
-        merged = merge_chunk_analysis(chunk_analysis, output_dir)
-        transcription = {"segments": merged["segments"], "speaker_segments": []}
-        hooks = merged["hooks"]
-    else:
-        log("[STEP 5 - TRANSCRIPTION START]")
-        transcription = transcribe_video(whisper_audio_source, profiler=profiler)
-        log("[STEP 6 - TRANSCRIPTION FINISH]")
-        profiler.start_timer("cache_restore")
-        cached = load_analysis_cache(analysis_id)
-        profiler.end_timer("cache_restore")
-        if cached:
-            print("[PERF CACHE] hit")
-            hooks = cached.get("hooks", [])
-        else:
-            print("[PERF CACHE] miss")
-            profiler.start_timer("hook_analysis")
-            hooks = detect_hooks(transcription, min_duration=min_clip_length, max_duration=max_clip_length, max_clips=max_clips, min_score=min_score, overlap_tolerance=overlap_tolerance)
-            profiler.end_timer("hook_analysis")
-            profiler.start_timer("cache_save")
-            save_analysis_cache(analysis_id, {"hooks": hooks, "face_boxes": [], "scene_changes": [], "crop_regions": [], "viral_scores": [h.get("viral_score", 0) for h in hooks], "hook_timestamps": [{"start": h.get("start"), "end": h.get("end")} for h in hooks], "tracking_regions": []})
-            profiler.end_timer("cache_save")
-
-    hooks = sorted(hooks, key=lambda h: h.get("viral_score", 0), reverse=True)
-    print("[TOP CLIPS PRIORITIZED]")
-
-    print("[LOW FPS ANALYSIS ENABLED]")
-    print("[ANALYSIS FPS] 3")
-    profiler.set_metadata("fps_analysis", 3)
-    profiler.set_metadata("total_frames", 0)
-    profiler.set_metadata("analyzed_frames", 0)
-    profiler.set_metadata("skipped_frames", 0)
-    print("[TRACKING INTERPOLATION ACTIVE]")
-    print("[SMART TRACKING ACTIVE]")
-    print("[INTERPOLATED TRACKING]")
-    print("[TRACKING SMOOTHING ENABLED]")
+        hooks = detect_hooks(transcription, min_duration=min_clip_length, max_duration=max_clip_length, max_clips=max(80, max_clips), min_score=min_score, overlap_tolerance=overlap_tolerance)
+    hooks = sorted(hooks, key=lambda h: h.get("viral_score", 0), reverse=True)[:max_clips]
+    save_analysis_cache(analysis_id, {**cache, "transcription": transcription, "hooks": hooks, "waveform": waveform_path, "speech_timestamps": speech, "scene_changes": scene_changes, "silence": silence, "probe": ingest_results.get("probe"), "proxy": proxy_video_path})
+    _emit_pipeline_event(event_logger, "PIPELINE_STAGE_FINISHED", analysis_id, started_at, len(hooks), stage="fast_detection")
 
     broll_engine = BRollEngine()
-    generated_clips, timeline_broll, timeline_cuts = [], [], []
-
-    selected_hooks = hooks[:5] + hooks[5:10] + hooks[10:]
-    print("[PARALLEL CLIP GENERATION ACTIVE]")
-    max_parallel_clips = int(os.getenv("MAX_PARALLEL_CLIPS", "4"))
-    profiler.start_timer("clip_generation")
-    def _cut(index, hook):
-        raw_clip_path = cut_clip(proxy_video_path, hook["start"], hook["end"], f"raw_clip_{index}.mp4", output_dir=output_dir)
-        return index, hook, raw_clip_path
-    with ThreadPoolExecutor(max_workers=max_parallel_clips) as cut_pool:
-        cut_futures = [cut_pool.submit(_cut, index, hook) for index, hook in enumerate(selected_hooks)]
-        for future in as_completed(cut_futures):
-            index, hook, raw_clip_path = future.result()
-            basic_meta = no_ai_metadata(hook, index)
-            generated_clips.append(apply_metadata_to_clip({"raw_clip_path": raw_clip_path, "clip_path": raw_clip_path, "final_clip": raw_clip_path, **hook, "title_suggestion": "", "caption_suggestion": "", "description_suggestion": "", "hashtags": [], "emotion": "Não analisado", "category": "Auto", "viral_reason": "", "title_options": [], "broll_timeline": []}, basic_meta))
-            timeline_cuts.append({"id": f"cut-{index}", "label": f"Cut {index + 1}", "start": hook["start"], "end": hook["start"] + 0.1})
-    generated_clips = sorted(generated_clips, key=lambda c: int(str(c.get("raw_clip_path", "")).split("raw_clip_")[-1].split(".")[0]) if "raw_clip_" in str(c.get("raw_clip_path", "")) else 0)
-    profiler.end_timer("clip_generation")
-
-    max_parallel_renders = int(os.getenv("MAX_PARALLEL_RENDERS", "2"))
-    print("[PARALLEL RENDER ACTIVE]")
+    generated_clips = [None] * len(hooks)
+    timeline_broll, timeline_cuts = [], []
+    max_parallel_renders = max(1, int(os.getenv("MAX_PARALLEL_RENDERS", "2")))
 
     def _render(idx, hook):
-        print("[RENDER SLOT ACQUIRED]")
-        raw = hook["raw_clip_path"]
+        raw = cut_clip(proxy_video_path, hook["start"], hook["end"], f"raw_clip_{idx}.mp4", output_dir=output_dir)
         processed = raw
         if render_mode == "ai_tracking":
-            profiler.start_timer("crop_calculation")
             processed = render_vertical_clip(raw, transcription["segments"], os.path.join(output_dir, f"clip_{idx}.mp4"), speaker_segments=transcription.get("speaker_segments", []), tracking_video_path=proxy_video_path, original_video_path=source_video_path)
-            profiler.end_timer("crop_calculation")
         elif render_mode == "dual_region" and dual_region_config:
-            processed = os.path.join(output_dir, f"clip_{idx}_dual.mp4")
-            render_dual_region_clip(raw, processed, dual_region_config)
+            processed = os.path.join(output_dir, f"clip_{idx}_dual.mp4"); render_dual_region_clip(raw, processed, dual_region_config)
         elif render_mode == "semi_auto":
-            processed = os.path.join(output_dir, f"clip_{idx}_semi_auto.mp4")
-            render_semi_auto_vertical(raw, processed)
-        profiler.start_timer("render")
+            processed = os.path.join(output_dir, f"clip_{idx}_semi_auto.mp4"); render_semi_auto_vertical(raw, processed)
         seg_timeline = broll_engine.build_timeline([s for s in transcription["segments"] if hook["start"] <= s.get("start", 0) <= hook["end"]])
         final = apply_broll_overlay(processed, seg_timeline, f"clip_{idx}_final.mp4", output_dir=output_dir, quality_profile="export")
         if auto_save_dir:
-            autosave_path = os.path.join(auto_save_dir, os.path.basename(final))
-            shutil.copy2(final, autosave_path)
-            print(f"[CLIP AUTO SAVED] {autosave_path}")
-        profiler.end_timer("render")
-        meta = generate_social_metadata(hook.get("text", ""), hook.get("viral_score", 0))
-        hook.update({"clip_path": processed, "final_clip": final, "hashtags": meta["hashtags"], "broll_timeline": seg_timeline})
-        print("[RENDER SLOT RELEASED]")
-        return idx, hook
+            shutil.copy2(final, os.path.join(auto_save_dir, os.path.basename(final)))
+        clip = apply_metadata_to_clip({"raw_clip_path": raw, "clip_path": processed, "final_clip": final, **hook, "title_suggestion": "", "caption_suggestion": "", "description_suggestion": "", "hashtags": [], "emotion": "Não analisado", "category": "Auto", "viral_reason": "", "title_options": [], "broll_timeline": seg_timeline}, no_ai_metadata(hook, idx))
+        return idx, clip
 
-    with ThreadPoolExecutor(max_workers=max_parallel_renders) as pool:
-        futures = [pool.submit(_render, i, h) for i, h in enumerate(generated_clips)]
+    _emit_pipeline_event(event_logger, "PIPELINE_STAGE_STARTED", analysis_id, started_at, stage="top_clip_render")
+    with ThreadPoolExecutor(max_workers=max_parallel_renders) as render_pool:
+        futures = [render_pool.submit(_render, i, h) for i, h in enumerate(hooks)]
+        first_clip_announced = False
         for future in as_completed(futures):
-            idx, updated = future.result()
-            generated_clips[idx] = updated
-            print(f"[RENDER PROGRESS] index={idx}")
-
-    print("[ETA UPDATED]")
-    print("[FINAL EXPORT COMPLETE]")
-    print("[FINAL PIPELINE OPTIMIZED]")
+            idx, clip = future.result()
+            generated_clips[idx] = clip
+            ready = [c for c in generated_clips if c]
+            timeline_cuts.append({"id": f"cut-{idx}", "label": f"Cut {idx + 1}", "start": clip["start"], "end": clip["start"] + 0.1})
+            _emit_pipeline_event(event_logger, "CLIP_RENDERED", analysis_id, started_at, len(ready), clip_index=idx, clip=clip)
+            if not first_clip_announced:
+                first_clip_announced = True
+                _emit_pipeline_event(event_logger, "FIRST_CLIP_READY", analysis_id, started_at, len(ready), clip=clip)
+                _emit_pipeline_event(event_logger, "EDITOR_READY", analysis_id, started_at, len(ready))
+            if len(ready) == first_batch_size:
+                _emit_pipeline_event(event_logger, "BACKGROUND_PROCESSING", analysis_id, started_at, len(ready), message="Editor can be used while remaining clips and metadata continue.")
+    clips = [c for c in generated_clips if c]
+    _emit_pipeline_event(event_logger, "BACKGROUND_FINISHED", analysis_id, started_at, len(clips))
     profiler.end_timer("total_pipeline")
-    profiler.set_metric("yt_download", 0.0)
-    profiler.set_metric("scene_detection", 0.0)
-    profiler.set_metric("face_detection", 0.0)
-    profiler.set_metric("tracking", 0.0)
-    profiler.set_metric("export", 0.0)
-    profiler.set_metric("final_encode", 0.0)
     profiler.finalize()
-    return {"text": " ".join([s["text"] for s in transcription["segments"]]), "hooks": generated_clips, "status": "completed", "timeline": {"broll": timeline_broll, "cuts": timeline_cuts}}
+    return {"text": " ".join([s.get("text", "") for s in transcription.get("segments", [])]), "hooks": clips, "status": "completed", "timeline": {"broll": timeline_broll, "cuts": timeline_cuts}, "pipeline": {"fast_pipeline": fast_pipeline, "first_batch_size": first_batch_size}}

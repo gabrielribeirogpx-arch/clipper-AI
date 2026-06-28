@@ -5,6 +5,8 @@ import { persist } from 'zustand/middleware';
 
 type UploadStatus = 'idle' | 'uploading' | 'processing' | 'success' | 'error';
 
+export type PipelineEvent = { event: string; analysis_id: string; time: number; clip_count: number; total_time: number; stage?: string; message?: string };
+
 const INITIAL_STATUS_LABEL = 'Waiting for upload...';
 
 type UploadedVideo = {
@@ -30,6 +32,9 @@ type UploadState = {
   currentStep: string | null;
   status: string;
   clips: Array<Record<string, unknown>>;
+  pipelineEvents: PipelineEvent[];
+  editorReady: boolean;
+  backgroundProcessing: boolean;
   renderMode: RenderMode;
   videoQuality: VideoQuality;
   setRenderMode: (mode: RenderMode) => void;
@@ -40,7 +45,7 @@ type UploadState = {
   setUploadedVideo: (video: UploadedVideo | null) => void;
   setUploadResult: (projectId: string, timelineData: Record<string, unknown>) => void;
   setActiveJob: (jobId: string, analysisId: string) => void;
-  updateIngestState: (payload: { progress?: number; step?: string; status?: string; clips?: Array<Record<string, unknown>>; analysisId?: string | null }) => void;
+  updateIngestState: (payload: { progress?: number; step?: string; status?: string; clips?: Array<Record<string, unknown>>; analysisId?: string | null; pipeline_event?: PipelineEvent }) => void;
   clearActiveJob: () => void;
   resetIngestState: () => void;
   resetStaleIngestVisualState: () => void;
@@ -60,6 +65,9 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
   currentStep: INITIAL_STATUS_LABEL,
   status: 'idle',
   clips: [],
+  pipelineEvents: [],
+  editorReady: false,
+  backgroundProcessing: false,
   renderMode: 'ai_tracking',
   videoQuality: '1080p',
   setUploadProgress: (uploadProgress) => set({ uploadProgress }),
@@ -71,13 +79,16 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
     console.log('[FRONTEND ACTIVE JOB]', { activeJobId, analysisId });
     set({ activeJobId, analysisId, status: 'processing' });
   },
-  updateIngestState: ({ progress, step, status, clips, analysisId }) => set((state) => ({
+  updateIngestState: ({ progress, step, status, clips, analysisId, pipeline_event }) => set((state) => ({
     uploadProgress: progress ?? state.uploadProgress,
     processingStage: step ?? state.processingStage,
     currentStep: step ?? state.currentStep,
     status: status ?? state.status,
     clips: clips ?? state.clips,
     analysisId: analysisId ?? state.analysisId,
+    pipelineEvents: pipeline_event ? [...state.pipelineEvents, pipeline_event].slice(-80) : state.pipelineEvents,
+    editorReady: state.editorReady || pipeline_event?.event === 'EDITOR_READY' || status === 'editor_ready' || status === 'background_processing',
+    backgroundProcessing: pipeline_event?.event === 'BACKGROUND_PROCESSING' || status === 'background_processing' ? true : (status === 'completed' ? false : state.backgroundProcessing),
   })),
   setRenderMode: (renderMode) => {
     console.log('[RENDER MODE SAVED]', { renderMode });
@@ -99,6 +110,9 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
       currentStep: INITIAL_STATUS_LABEL,
       status: 'idle',
       clips: [],
+      pipelineEvents: [],
+      editorReady: false,
+      backgroundProcessing: false,
     });
   },
   resetStaleIngestVisualState: () => {
@@ -116,6 +130,9 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
       currentStep: null,
       status: 'idle',
       clips: [],
+      pipelineEvents: [],
+      editorReady: false,
+      backgroundProcessing: false,
     });
     console.log('[UPLOAD VISUAL STATE CLEARED]');
   },
@@ -145,6 +162,9 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
       currentStep: INITIAL_STATUS_LABEL,
       status: 'idle',
       clips: [],
+      pipelineEvents: [],
+      editorReady: false,
+      backgroundProcessing: false,
       renderMode: 'ai_tracking',
       videoQuality: '1080p',
     }),
@@ -161,4 +181,7 @@ export const useUploadStore = create<UploadState>()(persist((set) => ({
   clips: state.clips,
   renderMode: state.renderMode,
   videoQuality: state.videoQuality,
+  pipelineEvents: state.pipelineEvents,
+  editorReady: state.editorReady,
+  backgroundProcessing: state.backgroundProcessing,
 }) }));

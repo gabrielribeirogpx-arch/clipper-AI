@@ -127,7 +127,8 @@ export async function exportClip(clipId: string): Promise<ExportResponse> {
 
 
 export type IngestJobResponse = { success: boolean; job_id: string; analysis_id: string; status: string };
-export type IngestStatus = { status: string; progress: number; step: string; analysis_id: string; clips: Array<Record<string, unknown>>; error: unknown; render_mode?: RenderMode };
+export type PipelineEvent = { event: string; analysis_id: string; time: number; clip_count: number; total_time: number; stage?: string; message?: string };
+export type IngestStatus = { status: string; progress: number; step: string; analysis_id: string; clips: Array<Record<string, unknown>>; error: unknown; render_mode?: RenderMode; pipeline_event?: PipelineEvent };
 export type IngestJobState = IngestStatus & { job_id: string; finished: boolean };
 
 export async function ingestYouTubeJob(payload: YouTubeIngestRequest): Promise<IngestJobResponse> {
