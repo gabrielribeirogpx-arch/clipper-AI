@@ -11,7 +11,7 @@ from app.services.ffmpeg_service import cut_clip, apply_broll_overlay
 from app.services.vertical_render_service import render_vertical_clip, render_dual_region_clip, render_semi_auto_vertical
 from app.services.broll_engine import BRollEngine
 from app.services.social_metadata_service import generate_social_metadata
-from app.services.ai_local_service import generate_clip_metadata
+from app.services.ai_metadata_service import apply_metadata_to_clip, no_ai_metadata
 from app.data.timeline_state import set_timeline_state, save_timeline_state_for_analysis
 from app.services.analysis_cache_service import load_analysis_cache, save_analysis_cache
 from app.services.chunk_processing_service import (
@@ -193,7 +193,8 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
         cut_futures = [cut_pool.submit(_cut, index, hook) for index, hook in enumerate(selected_hooks)]
         for future in as_completed(cut_futures):
             index, hook, raw_clip_path = future.result()
-            generated_clips.append({"raw_clip_path": raw_clip_path, "clip_path": raw_clip_path, "final_clip": raw_clip_path, **hook, "title_suggestion": "", "caption_suggestion": "", "description_suggestion": "", "hashtags": [], "emotion": "neutro", "category": "curiosidade", "viral_reason": "", "title_options": [], "broll_timeline": []})
+            basic_meta = no_ai_metadata(hook, index)
+            generated_clips.append(apply_metadata_to_clip({"raw_clip_path": raw_clip_path, "clip_path": raw_clip_path, "final_clip": raw_clip_path, **hook, "title_suggestion": "", "caption_suggestion": "", "description_suggestion": "", "hashtags": [], "emotion": "Não analisado", "category": "Auto", "viral_reason": "", "title_options": [], "broll_timeline": []}, basic_meta))
             timeline_cuts.append({"id": f"cut-{index}", "label": f"Cut {index + 1}", "start": hook["start"], "end": hook["start"] + 0.1})
     generated_clips = sorted(generated_clips, key=lambda c: int(str(c.get("raw_clip_path", "")).split("raw_clip_")[-1].split(".")[0]) if "raw_clip_" in str(c.get("raw_clip_path", "")) else 0)
     profiler.end_timer("clip_generation")
@@ -224,8 +225,7 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
             print(f"[CLIP AUTO SAVED] {autosave_path}")
         profiler.end_timer("render")
         meta = generate_social_metadata(hook.get("text", ""), hook.get("viral_score", 0))
-        ai = generate_clip_metadata(hook.get("text", ""))
-        hook.update({"clip_path": processed, "final_clip": final, "viral_score": ai.get("score", hook["viral_score"]), "title_suggestion": ai.get("titles", [meta["title"]])[0], "caption_suggestion": ai.get("hook", meta["caption"]), "description_suggestion": ai.get("description", meta["description"]), "hashtags": meta["hashtags"], "emotion": ai.get("emotion", "neutro"), "category": ai.get("category", "curiosidade"), "viral_reason": ai.get("viral_reason", ""), "title_options": ai.get("titles", []), "broll_timeline": seg_timeline})
+        hook.update({"clip_path": processed, "final_clip": final, "hashtags": meta["hashtags"], "broll_timeline": seg_timeline})
         print("[RENDER SLOT RELEASED]")
         return idx, hook
 
