@@ -33,6 +33,7 @@ function EditorHome() {
   const analysisId = searchParams.get('analysis_id');
   const heroRef = useRef<HTMLElement | null>(null);
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceKey>('timeline');
+  const [assistantOpen, setAssistantOpen] = useState(false);
   
   useEffect(() => {
     console.log('[TRUE 16:9 VIEWPORT FIX ACTIVE]');
@@ -106,6 +107,7 @@ function EditorHome() {
                 <button onClick={() => { window.location.href = '/upload'; }} className="rounded-lg border border-slate-300/20 bg-white/6 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-white/10">Importar</button>
                 <button onClick={() => setActiveWorkspace('timeline')} className="rounded-lg bg-cyan-300 px-3 py-1.5 text-xs font-bold text-slate-950 shadow-[0_10px_28px_rgba(34,211,238,.2)]">Gerar Clips</button>
                 <button onClick={() => selectedClip?.final_video && window.open(mediaUrl(selectedClip.final_video) ?? selectedClip.final_video, '_blank')} className="rounded-lg border border-emerald-300/30 bg-emerald-300/10 px-3 py-1.5 text-xs font-semibold text-emerald-100">Exportar</button>
+                <button onClick={() => setAssistantOpen((open) => !open)} className="editor-assistant-toggle rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-3 py-1.5 text-xs font-semibold text-cyan-100" aria-expanded={assistantOpen} aria-controls="editor-ai-assistant">{assistantOpen ? 'Ocultar IA' : 'AI Assistant'}</button>
                 <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] text-slate-200">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(16,185,129,.9)]" />
                   <span>Auto Clip Generation Active</span>
@@ -132,7 +134,7 @@ function EditorHome() {
           )}
         </section>
 
-        <section className="editor-right min-h-0 min-w-0">
+        <section id="editor-ai-assistant" className={`editor-right min-h-0 min-w-0 ${assistantOpen ? 'is-open' : ''}`}>
           <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-2">
             <ClipResultsPanel />
             <div className="panel-premium rounded-2xl p-3"><p className="panel-title">Local Engine Ready</p><p className="text-xs leading-relaxed text-slate-300">Preparado para processamento pesado local no dispositivo; cloud futura focada em licença, billing e sync.</p></div>
