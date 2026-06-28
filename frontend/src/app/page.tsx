@@ -96,13 +96,13 @@ function EditorHome() {
         </aside>
 
         <section className="editor-main">
-          <header className="panel-premium editor-topbar px-4 py-1.5">
-            <div className="flex items-center justify-between gap-3">
+          <header className="panel-premium editor-topbar px-4 py-3">
+            <div className="flex h-full min-h-0 flex-wrap items-center justify-between gap-3 overflow-hidden">
               <div className="min-w-0">
                 <p className="truncate text-[10px] text-slate-400">Projetos &gt; Clipper Launch Campaign</p>
                 <h1 className="truncate text-[20px] font-semibold leading-tight tracking-tight">Editor de Clips IA</h1>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
                 <button onClick={() => { window.location.href = '/upload'; }} className="rounded-lg border border-slate-300/20 bg-white/6 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-white/10">Importar</button>
                 <button onClick={() => setActiveWorkspace('timeline')} className="rounded-lg bg-cyan-300 px-3 py-1.5 text-xs font-bold text-slate-950 shadow-[0_10px_28px_rgba(34,211,238,.2)]">Gerar Clips</button>
                 <button onClick={() => selectedClip?.final_video && window.open(mediaUrl(selectedClip.final_video) ?? selectedClip.final_video, '_blank')} className="rounded-lg border border-emerald-300/30 bg-emerald-300/10 px-3 py-1.5 text-xs font-semibold text-emerald-100">Exportar</button>
