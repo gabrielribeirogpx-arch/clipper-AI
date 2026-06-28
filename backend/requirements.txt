@@ -1,6 +1,6 @@
 fastapi==0.128.0
 moviepy==1.0.3
-numpy==1.26.4
+numpy>=2.0.2,<3
 opencv-python==4.10.0.84
 pydantic==2.12.5
 python-multipart==0.0.21
