@@ -8,6 +8,12 @@ import { mediaUrl } from '@/lib/api';
 
 const formatDuration = (seconds: number) => `${Math.max(0, seconds).toFixed(seconds >= 10 ? 0 : 1)}s`;
 
+const metadataBadge = (clip: GeneratedClip) => {
+  if (clip.metadata_status === 'ai') return { label: 'Metadata IA', className: 'border-violet-300/35 bg-violet-400/12 text-violet-100' };
+  if (clip.metadata_status === 'pending') return { label: 'Metadata pendente', className: 'border-amber-300/35 bg-amber-400/12 text-amber-100' };
+  return { label: 'Sem IA', className: 'border-slate-300/20 bg-slate-400/10 text-slate-200' };
+};
+
 const getScoreTone = (score: number) => {
   if (score >= 85) return 'border-emerald-300/35 bg-emerald-400/12 text-emerald-100';
   if (score >= 70) return 'border-cyan-300/30 bg-cyan-400/10 text-cyan-100';
@@ -32,6 +38,7 @@ function ClipCard({ clip, index }: { clip: GeneratedClip; index: number }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const clipUrl = mediaUrl(clip.final_video);
   const title = clip.title || clip.label || `Clip ${index + 1}`;
+  const badge = metadataBadge(clip);
 
   return (
     <motion.article
@@ -52,7 +59,10 @@ function ClipCard({ clip, index }: { clip: GeneratedClip; index: number }) {
         <div className="min-w-0">
           <div className="mb-1.5 flex items-start justify-between gap-2">
             <p className="line-clamp-2 text-sm font-semibold leading-snug text-white">{title}</p>
-            <ViralScoreBadge score={clip.viral_score ?? 0} />
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <ViralScoreBadge score={clip.viral_score ?? 0} />
+              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${badge.className}`}>{badge.label}</span>
+            </div>
           </div>
           <p className="line-clamp-2 text-xs leading-relaxed text-slate-400">{clip.caption || clip.description || 'Sem caption sugerida ainda.'}</p>
           <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-slate-300">
@@ -75,7 +85,7 @@ function ClipCard({ clip, index }: { clip: GeneratedClip; index: number }) {
 }
 
 export function ClipResultsPanel() {
-  const { generatedClips, selectedClipId } = useTimelineStore();
+  const { analysisId, generatedClips, hydrateFromBackend, selectedClipId } = useTimelineStore();
   const clips = useMemo(() => generatedClips, [generatedClips]);
   const bestClip = clips[0];
   const selected = clips.find((clip) => clip.id === selectedClipId) ?? bestClip;
@@ -87,7 +97,10 @@ export function ClipResultsPanel() {
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-200/80">AI Assistant</p>
           <h2 className="mt-1 text-base font-semibold text-white">Melhores momentos</h2>
         </div>
-        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] text-slate-300">{clips.length} clips</span>
+        <div className="flex items-center gap-2">
+          <button onClick={() => void hydrateFromBackend(analysisId)} disabled={!analysisId} className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-2 py-1 text-[10px] font-medium text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40">Atualizar metadata</button>
+          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] text-slate-300">{clips.length} clips</span>
+        </div>
       </div>
 
       <div className="mb-3 rounded-2xl border border-white/10 bg-slate-950/45 p-3">

@@ -52,6 +52,8 @@ export type GeneratedClip = {
   description: string;
   hashtags?: string[];
   raw_clip_path?: string;
+  metadata_status?: 'ai' | 'pending' | 'no_ai' | string;
+  metadata_provider?: string;
 };
 
 type RenderMode = 'preview' | 'export';

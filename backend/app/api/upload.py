@@ -15,6 +15,8 @@ from app.schemas.upload import YoutubeIngestRequest
 import os
 import uuid
 import shutil
+import threading
+from app.services.ai_metadata_service import apply_metadata_to_clip, generate_metadata, max_clips, select_provider
 
 router = APIRouter()
 
@@ -218,6 +220,54 @@ async def start_ingest_cleanup_task() -> None:
     asyncio.create_task(_cleanup_loop())
 
 
+
+def _clip_response_item(hook, index: int) -> dict:
+    return {
+        "id": f"clip-{index}",
+        "label": f"Clip {index + 1}",
+        "start": hook["start"],
+        "end": hook["end"],
+        "duration": round(hook["end"] - hook["start"], 2),
+        "clip_path": _to_media_url(hook["clip_path"]),
+        "raw_clip_path": _to_media_url(hook.get("raw_clip_path", hook["clip_path"])),
+        "final_video": _to_media_url(hook["final_clip"]),
+        "viral_score": hook["viral_score"],
+        "hook_score": hook.get("hook_score", hook["viral_score"]),
+        "retention_score": hook["retention_score"],
+        "emotion_score": hook["emotional_score"],
+        "title": hook.get("title_suggestion", ""),
+        "caption": hook.get("caption_suggestion", ""),
+        "description": hook.get("description_suggestion", ""),
+        "hashtags": hook.get("hashtags", []),
+        "emotion": hook.get("emotion", "Não analisado"),
+        "category": hook.get("category", "Auto"),
+        "viral_reason": hook.get("viral_reason", ""),
+        "title_options": hook.get("title_options", []),
+        "metadata_status": hook.get("metadata_status", "no_ai"),
+        "metadata_provider": hook.get("metadata_provider", "none"),
+    }
+
+
+def _start_ai_metadata_background(hooks: list, next_state: dict, output_dir: str, provider: str | None = None) -> None:
+    provider = provider or select_provider()
+    limit = max_clips()
+    if provider == "none" or limit <= 0 or not hooks:
+        print(f"[AI_METADATA_FALLBACK_NO_AI] reason=background_disabled provider={provider} limit={limit}")
+        return
+
+    def _worker() -> None:
+        print(f"[AI_METADATA_BACKGROUND_STARTED] provider={provider} max_clips={limit}")
+        updated_hooks = list(hooks)
+        for index, hook in enumerate(updated_hooks[:limit]):
+            meta = generate_metadata(hook, index=index, output_dir=output_dir, provider=provider)
+            updated_hooks[index] = apply_metadata_to_clip(hook, meta)
+        refreshed = {**next_state, "clips": [_clip_response_item(hook, index) for index, hook in enumerate(updated_hooks)]}
+        set_timeline_state(refreshed)
+        save_timeline_state_for_analysis(refreshed.get("analysisId"), refreshed)
+        print(f"[AI_METADATA_BACKGROUND_FINISHED] provider={provider} enriched={min(limit, len(updated_hooks))}")
+
+    threading.Thread(target=_worker, name="ai-metadata-background", daemon=True).start()
+
 def _build_upload_response(transcription, file_id: str, filepath: str, render_mode: str = "ai_tracking", video_quality: str = "1080p"):
 
     hooks = transcription["hooks"]
@@ -230,6 +280,12 @@ def _build_upload_response(transcription, file_id: str, filepath: str, render_mo
     print(f"[RENDER MODE SAVE] upload_response_render_mode={render_mode}")
     print("[DUAL REGION CONFIG SAVE] upload_response_dual_region_config=None")
     print(f"[TIMELINE STATE BOOTSTRAP] analysis_id={analysis_id}")
+    selected_ai_provider = select_provider()
+    pending_limit = max_clips() if selected_ai_provider != "none" else 0
+    if pending_limit > 0:
+        for index, hook in enumerate(hooks[:pending_limit]):
+            hook["metadata_status"] = "pending"
+            hook["metadata_provider"] = selected_ai_provider
     next_state = {
         "renderMode": "preview",
         "analysisId": analysis_id,
@@ -237,31 +293,8 @@ def _build_upload_response(transcription, file_id: str, filepath: str, render_mo
         "previewVideoUrl": _to_media_url(first_final_clip),
         "exportVideoUrl": _to_media_url(first_final_clip),
         "duration": duration,
-        "clips": [
-            {
-                "id": f"clip-{index}",
-                "label": f"Clip {index + 1}",
-                "start": hook["start"],
-                "end": hook["end"],
-                "duration": round(hook["end"] - hook["start"], 2),
-                "clip_path": _to_media_url(hook["clip_path"]),
-                "raw_clip_path": _to_media_url(hook.get("raw_clip_path", hook["clip_path"])),
-                "final_video": _to_media_url(hook["final_clip"]),
-                "viral_score": hook["viral_score"],
-                "hook_score": hook.get("hook_score", hook["viral_score"]),
-                "retention_score": hook["retention_score"],
-                "emotion_score": hook["emotional_score"],
-                "title": hook.get("title_suggestion", ""),
-                "caption": hook.get("caption_suggestion", ""),
-                "description": hook.get("description_suggestion", ""),
-                "hashtags": hook.get("hashtags", []),
-                "emotion": hook.get("emotion", "neutro"),
-                "category": hook.get("category", "curiosidade"),
-                "viral_reason": hook.get("viral_reason", ""),
-                "title_options": hook.get("title_options", []),
-            }
-            for index, hook in enumerate(hooks)
-        ],
+        "clips": [_clip_response_item(hook, index) for index, hook in enumerate(hooks)],
+
         "hooks": [
             {
                 "id": f"hook-{index}",
@@ -283,6 +316,7 @@ def _build_upload_response(transcription, file_id: str, filepath: str, render_mo
     print(f"[TIMELINE STATE ANALYSIS] persisted_analysis_id={next_state.get('analysisId')}")
     set_timeline_state(next_state)
     save_timeline_state_for_analysis(next_state.get("analysisId"), next_state)
+    _start_ai_metadata_background(hooks, next_state, Path(first_final_clip).parent.as_posix(), provider=selected_ai_provider)
 
     return {
         "success": True,
@@ -309,6 +343,8 @@ def _build_upload_response(transcription, file_id: str, filepath: str, render_mo
                 "category": hook.get("category", "curiosidade"),
                 "viral_reason": hook.get("viral_reason", ""),
                 "title_options": hook.get("title_options", []),
+                "metadata_status": hook.get("metadata_status", "no_ai"),
+                "metadata_provider": hook.get("metadata_provider", "none"),
                 "clip_start": hook["start"],
                 "clip_end": hook["end"],
                 "emotional_score": hook["emotional_score"],
