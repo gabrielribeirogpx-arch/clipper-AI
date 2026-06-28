@@ -50,16 +50,16 @@ function ClipCard({ clip, index }: { clip: GeneratedClip; index: number }) {
         onMouseEnter={() => void videoRef.current?.play()}
         onMouseLeave={() => { if (videoRef.current) { videoRef.current.pause(); videoRef.current.currentTime = 0; } }}
         onClick={() => selectClip(clip.id)}
-        className="grid w-full grid-cols-[112px_1fr] gap-3 p-3 text-left"
+        className="grid w-full grid-cols-[minmax(84px,112px)_minmax(0,1fr)] gap-3 p-3 text-left max-[360px]:grid-cols-1"
       >
         <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
           {clipUrl ? <video ref={videoRef} src={clipUrl} muted loop playsInline className="aspect-video h-full w-full object-cover opacity-90 transition group-hover:scale-105" /> : <div className="aspect-video bg-slate-800" />}
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1.5 text-[10px] text-slate-200">{formatDuration(clip.duration)}</div>
         </div>
         <div className="min-w-0">
-          <div className="mb-1.5 flex items-start justify-between gap-2">
+          <div className="mb-1.5 flex min-w-0 flex-wrap items-start justify-between gap-2">
             <p className="line-clamp-2 text-sm font-semibold leading-snug text-white">{title}</p>
-            <div className="flex shrink-0 flex-col items-end gap-1">
+            <div className="flex shrink-0 flex-row flex-wrap items-end justify-end gap-1">
               <ViralScoreBadge score={clip.viral_score ?? 0} />
               <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${badge.className}`}>{badge.label}</span>
             </div>
