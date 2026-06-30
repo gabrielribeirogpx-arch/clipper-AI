@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import re
@@ -82,27 +83,128 @@ def _format_download_section(start_time: str | None, end_time: str | None) -> st
 
 
 
-def _build_format_attempts(video_quality: str) -> list[dict[str, str]]:
-    normalized_quality = (video_quality or "1080p").strip().lower()
-    max_height = QUALITY_HEIGHTS.get(normalized_quality, QUALITY_HEIGHTS["1080p"])
-    return [
-        {
-            "name": "h264_avc_requested_quality",
-            "selector": f"bestvideo[vcodec*=avc1][height<={max_height}]+bestaudio/best[vcodec*=avc1][height<={max_height}]/best[ext=mp4][height<={max_height}]",
-        },
-        {
-            "name": "bestvideo_requested_quality",
-            "selector": f"bestvideo[height<={max_height}]+bestaudio/best[height<={max_height}]",
-        },
-        {
-            "name": "best_video_audio_any_quality",
-            "selector": "bv*+ba/best",
-        },
-        {
-            "name": "best_single_file",
-            "selector": "best",
-        },
-    ]
+
+@dataclass(frozen=True)
+class SelectedFormat:
+    video_format_id: str
+    audio_format_id: str | None
+    download_format: str
+    video_codec: str
+    height: int | None
+    ext: str | None
+    fps: float | None
+    tbr: float | None
+
+
+class FormatSelector:
+    """Select yt-dlp formats from a JSON scan without relying on textual selectors."""
+
+    CODEC_PRIORITY = (
+        ("h264", ("avc1", "h264")),
+        ("vp9", ("vp9",)),
+        ("av1", ("av01", "av1")),
+    )
+
+    def __init__(self, requested_quality: str) -> None:
+        normalized_quality = (requested_quality or "1080p").strip().lower()
+        self.max_height = QUALITY_HEIGHTS.get(normalized_quality, QUALITY_HEIGHTS["1080p"])
+        self.requested_quality = normalized_quality
+
+    @staticmethod
+    def _to_number(value: object, default: float = 0.0) -> float:
+        if value is None:
+            return default
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _codec_bucket(vcodec: object) -> str | None:
+        codec = str(vcodec or "").lower()
+        if not codec or codec == "none":
+            return None
+        for bucket, markers in FormatSelector.CODEC_PRIORITY:
+            if any(marker in codec for marker in markers):
+                return bucket
+        return "other"
+
+    @staticmethod
+    def _has_video(format_info: dict) -> bool:
+        return str(format_info.get("vcodec") or "none").lower() != "none"
+
+    @staticmethod
+    def _has_audio(format_info: dict) -> bool:
+        return str(format_info.get("acodec") or "none").lower() != "none"
+
+    def _video_sort_key(self, format_info: dict) -> tuple:
+        height = int(self._to_number(format_info.get("height"), 0))
+        width = int(self._to_number(format_info.get("width"), 0))
+        fps = self._to_number(format_info.get("fps"), 0)
+        tbr = self._to_number(format_info.get("tbr") or format_info.get("vbr"), 0)
+        filesize = self._to_number(format_info.get("filesize") or format_info.get("filesize_approx"), 0)
+        return (height, width, fps, tbr, filesize)
+
+    def _audio_sort_key(self, format_info: dict) -> tuple:
+        abr = self._to_number(format_info.get("abr"), 0)
+        tbr = self._to_number(format_info.get("tbr"), 0)
+        filesize = self._to_number(format_info.get("filesize") or format_info.get("filesize_approx"), 0)
+        ext_score = 1 if str(format_info.get("ext") or "").lower() in {"m4a", "mp4"} else 0
+        return (abr, tbr, ext_score, filesize)
+
+    def select(self, info: dict) -> SelectedFormat:
+        formats = [fmt for fmt in info.get("formats", []) if isinstance(fmt, dict) and fmt.get("format_id")]
+        videos = [
+            fmt for fmt in formats
+            if self._has_video(fmt)
+            and int(self._to_number(fmt.get("height"), 0)) > 0
+            and int(self._to_number(fmt.get("height"), 0)) <= self.max_height
+        ]
+        if not videos:
+            raise YouTubeDownloadError(
+                message=f"Nenhum formato de vídeo encontrado até {self.max_height}p após varredura yt-dlp -J.",
+                category="format_unavailable",
+            )
+
+        selected_video = None
+        for bucket, _markers in self.CODEC_PRIORITY:
+            candidates = [fmt for fmt in videos if self._codec_bucket(fmt.get("vcodec")) == bucket]
+            if candidates:
+                selected_video = max(candidates, key=self._video_sort_key)
+                break
+        if selected_video is None:
+            selected_video = max(videos, key=self._video_sort_key)
+
+        audio_format_id = None
+        if not self._has_audio(selected_video):
+            audios = [fmt for fmt in formats if self._has_audio(fmt) and not self._has_video(fmt)]
+            if audios:
+                audio_format_id = str(max(audios, key=self._audio_sort_key)["format_id"])
+
+        video_format_id = str(selected_video["format_id"])
+        download_format = f"{video_format_id}+{audio_format_id}" if audio_format_id else video_format_id
+        return SelectedFormat(
+            video_format_id=video_format_id,
+            audio_format_id=audio_format_id,
+            download_format=download_format,
+            video_codec=str(selected_video.get("vcodec") or ""),
+            height=int(self._to_number(selected_video.get("height"), 0)) or None,
+            ext=str(selected_video.get("ext") or "") or None,
+            fps=self._to_number(selected_video.get("fps"), 0) or None,
+            tbr=self._to_number(selected_video.get("tbr") or selected_video.get("vbr"), 0) or None,
+        )
+
+
+def _build_json_scan_command(
+    base_command: list[str],
+    youtube_url: str,
+    cookies_runtime_path: str | None,
+) -> list[str]:
+    command = [*base_command, "-J"]
+    if cookies_runtime_path:
+        command.extend(["--cookies", cookies_runtime_path])
+    command.append(youtube_url)
+    return command
 
 
 def _has_invalid_cookies_warning(stderr: str, stdout: str) -> bool:
@@ -125,7 +227,7 @@ def _has_invalid_cookies_warning(stderr: str, stdout: str) -> bool:
 
 def _build_download_command(
     base_command: list[str],
-    format_selector: str,
+    format_id_selector: str,
     output_template: str,
     youtube_url: str,
     ffmpeg_location: str | None,
@@ -136,7 +238,7 @@ def _build_download_command(
         *base_command,
         "--verbose",
         "-f",
-        format_selector,
+        format_id_selector,
         "-S",
         "fps",
         "--merge-output-format",
@@ -233,7 +335,7 @@ def _normalize_to_h264_mp4(media_path: str, ffmpeg_location: str | None) -> str:
         "+faststart",
         normalized_path,
     ]
-    logger.info("[YOUTUBE NORMALIZE START]", extra={"codec": codec_name, "format": format_name, "command": nvenc_cmd})
+    logger.info("FORMAT_NORMALIZATION", extra={"codec": codec_name, "format": format_name, "command": nvenc_cmd})
     normalize_result = subprocess.run(nvenc_cmd, check=False, capture_output=True, text=True)
     if normalize_result.returncode != 0:
         libx264_cmd = [*nvenc_cmd]
@@ -287,7 +389,6 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
     ]
 
     normalized_quality = (video_quality or "1080p").strip().lower()
-    format_attempts = _build_format_attempts(normalized_quality)
     print("[H264 SOURCE PREFERRED]")
     print(f"[DOWNLOAD QUALITY SELECTED] {normalized_quality}")
 
@@ -310,107 +411,146 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
         section = _format_download_section(start_time, end_time)
         logger.info("[YOUTUBE DOWNLOAD START] Iniciando download do YouTube", extra={"url": youtube_url})
 
-        last_result: subprocess.CompletedProcess[str] | None = None
-        last_command: list[str] | None = None
-        cookies_disabled = False
+        active_cookies = cookies_runtime_path
+        scan_command = _build_json_scan_command(
+            base_command=base_command,
+            youtube_url=youtube_url,
+            cookies_runtime_path=active_cookies,
+        )
+        logger.info(
+            "FORMAT_SCAN_START",
+            extra={
+                "requested_quality": normalized_quality,
+                "max_height": FormatSelector(normalized_quality).max_height,
+                "using_cookies": bool(active_cookies),
+                "command": scan_command,
+            },
+        )
+        try:
+            scan_result = subprocess.run(
+                scan_command,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=YT_DLP_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as exc:
+            logger.error("[YOUTUBE FORMAT SCAN TIMEOUT]", extra={"timeout_seconds": YT_DLP_TIMEOUT_SECONDS})
+            raise YouTubeDownloadError(message=f"yt-dlp -J timed out after {YT_DLP_TIMEOUT_SECONDS}s", category="timeout") from exc
+        except Exception as exc:  # pragma: no cover - defensive runtime guard
+            logger.exception("yt-dlp format scan crashed", extra={"command": scan_command})
+            raise YouTubeDownloadError(
+                message=f"Failed to execute yt-dlp -J: {exc}",
+                category="execution_error",
+            ) from exc
 
-        for attempt_index, attempt in enumerate(format_attempts, start=1):
-            active_cookies = None if cookies_disabled else cookies_runtime_path
-            command = _build_download_command(
+        if _has_invalid_cookies_warning(scan_result.stderr or "", scan_result.stdout or ""):
+            logger.warning("[YTDLP_COOKIES_INVALID_WARNING] cookies inválidas/expiradas detectadas; refazendo varredura sem cookies")
+            active_cookies = None
+            scan_command = _build_json_scan_command(
                 base_command=base_command,
-                format_selector=attempt["selector"],
-                output_template=output_template,
                 youtube_url=youtube_url,
-                ffmpeg_location=ffmpeg_location,
-                section=section,
-                cookies_runtime_path=active_cookies,
+                cookies_runtime_path=None,
             )
-            logger.info(
-                "[YTDLP_FORMAT_ATTEMPT]",
-                extra={
-                    "attempt": attempt_index,
-                    "attempt_name": attempt["name"],
-                    "format_selector": attempt["selector"],
-                    "using_cookies": bool(active_cookies),
-                },
+            logger.info("FORMAT_SCAN_START", extra={"requested_quality": normalized_quality, "using_cookies": False, "command": scan_command})
+            scan_result = subprocess.run(
+                scan_command,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=YT_DLP_TIMEOUT_SECONDS,
             )
-            logger.info("[REAL YT-DLP COMMAND]", extra={"purpose": "download", "command": command})
-            try:
-                result = subprocess.run(
-                    command,
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                    timeout=YT_DLP_TIMEOUT_SECONDS,
-                )
-            except subprocess.TimeoutExpired as exc:
-                logger.error("[YOUTUBE DOWNLOAD TIMEOUT]", extra={"timeout_seconds": YT_DLP_TIMEOUT_SECONDS})
-                raise YouTubeDownloadError(message=f"yt-dlp timed out after {YT_DLP_TIMEOUT_SECONDS}s", category="timeout") from exc
-            except Exception as exc:  # pragma: no cover - defensive runtime guard
-                logger.exception("yt-dlp execution crashed", extra={"command": command})
-                raise YouTubeDownloadError(
-                    message=f"Failed to execute yt-dlp: {exc}",
-                    category="execution_error",
-                ) from exc
 
-            last_result = result
-            last_command = command
-            print("YT-DLP STDOUT:", result.stdout)
-            print("YT-DLP STDERR:", result.stderr)
-            print("YT-DLP RETURN CODE:", result.returncode)
-            logger.info("[YT-DLP STDOUT]", extra={"stdout": result.stdout})
-            logger.info("[YT-DLP STDERR]", extra={"stderr": result.stderr})
-
-            if _has_invalid_cookies_warning(result.stderr or "", result.stdout or ""):
-                cookies_disabled = True
-                logger.warning(
-                    "[YTDLP_COOKIES_INVALID_WARNING] cookies inválidas/expiradas detectadas; próximas tentativas continuarão sem cookies",
-                    extra={"attempt": attempt_index, "attempt_name": attempt["name"]},
-                )
-
-            if result.returncode == 0:
-                final_format_match = re.search(r"\[REAL FINAL FORMAT\]\s*([^\n\r]+)", result.stdout or "")
-                final_format_value = (final_format_match.group(1).strip() if final_format_match else "")
-                logger.info(
-                    "[YTDLP_FORMAT_SELECTED]",
-                    extra={
-                        "attempt": attempt_index,
-                        "attempt_name": attempt["name"],
-                        "format_selector": attempt["selector"],
-                        "real_final_format": final_format_value or None,
-                    },
-                )
-                break
-
-            if attempt_index < len(format_attempts):
-                logger.warning(
-                    "[YTDLP_FORMAT_FALLBACK]",
-                    extra={
-                        "failed_attempt": attempt_index,
-                        "failed_attempt_name": attempt["name"],
-                        "next_attempt": attempt_index + 1,
-                        "returncode": result.returncode,
-                        "stderr": result.stderr,
-                    },
-                )
-        else:
-            result = last_result
-            category, message = _classify_ytdlp_error(result.stderr if result else "", result.stdout if result else "")
-            raw_error = (result.stderr or result.stdout or message if result else message).strip()
+        if scan_result.returncode != 0:
+            category, message = _classify_ytdlp_error(scan_result.stderr or "", scan_result.stdout or "")
+            raw_error = (scan_result.stderr or scan_result.stdout or message).strip()
             logger.error(
-                "[YOUTUBE DOWNLOAD ERROR] all yt-dlp format attempts failed",
+                "[YOUTUBE FORMAT SCAN ERROR]",
                 extra={
-                    "command": last_command,
-                    "stdout": result.stdout if result else "",
-                    "stderr": result.stderr if result else "",
-                    "returncode": result.returncode if result else None,
+                    "command": scan_command,
+                    "stdout": scan_result.stdout,
+                    "stderr": scan_result.stderr,
+                    "returncode": scan_result.returncode,
                     "error_category": category,
                 },
             )
+            raise YouTubeDownloadError(message=f"Não foi possível obter formatos via yt-dlp -J. Detalhes: {raw_error}", category=category)
+
+        try:
+            format_info = json.loads(scan_result.stdout or "{}")
+        except json.JSONDecodeError as exc:
+            logger.error("[YOUTUBE FORMAT SCAN JSON_ERROR]", extra={"stdout": scan_result.stdout[:2000]})
+            raise YouTubeDownloadError(message="yt-dlp -J returned invalid JSON while scanning formats.", category="format_scan_json") from exc
+
+        available_formats = format_info.get("formats", []) if isinstance(format_info, dict) else []
+        logger.info(
+            "FORMAT_SCAN_RESULT",
+            extra={
+                "format_count": len(available_formats),
+                "requested_quality": normalized_quality,
+                "video_id": format_info.get("id") if isinstance(format_info, dict) else None,
+            },
+        )
+        selected_format = FormatSelector(normalized_quality).select(format_info)
+        logger.info(
+            "FORMAT_SELECTED_BY_ID",
+            extra={
+                "video_format_id": selected_format.video_format_id,
+                "audio_format_id": selected_format.audio_format_id,
+                "download_format": selected_format.download_format,
+                "vcodec": selected_format.video_codec,
+                "height": selected_format.height,
+                "ext": selected_format.ext,
+                "fps": selected_format.fps,
+                "tbr": selected_format.tbr,
+            },
+        )
+
+        command = _build_download_command(
+            base_command=base_command,
+            format_id_selector=selected_format.download_format,
+            output_template=output_template,
+            youtube_url=youtube_url,
+            ffmpeg_location=ffmpeg_location,
+            section=section,
+            cookies_runtime_path=active_cookies,
+        )
+        logger.info("[REAL YT-DLP COMMAND]", extra={"purpose": "download", "command": command})
+        try:
+            result = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=YT_DLP_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as exc:
+            logger.error("[YOUTUBE DOWNLOAD TIMEOUT]", extra={"timeout_seconds": YT_DLP_TIMEOUT_SECONDS})
+            raise YouTubeDownloadError(message=f"yt-dlp timed out after {YT_DLP_TIMEOUT_SECONDS}s", category="timeout") from exc
+        except Exception as exc:  # pragma: no cover - defensive runtime guard
+            logger.exception("yt-dlp execution crashed", extra={"command": command})
+            raise YouTubeDownloadError(
+                message=f"Failed to execute yt-dlp: {exc}",
+                category="execution_error",
+            ) from exc
+
+        print("YT-DLP STDOUT:", result.stdout)
+        print("YT-DLP STDERR:", result.stderr)
+        print("YT-DLP RETURN CODE:", result.returncode)
+        logger.info("[YT-DLP STDOUT]", extra={"stdout": result.stdout})
+        logger.info("[YT-DLP STDERR]", extra={"stderr": result.stderr})
+
+        if result.returncode != 0:
+            category, message = _classify_ytdlp_error(result.stderr or "", result.stdout or "")
+            raw_error = (result.stderr or result.stdout or message).strip()
+            logger.error(
+                "[YOUTUBE DOWNLOAD ERROR] selected format_id download failed",
+                extra={"command": command, "stdout": result.stdout, "stderr": result.stderr, "returncode": result.returncode, "error_category": category},
+            )
             raise YouTubeDownloadError(
                 message=(
-                    "Não foi possível baixar este vídeo do YouTube em nenhum formato disponível. "
-                    "Tentamos H.264/AVC na qualidade solicitada, vídeo+áudio alternativo, bv*+ba/best e best. "
+                    "Não foi possível baixar o vídeo pelo format_id selecionado dinamicamente. "
+                    "O download não depende de seletores textuais fixos do yt-dlp. "
                     f"Detalhes do yt-dlp: {raw_error}"
                 ),
                 category=category,
@@ -418,7 +558,7 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
 
         logger.info(
             "[YOUTUBE DOWNLOAD SUCCESS] yt-dlp command finished",
-            extra={"command": last_command, "returncode": last_result.returncode if last_result else 0, "error_category": "none"},
+            extra={"command": command, "returncode": result.returncode, "error_category": "none"},
         )
 
         matches = sorted(
