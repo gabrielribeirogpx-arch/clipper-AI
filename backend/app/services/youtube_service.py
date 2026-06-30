@@ -94,6 +94,7 @@ class SelectedFormat:
     ext: str | None
     fps: float | None
     tbr: float | None
+    selection_reason: str | None
 
 
 class FormatSelector:
@@ -137,8 +138,12 @@ class FormatSelector:
     def _has_audio(format_info: dict) -> bool:
         return str(format_info.get("acodec") or "none").lower() != "none"
 
-    def _video_sort_key(self, format_info: dict) -> tuple:
+    def _height(self, format_info: dict) -> int | None:
         height = int(self._to_number(format_info.get("height"), 0))
+        return height if height > 0 else None
+
+    def _video_sort_key(self, format_info: dict) -> tuple:
+        height = self._height(format_info) or 0
         width = int(self._to_number(format_info.get("width"), 0))
         fps = self._to_number(format_info.get("fps"), 0)
         tbr = self._to_number(format_info.get("tbr") or format_info.get("vbr"), 0)
@@ -152,28 +157,94 @@ class FormatSelector:
         ext_score = 1 if str(format_info.get("ext") or "").lower() in {"m4a", "mp4"} else 0
         return (abr, tbr, ext_score, filesize)
 
-    def select(self, info: dict) -> SelectedFormat:
-        formats = [fmt for fmt in info.get("formats", []) if isinstance(fmt, dict) and fmt.get("format_id")]
-        videos = [
-            fmt for fmt in formats
-            if self._has_video(fmt)
-            and int(self._to_number(fmt.get("height"), 0)) > 0
-            and int(self._to_number(fmt.get("height"), 0)) <= self.max_height
+    @staticmethod
+    def scan_counts(info: dict) -> tuple[int, int, int]:
+        formats = info.get("formats", []) if isinstance(info, dict) else []
+        dict_formats = [fmt for fmt in formats if isinstance(fmt, dict)]
+        video_formats = [fmt for fmt in dict_formats if FormatSelector._has_video(fmt)]
+        audio_formats = [fmt for fmt in dict_formats if FormatSelector._has_audio(fmt)]
+        return (len(dict_formats), len(video_formats), len(audio_formats))
+
+    @staticmethod
+    def _format_sample(formats: list[dict], limit: int = 10) -> list[dict]:
+        return [
+            {
+                "format_id": fmt.get("format_id"),
+                "ext": fmt.get("ext"),
+                "vcodec": fmt.get("vcodec"),
+                "acodec": fmt.get("acodec"),
+                "height": fmt.get("height"),
+                "resolution": fmt.get("resolution"),
+            }
+            for fmt in formats[:limit]
         ]
+
+    def _log_rejected(self, reason: str, format_info: dict) -> None:
+        logger.info(
+            "FORMAT_REJECTED",
+            extra={
+                "reason": reason,
+                "format_id": format_info.get("format_id"),
+                "vcodec": format_info.get("vcodec"),
+                "height": format_info.get("height"),
+                "ext": format_info.get("ext"),
+            },
+        )
+
+    def _select_best_video(self, videos: list[dict]) -> tuple[dict | None, str | None]:
+        known_height_videos = [
+            fmt for fmt in videos
+            if self._height(fmt) is not None and self._height(fmt) <= self.max_height
+        ]
+        tiers = [
+            ("h264_le_requested_height", lambda fmt: self._codec_bucket(fmt.get("vcodec")) == "h264", known_height_videos),
+            ("vp9_le_requested_height", lambda fmt: self._codec_bucket(fmt.get("vcodec")) == "vp9", known_height_videos),
+            ("av1_le_requested_height", lambda fmt: self._codec_bucket(fmt.get("vcodec")) == "av1", known_height_videos),
+            ("any_video_le_requested_height", lambda fmt: True, known_height_videos),
+            ("h264_any_resolution", lambda fmt: self._codec_bucket(fmt.get("vcodec")) == "h264", videos),
+            ("vp9_any_resolution", lambda fmt: self._codec_bucket(fmt.get("vcodec")) == "vp9", videos),
+            ("av1_any_resolution", lambda fmt: self._codec_bucket(fmt.get("vcodec")) == "av1", videos),
+            ("any_video_available", lambda fmt: True, videos),
+        ]
+        for reason, predicate, source_formats in tiers:
+            candidates = [fmt for fmt in source_formats if predicate(fmt)]
+            if candidates:
+                return max(candidates, key=self._video_sort_key), reason
+        return None, None
+
+    def select(self, info: dict) -> SelectedFormat:
+        raw_formats = info.get("formats", []) if isinstance(info, dict) else []
+        dict_formats = [fmt for fmt in raw_formats if isinstance(fmt, dict)]
+        formats = []
+        videos = []
+        for fmt in dict_formats:
+            if not fmt.get("format_id"):
+                self._log_rejected("missing_format_id", fmt)
+                continue
+            formats.append(fmt)
+            if not self._has_video(fmt):
+                self._log_rejected("no_video", fmt)
+                continue
+            videos.append(fmt)
+
         if not videos:
+            total_formats, video_format_count, _audio_format_count = self.scan_counts(info)
+            sample = self._format_sample(dict_formats)
             raise YouTubeDownloadError(
-                message=f"Nenhum formato de vídeo encontrado até {self.max_height}p após varredura yt-dlp -J.",
+                message=(
+                    "Nenhum formato de vídeo encontrado após varredura yt-dlp -J. "
+                    f"total_formats={total_formats}, formats_with_vcodec={video_format_count}, "
+                    f"sample_first_10={json.dumps(sample, ensure_ascii=False)}"
+                ),
                 category="format_unavailable",
             )
 
-        selected_video = None
-        for bucket, _markers in self.CODEC_PRIORITY:
-            candidates = [fmt for fmt in videos if self._codec_bucket(fmt.get("vcodec")) == bucket]
-            if candidates:
-                selected_video = max(candidates, key=self._video_sort_key)
-                break
+        selected_video, selection_reason = self._select_best_video(videos)
         if selected_video is None:
-            selected_video = max(videos, key=self._video_sort_key)
+            raise YouTubeDownloadError(
+                message=f"Nenhum formato de vídeo selecionável encontrado após varredura yt-dlp -J. total_formats={len(dict_formats)}",
+                category="format_unavailable",
+            )
 
         audio_format_id = None
         if not self._has_audio(selected_video):
@@ -182,16 +253,27 @@ class FormatSelector:
                 audio_format_id = str(max(audios, key=self._audio_sort_key)["format_id"])
 
         video_format_id = str(selected_video["format_id"])
+        logger.info(
+            "FORMAT_SELECTED_BY_ID",
+            extra={
+                "format_id": video_format_id,
+                "vcodec": selected_video.get("vcodec"),
+                "height": self._height(selected_video),
+                "ext": selected_video.get("ext"),
+                "reason": selection_reason,
+            },
+        )
         download_format = f"{video_format_id}+{audio_format_id}" if audio_format_id else video_format_id
         return SelectedFormat(
             video_format_id=video_format_id,
             audio_format_id=audio_format_id,
             download_format=download_format,
             video_codec=str(selected_video.get("vcodec") or ""),
-            height=int(self._to_number(selected_video.get("height"), 0)) or None,
+            height=self._height(selected_video),
             ext=str(selected_video.get("ext") or "") or None,
             fps=self._to_number(selected_video.get("fps"), 0) or None,
             tbr=self._to_number(selected_video.get("tbr") or selected_video.get("vbr"), 0) or None,
+            selection_reason=selection_reason,
         )
 
 
@@ -482,11 +564,13 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
             logger.error("[YOUTUBE FORMAT SCAN JSON_ERROR]", extra={"stdout": scan_result.stdout[:2000]})
             raise YouTubeDownloadError(message="yt-dlp -J returned invalid JSON while scanning formats.", category="format_scan_json") from exc
 
-        available_formats = format_info.get("formats", []) if isinstance(format_info, dict) else []
+        total_formats, video_formats, audio_formats = FormatSelector.scan_counts(format_info)
         logger.info(
             "FORMAT_SCAN_RESULT",
             extra={
-                "format_count": len(available_formats),
+                "total_formats": total_formats,
+                "video_formats": video_formats,
+                "audio_formats": audio_formats,
                 "requested_quality": normalized_quality,
                 "video_id": format_info.get("id") if isinstance(format_info, dict) else None,
             },
@@ -495,12 +579,14 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
         logger.info(
             "FORMAT_SELECTED_BY_ID",
             extra={
+                "format_id": selected_format.video_format_id,
                 "video_format_id": selected_format.video_format_id,
                 "audio_format_id": selected_format.audio_format_id,
                 "download_format": selected_format.download_format,
                 "vcodec": selected_format.video_codec,
                 "height": selected_format.height,
                 "ext": selected_format.ext,
+                "reason": selected_format.selection_reason,
                 "fps": selected_format.fps,
                 "tbr": selected_format.tbr,
             },
