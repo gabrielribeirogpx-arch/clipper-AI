@@ -107,3 +107,10 @@ body { background: var(--bg-primary); }
   .editor-shell { --editor-header-height: 54px; --editor-timeline-height: 220px; --editor-gap: 10px; --editor-pad: 10px; }
 }
 
+
+.upload-viewport-card {
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
