@@ -135,6 +135,11 @@ def _run_diarization(whisperx, audio, aligned_result, device, profiler=None):
     return aligned_result
 
 
+def _faster_whisper_result(segments):
+    normalized = _result_with_text({"segments": segments})
+    return {"text": normalized["text"], "segments": normalized["segments"]}
+
+
 def _transcribe_with_faster_whisper(video_path, profiler=None):
     device = _resolve_faster_whisper_device()
     model_name = WHISPER_MODEL
@@ -146,7 +151,7 @@ def _transcribe_with_faster_whisper(video_path, profiler=None):
         profiler.end_timer("whisper_load_model")
         profiler.start_timer("whisper_transcription")
 
-    segments_iter, info = model.transcribe(video_path)
+    segments_iter, _info = model.transcribe(video_path)
     segments = [
         {
             "start": float(segment.start or 0.0),
@@ -159,15 +164,7 @@ def _transcribe_with_faster_whisper(video_path, profiler=None):
     if profiler:
         profiler.end_timer("whisper_transcription")
 
-    return _result_with_text(
-        {
-            "segments": segments,
-            "language": getattr(info, "language", None),
-            "language_probability": getattr(info, "language_probability", None),
-            "provider": TRANSCRIPTION_PROVIDER_FASTER_WHISPER,
-            "model": model_name,
-        }
-    )
+    return _faster_whisper_result(segments)
 
 
 def _transcribe_with_whisperx(video_path, diarize: bool = True, profiler=None):
