@@ -30,6 +30,12 @@ export const API_BASE = (process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 
 
 export const apiUrl = (path: string) => `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
 
+const isInvalidSaveFolder = (path?: string | null) => {
+  const value = (path ?? '').trim();
+  if (!value) return true;
+  return value.includes('<') || value.includes('>') || value.toLowerCase().includes('<user>');
+};
+
 export const mediaUrl = (path?: string | null) => {
   if (!path) return null;
   if (/^https?:\/\//i.test(path)) return path;
@@ -70,7 +76,7 @@ export function uploadVideo(
     const formData = new FormData();
     formData.append('file', file);
     if (analysisName?.trim()) formData.append('analysis_name', analysisName.trim());
-    if (saveFolder?.trim()) formData.append('save_folder', saveFolder.trim());
+    if (saveFolder?.trim() && !isInvalidSaveFolder(saveFolder)) formData.append('save_folder', saveFolder.trim());
     formData.append('render_mode', renderMode);
     formData.append('video_quality', videoQuality);
 
@@ -87,7 +93,7 @@ export function uploadVideo(
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(JSON.parse(xhr.responseText) as UploadResponse);
       } else {
-        reject(new Error('Upload failed'));
+        void responseErrorMessage(new Response(xhr.responseText, { status: xhr.status }), 'Upload failed').then((message) => reject(new Error(message)));
       }
     };
 
