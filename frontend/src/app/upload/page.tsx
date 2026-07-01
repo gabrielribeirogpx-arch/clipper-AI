@@ -51,12 +51,12 @@ function YouTubeRangeSelector({
   const endPercent = (end / duration) * 100;
 
   return (
-    <div className="space-y-4 rounded-2xl border border-white/10 bg-[#080f1f]/95 p-4">
+    <div className="space-y-3 rounded-2xl border border-white/10 bg-[#080f1f]/95 p-3">
       <div className="flex items-center justify-between text-xs uppercase tracking-[0.22em] text-slate-400">
         <span>Intervalo do vídeo fonte</span>
         <span>{formatTimestamp(end - start)} selecionados</span>
       </div>
-      <div className="relative pt-5">
+      <div className="relative pt-4">
         <div className="pointer-events-none absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-slate-800" />
         <div
           className="pointer-events-none absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-gradient-to-r from-cyan-400/90 to-violet-400/90 shadow-[0_0_24px_rgba(34,211,238,.45)] transition-all duration-150"
@@ -88,15 +88,15 @@ function YouTubeRangeSelector({
         />
       </div>
 
-      <div className="grid gap-3 text-sm text-slate-100 md:grid-cols-2">
-        <div className="rounded-xl border border-cyan-300/30 bg-cyan-300/5 p-3">
+      <div className="grid gap-2 text-sm text-slate-100 sm:grid-cols-2">
+        <div className="rounded-xl border border-cyan-300/30 bg-cyan-300/5 p-2.5">
           <p className="text-xs uppercase tracking-[0.2em] text-cyan-200">Início da fonte</p>
-          <p className="mt-1 text-lg font-medium">{formatTimestamp(start)}</p>
+          <p className="mt-0.5 text-base font-medium">{formatTimestamp(start)}</p>
           {isDragging === 'start' && <p className="text-xs text-cyan-300">Dragging preview</p>}
         </div>
-        <div className="rounded-xl border border-violet-300/30 bg-violet-300/5 p-3">
+        <div className="rounded-xl border border-violet-300/30 bg-violet-300/5 p-2.5">
           <p className="text-xs uppercase tracking-[0.2em] text-violet-200">Fim da fonte</p>
-          <p className="mt-1 text-lg font-medium">{formatTimestamp(end)}</p>
+          <p className="mt-0.5 text-base font-medium">{formatTimestamp(end)}</p>
           {isDragging === 'end' && <p className="text-xs text-violet-300">Dragging preview</p>}
         </div>
       </div>
@@ -600,15 +600,15 @@ export default function UploadPage() {
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#050813] px-6 py-16 text-white">
+    <main className="relative flex min-h-screen items-center overflow-hidden bg-[#050813] px-3 py-6 text-white sm:px-4 md:px-6">
       <style jsx>{`
         .timeline-thumb::-webkit-slider-thumb { appearance: none; height: 20px; width: 20px; border-radius: 9999px; background: linear-gradient(130deg, #67e8f9, #a78bfa); box-shadow: 0 0 18px rgba(103, 232, 249, 0.5); cursor: ew-resize; border: 2px solid #0b1220; }
         .timeline-thumb::-moz-range-thumb { height: 20px; width: 20px; border-radius: 9999px; background: linear-gradient(130deg, #67e8f9, #a78bfa); box-shadow: 0 0 18px rgba(103, 232, 249, 0.5); cursor: ew-resize; border: 2px solid #0b1220; }
       `}</style>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(6,182,212,.25),transparent_36%),radial-gradient(circle_at_80%_15%,rgba(168,85,247,.22),transparent_36%)]" />
-      <section className="relative mx-auto max-w-4xl rounded-[2.4rem] border border-white/15 bg-white/[0.04] p-8 shadow-[0_0_120px_rgba(34,211,238,.12)] backdrop-blur-3xl md:p-12">
-        <h1 className="text-center text-4xl font-semibold">Upload Cinematic AI</h1>
-        <p className="mt-3 text-center text-slate-300">Envie seu vídeo e gere uma timeline inteligente.</p>
+      <section className="upload-viewport-card timeline-scrollbar relative mx-auto w-full max-w-4xl rounded-[1.75rem] border border-white/15 bg-white/[0.04] p-4 shadow-[0_0_120px_rgba(34,211,238,.12)] backdrop-blur-3xl sm:p-5 md:p-6">
+        <h1 className="text-center text-2xl font-semibold sm:text-3xl">Upload Cinematic AI</h1>
+        <p className="mt-1.5 text-center text-sm text-slate-300 sm:text-base">Envie seu vídeo e gere uma timeline inteligente.</p>
 
         <motion.div
           onDragOver={(e) => {
@@ -618,28 +618,30 @@ export default function UploadPage() {
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
           animate={{ scale: isDragging ? 1.01 : 1, boxShadow: isDragging ? '0 0 50px rgba(34,211,238,.35)' : '0 0 20px rgba(168,85,247,.18)' }}
-          className="mt-10 rounded-3xl border border-dashed border-cyan-300/45 bg-[#081025]/70 p-12 text-center"
+          className="mt-5 rounded-2xl border border-dashed border-cyan-300/45 bg-[#081025]/70 p-5 text-center sm:p-6"
         >
-          <p className="text-lg">Drag & drop MP4/MOV</p>
-          <label className="mx-auto mt-8 inline-flex cursor-pointer rounded-xl bg-gradient-to-r from-cyan-300 to-violet-500 px-6 py-3 font-semibold text-slate-950">
+          <p className="text-base">Drag & drop MP4/MOV</p>
+          <label className="mx-auto mt-4 inline-flex cursor-pointer rounded-xl bg-gradient-to-r from-cyan-300 to-violet-500 px-5 py-2.5 text-sm font-semibold text-slate-950">
             Upload Video
             <input type="file" accept="video/mp4,video/quicktime" className="hidden" onChange={onFileSelect} />
           </label>
         </motion.div>
 
-        <div className="mt-8 grid gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-          <input value={analysisName} onChange={(e) => setAnalysisName(e.target.value)} placeholder="Nome da análise (opcional)" className="rounded-lg bg-slate-900 px-3 py-2 text-sm" />
-          <div className="flex gap-2 text-sm text-slate-200">
+        <div className="mt-5 grid gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 sm:p-4">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <input value={analysisName} onChange={(e) => setAnalysisName(e.target.value)} placeholder="Nome da análise (opcional)" className="min-w-0 rounded-lg bg-slate-900 px-3 py-2 text-sm" />
+            <div className="flex flex-wrap gap-2 text-sm text-slate-200 lg:justify-end">
             <button type="button" onClick={() => store.setRenderMode('ai_tracking')} className={`rounded-lg px-3 py-2 ${renderMode === 'ai_tracking' ? 'bg-cyan-400 text-black' : 'bg-slate-800'}`}>AI Tracking</button>
             <button type="button" onClick={() => store.setRenderMode('dual_region')} className={`rounded-lg px-3 py-2 ${renderMode === 'dual_region' ? 'bg-cyan-400 text-black' : 'bg-slate-800'}`}>Dual Region</button>
             <button type="button" onClick={() => { console.log('[SEMI AUTO MODE SELECTED]'); store.setRenderMode('semi_auto'); }} className={`rounded-lg px-3 py-2 ${renderMode === 'semi_auto' ? 'bg-cyan-400 text-black' : 'bg-slate-800'}`}>Semi Auto</button>
+            </div>
           </div>
 
           <input value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)} placeholder="https://youtube.com/live/..." className="rounded-lg bg-slate-900 px-3 py-2 text-sm" />
-          <div className="rounded-xl border border-cyan-300/20 bg-slate-950/80 p-4 shadow-[0_0_30px_rgba(34,211,238,.08)]">
+          <div className="rounded-xl border border-cyan-300/20 bg-slate-950/80 p-3 shadow-[0_0_30px_rgba(34,211,238,.08)] sm:flex sm:items-center sm:justify-between sm:gap-4">
             <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">📁 Save clips to:</p>
             <p className="mt-1 truncate text-sm text-cyan-200">{hasRealExportDirectory ? exportDirectory : INTERNAL_APP_FOLDER_LABEL}</p>
-            <button type="button" onClick={() => void chooseExportFolder()} className="mt-3 rounded-lg border border-cyan-300/30 px-3 py-1.5 text-xs text-cyan-100 transition hover:bg-cyan-300/10">
+            <button type="button" onClick={() => void chooseExportFolder()} className="mt-3 shrink-0 rounded-lg border border-cyan-300/30 px-3 py-1.5 text-xs text-cyan-100 transition hover:bg-cyan-300/10 sm:mt-0">
               Change Folder
             </button>
           </div>
@@ -652,7 +654,7 @@ export default function UploadPage() {
             </div>
           )}
           <YouTubeRangeSelector duration={MAX_YOUTUBE_DURATION_SECONDS} start={startSeconds} end={endSeconds} onStart={setStartSeconds} onEnd={setEndSeconds} />
-          <div className="grid gap-3 rounded-xl border border-white/10 bg-slate-950/70 p-4 text-sm text-slate-100 md:grid-cols-2">
+          <div className="grid gap-3 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm text-slate-100 md:grid-cols-2">
             <label className="space-y-1">
               <span className="text-xs uppercase tracking-[0.18em] text-slate-400">Duração mínima de cada clipe (s)</span>
               <input type="number" min={10} max={maxClipLength} value={minClipLength} onChange={(e) => setMinClipLength(clamp(Number(e.target.value), 10, maxClipLength))} className="w-full rounded-lg bg-slate-900 px-3 py-2" />
@@ -668,7 +670,7 @@ export default function UploadPage() {
         </div>
 
         {store.uploadedVideo && (
-          <div className="mt-8 grid gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:grid-cols-2">
+          <div className="mt-5 grid gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:grid-cols-2">
             <video src={store.uploadedVideo.previewUrl} className="h-52 w-full rounded-xl object-cover" controls />
             <div className="space-y-2 text-sm text-slate-200">
               <p>Arquivo: {store.uploadedVideo.name}</p>
@@ -680,7 +682,7 @@ export default function UploadPage() {
         )}
 
         {showUploadCard && (
-          <div className="mt-8 space-y-4 rounded-2xl border border-cyan-300/25 bg-cyan-500/5 p-5">
+          <div className="mt-5 space-y-3 rounded-2xl border border-cyan-300/25 bg-cyan-500/5 p-4">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-cyan-100">{uploadCardLabel}</p>
@@ -728,7 +730,7 @@ export default function UploadPage() {
           </p>
         )}
 
-        <div className="mt-10">
+        <div className="mt-5">
           <h3 className="text-sm uppercase tracking-[0.2em] text-slate-400">Recent uploads</h3>
           {recentUploads.map((name) => (
             <p key={name} className="mt-2 text-sm text-slate-300">
