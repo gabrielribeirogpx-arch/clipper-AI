@@ -53,8 +53,8 @@ function YouTubeRangeSelector({
   return (
     <div className="space-y-4 rounded-2xl border border-white/10 bg-[#080f1f]/95 p-4">
       <div className="flex items-center justify-between text-xs uppercase tracking-[0.22em] text-slate-400">
-        <span>Selection</span>
-        <span>{formatTimestamp(end - start)} window</span>
+        <span>Intervalo do vídeo fonte</span>
+        <span>{formatTimestamp(end - start)} selecionados</span>
       </div>
       <div className="relative pt-5">
         <div className="pointer-events-none absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-slate-800" />
@@ -90,12 +90,12 @@ function YouTubeRangeSelector({
 
       <div className="grid gap-3 text-sm text-slate-100 md:grid-cols-2">
         <div className="rounded-xl border border-cyan-300/30 bg-cyan-300/5 p-3">
-          <p className="text-xs uppercase tracking-[0.2em] text-cyan-200">Start</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-cyan-200">Início da fonte</p>
           <p className="mt-1 text-lg font-medium">{formatTimestamp(start)}</p>
           {isDragging === 'start' && <p className="text-xs text-cyan-300">Dragging preview</p>}
         </div>
         <div className="rounded-xl border border-violet-300/30 bg-violet-300/5 p-3">
-          <p className="text-xs uppercase tracking-[0.2em] text-violet-200">End</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-violet-200">Fim da fonte</p>
           <p className="mt-1 text-lg font-medium">{formatTimestamp(end)}</p>
           {isDragging === 'end' && <p className="text-xs text-violet-300">Dragging preview</p>}
         </div>
@@ -135,6 +135,8 @@ export default function UploadPage() {
   const videoQuality = useUploadStore((state) => state.videoQuality);
   const [startSeconds, setStartSeconds] = useState(0);
   const [endSeconds, setEndSeconds] = useState(MAX_YOUTUBE_DURATION_SECONDS);
+  const [minClipLength, setMinClipLength] = useState(30);
+  const [maxClipLength, setMaxClipLength] = useState(90);
   const fileRef = useRef<File | null>(null);
   const ingestStreamRef = useRef<EventSource | null>(null);
   const activeStreamJobIdRef = useRef<string | null>(null);
@@ -242,7 +244,7 @@ export default function UploadPage() {
     store.setUploadedVideo({ name: file.name, size: file.size, type: file.type, previewUrl: URL.createObjectURL(file) });
     store.setUploadStatus('uploading');
     console.log('[UPLOAD SELECTED RENDER MODE]', { source: 'file_upload', renderMode });
-    const result = await uploadVideo(file, analysisName, store.setUploadProgress, renderMode, videoQuality, effectiveSaveFolder).catch((e) => {
+    const result = await uploadVideo(file, analysisName, store.setUploadProgress, renderMode, videoQuality, effectiveSaveFolder, undefined, undefined, minClipLength, maxClipLength).catch((e) => {
       store.setUploadStatus('error');
       throw e;
     });
@@ -493,10 +495,10 @@ export default function UploadPage() {
             const ingestPayload = {
         youtube_url: youtubeUrl.trim(),
         analysis_name: analysisName.trim() || undefined,
-        start_time: toHhMmSs(startSeconds),
-        end_time: toHhMmSs(endSeconds),
-        min_clip_length: 30,
-        max_clip_length: 90,
+        source_start_time: toHhMmSs(startSeconds),
+        source_end_time: toHhMmSs(endSeconds),
+        min_clip_length: minClipLength,
+        max_clip_length: maxClipLength,
         render_mode: renderMode,
                 video_quality: videoQuality,
         ...(effectiveSaveFolder ? { save_folder: effectiveSaveFolder } : {}),
@@ -650,6 +652,16 @@ export default function UploadPage() {
             </div>
           )}
           <YouTubeRangeSelector duration={MAX_YOUTUBE_DURATION_SECONDS} start={startSeconds} end={endSeconds} onStart={setStartSeconds} onEnd={setEndSeconds} />
+          <div className="grid gap-3 rounded-xl border border-white/10 bg-slate-950/70 p-4 text-sm text-slate-100 md:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-xs uppercase tracking-[0.18em] text-slate-400">Duração mínima de cada clipe (s)</span>
+              <input type="number" min={10} max={maxClipLength} value={minClipLength} onChange={(e) => setMinClipLength(clamp(Number(e.target.value), 10, maxClipLength))} className="w-full rounded-lg bg-slate-900 px-3 py-2" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs uppercase tracking-[0.18em] text-slate-400">Duração máxima de cada clipe (s)</span>
+              <input type="number" min={minClipLength} max={300} value={maxClipLength} onChange={(e) => setMaxClipLength(clamp(Number(e.target.value), minClipLength, 300))} className="w-full rounded-lg bg-slate-900 px-3 py-2" />
+            </label>
+          </div>
           <button type="button" onClick={handleAnalyzeYoutube} className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300">
             Analyze YouTube livestream
           </button>

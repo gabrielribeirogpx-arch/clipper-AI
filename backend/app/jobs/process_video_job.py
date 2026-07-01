@@ -104,7 +104,7 @@ def _clip_response_item(hook: dict, index: int) -> dict:
 def _persist_ready_timeline_state(analysis_id: str, ready_clips: list[dict], timeline_broll: list, timeline_cuts: list, render_mode: str, dual_region_config: dict | None) -> None:
     clips = [_clip_response_item(clip, index) for index, clip in enumerate(ready_clips)]
     first_video = clips[0]["final_video"] if clips else None
-    duration = max((clip.get("end", 0) for clip in ready_clips), default=0.0)
+    duration = max((clip.get("duration", clip.get("end", 0) - clip.get("start", 0)) for clip in clips), default=0.0)
     state = {
         "renderMode": "preview",
         "analysisId": analysis_id,
@@ -242,7 +242,33 @@ def _speech_timestamps(transcription: dict) -> list[dict]:
     return [{"start": s.get("start", 0), "end": s.get("end", 0)} for s in transcription.get("segments", [])]
 
 
-def process_video(video_path, original_video_path=None, proxy_video_path=None, output_dir="app/clips", render_mode="ai_tracking", dual_region_config=None, min_clip_length=30, max_clip_length=90, max_clips=25, min_score=0.45, overlap_tolerance=0.6, step_logger=None, auto_save_dir=None, event_logger=None):
+def _validate_clip_durations(hooks: list[dict], source_start_time: float, source_end_time: float, min_clip_length: int, max_clip_length: int) -> list[dict]:
+    validated = []
+    for hook in hooks:
+        original_start = float(hook.get("start", 0) or 0)
+        original_end = float(hook.get("end", original_start) or original_start)
+        start = max(original_start, source_start_time)
+        end = min(original_end, source_end_time)
+        if end - start > max_clip_length:
+            end = start + max_clip_length
+        if end > source_end_time:
+            end = source_end_time
+            start = max(source_start_time, end - max_clip_length)
+        if end <= start:
+            print(f"[CLIP_DURATION_CLAMPED] action=drop reason=non_positive original_start={original_start} original_end={original_end} source_start={source_start_time} source_end={source_end_time}")
+            continue
+        duration = end - start
+        if duration < min_clip_length and source_end_time - start >= min_clip_length:
+            end = min(source_end_time, start + min_clip_length)
+            duration = end - start
+        if (round(start, 2), round(end, 2)) != (round(original_start, 2), round(original_end, 2)):
+            print(f"[CLIP_DURATION_CLAMPED] original_start={original_start} original_end={original_end} start={start} end={end} duration={duration} min_clip_length={min_clip_length} max_clip_length={max_clip_length}")
+        print(f"[CLIP_DURATION_VALIDATED] start={start} end={end} duration={duration} min_clip_length={min_clip_length} max_clip_length={max_clip_length}")
+        validated.append({**hook, "start": round(start, 2), "end": round(end, 2)})
+    return validated
+
+
+def process_video(video_path, original_video_path=None, proxy_video_path=None, output_dir="app/clips", render_mode="ai_tracking", dual_region_config=None, source_start_time=0, source_end_time=None, min_clip_length=30, max_clip_length=90, max_clips=25, min_score=0.45, overlap_tolerance=0.6, step_logger=None, auto_save_dir=None, event_logger=None):
     os.makedirs(output_dir, exist_ok=True)
     auto_save_dir = _sanitize_auto_save_dir(auto_save_dir)
     if auto_save_dir:
@@ -256,6 +282,7 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
     profiler.record_gpu_info()
     profiler.start_timer("total_pipeline")
     source_video_path = original_video_path or video_path
+    source_start_time = float(source_start_time or 0)
     proxy_video_path = proxy_video_path or os.path.join(output_dir, "proxy_720p.mp4")
     audio_path = os.path.join(output_dir, "audio_16k.wav")
     waveform_path = os.path.join(output_dir, "waveform.png")
@@ -270,6 +297,11 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
             "waveform": ingest_pool.submit(_generate_waveform, source_video_path, waveform_path),
         }
         ingest_results = {name: future.result() for name, future in futures.items()}
+    local_duration = float((ingest_results.get("probe") or {}).get("duration") or 0)
+    if source_end_time is None:
+        source_end_time = local_duration if local_duration > 0 else float("inf")
+    source_end_time = min(float(source_end_time), local_duration) if local_duration > 0 else float(source_end_time)
+    print(f"[SOURCE_INTERVAL_APPLIED] source_start_time={source_start_time} source_end_time={source_end_time} local_duration={local_duration} video_path={source_video_path}")
     _emit_pipeline_event(event_logger, "PIPELINE_STAGE_FINISHED", analysis_id, started_at, stage="ingestion")
 
     whisper_audio_source = proxy_video_path if _proxy_audio_is_whisper_safe(proxy_video_path) else source_video_path
@@ -294,7 +326,9 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
         hooks = cache["hooks"]
         print("[HOOK CACHE HIT]")
     else:
-        hooks = detect_hooks(transcription, min_duration=min_clip_length, max_duration=max_clip_length, max_clips=max(80, max_clips), min_score=min_score, overlap_tolerance=overlap_tolerance)
+        interval_segments = [s for s in transcription.get("segments", []) if s.get("start", 0) < source_end_time and s.get("end", 0) > source_start_time]
+        hooks = detect_hooks({**transcription, "segments": interval_segments}, min_duration=min_clip_length, max_duration=max_clip_length, max_clips=max(80, max_clips), min_score=min_score, overlap_tolerance=overlap_tolerance)
+    hooks = _validate_clip_durations(hooks, source_start_time, source_end_time, min_clip_length, max_clip_length)
     hooks = sorted(hooks, key=lambda h: h.get("viral_score", 0), reverse=True)[:max_clips]
     save_analysis_cache(analysis_id, {**cache, "transcription": transcription, "hooks": hooks, "waveform": waveform_path, "speech_timestamps": speech, "scene_changes": scene_changes, "silence": silence, "probe": ingest_results.get("probe"), "proxy": proxy_video_path})
     _emit_pipeline_event(event_logger, "PIPELINE_STAGE_FINISHED", analysis_id, started_at, len(hooks), stage="fast_detection")

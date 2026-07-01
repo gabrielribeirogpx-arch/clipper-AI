@@ -87,14 +87,26 @@ def _to_media_url(path: str) -> str:
     return f"/media/{rel_path}"
 
 
+def _parse_time_to_seconds(value: str | None) -> float | None:
+    if value is None or value == "":
+        return None
+    parts = [float(part) for part in str(value).split(":")]
+    if len(parts) == 3:
+        return parts[0] * 3600 + parts[1] * 60 + parts[2]
+    if len(parts) == 2:
+        return parts[0] * 60 + parts[1]
+    return parts[0]
+
+
 async def process_youtube_ingest_job(job_id: str, body: dict, output_dir: str) -> None:
     try:
         update_job(job_id, status="downloading", progress=10, step="Downloading YouTube video")
+        print(f"[SOURCE_INTERVAL_SELECTED] source_start_time={body.get('source_start_time') or body.get('start_time')} source_end_time={body.get('source_end_time') or body.get('end_time')}")
         filepath = await asyncio.to_thread(
             download_youtube_video,
             body["youtube_url"],
-            body.get("start_time"),
-            body.get("end_time"),
+            body.get("source_start_time") or body.get("start_time"),
+            body.get("source_end_time") or body.get("end_time"),
             body.get("video_quality", "1080p"),
         )
 
@@ -140,6 +152,8 @@ async def process_youtube_ingest_job(job_id: str, body: dict, output_dir: str) -
             output_dir=output_dir,
             render_mode=process_render_mode,
             dual_region_config=body.get('dual_region_config'),
+            source_start_time=0,
+            source_end_time=None,
             min_clip_length=int(body.get("min_clip_length", 30)),
             max_clip_length=int(body.get("max_clip_length", 90)),
             max_clips=25,
@@ -187,6 +201,10 @@ async def upload_video(
     render_mode: str = Form(default="ai_tracking"),
     video_quality: str = Form(default="1080p"),
     save_folder: str | None = Form(default=None),
+    source_start_time: str | None = Form(default=None),
+    source_end_time: str | None = Form(default=None),
+    min_clip_length: int = Form(default=30),
+    max_clip_length: int = Form(default=90),
 ):
 
     file_id = str(uuid.uuid4())
@@ -207,7 +225,8 @@ async def upload_video(
     print(f"[PROCESS VIDEO JOB MODE] upload_processing_render_mode={process_render_mode}")
     print("[PROCESS VIDEO JOB CONFIG] upload_request_dual_region_config=None")
     resolved_save_folder = _resolve_save_folder(save_folder)
-    transcription = process_video(filepath, output_dir=output_dir, render_mode=process_render_mode, original_video_path=filepath, auto_save_dir=resolved_save_folder)
+    print(f"[SOURCE_INTERVAL_SELECTED] source_start_time={source_start_time} source_end_time={source_end_time}")
+    transcription = process_video(filepath, output_dir=output_dir, render_mode=process_render_mode, original_video_path=filepath, auto_save_dir=resolved_save_folder, source_start_time=_parse_time_to_seconds(source_start_time) or 0, source_end_time=_parse_time_to_seconds(source_end_time), min_clip_length=min_clip_length, max_clip_length=max_clip_length)
     return _build_upload_response(transcription, file_id, filepath, render_mode=render_mode, video_quality=video_quality)
 
 
@@ -339,7 +358,7 @@ def _start_ai_metadata_background(hooks: list, next_state: dict, output_dir: str
 def _build_upload_response(transcription, file_id: str, filepath: str, render_mode: str = "ai_tracking", video_quality: str = "1080p"):
 
     hooks = transcription["hooks"]
-    duration = max([hook["end"] for hook in hooks], default=0.0)
+    duration = max([round(hook["end"] - hook["start"], 2) for hook in hooks], default=0.0)
     first_final_clip = hooks[0]["final_clip"] if hooks else filepath
     analysis_id = Path(hooks[0]["final_clip"]).parent.name if hooks else "default"
 

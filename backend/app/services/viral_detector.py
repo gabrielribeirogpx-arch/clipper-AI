@@ -112,6 +112,13 @@ def detect_and_rank_hooks(
                 })
                 continue
 
+            if end - start > max_duration:
+                end = start + max_duration
+            hook_duration = end - start
+            if hook_duration > max_duration:
+                rejected.append({"reason": "above_max_duration", "start": round(start, 2), "end": round(end, 2), "duration": round(hook_duration, 2)})
+                continue
+
             hook = {
                 "start": round(start, 2),
                 "end": round(end, 2),
@@ -152,6 +159,7 @@ def detect_and_rank_hooks(
     for idx, clip in enumerate(accepted[:10]):
         print(
             f"[viral_detector] accepted[{idx}] start={clip['start']} end={clip['end']} "
+            f"duration={round(clip['end'] - clip['start'], 2)} max_duration={max_duration} "
             f"score={clip['viral_score']} normalized={clip['normalized_score']}"
         )
 
