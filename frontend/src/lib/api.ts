@@ -19,6 +19,8 @@ export type YouTubeIngestRequest = {
   save_folder?: string;
   start_time?: string;
   end_time?: string;
+  source_start_time?: string;
+  source_end_time?: string;
   min_clip_length?: number;
   max_clip_length?: number;
   render_mode?: RenderMode;
@@ -73,6 +75,10 @@ export function uploadVideo(
   renderMode: RenderMode = "ai_tracking",
   videoQuality: '720p' | '1080p' | '4k' = '1080p',
   saveFolder?: string,
+  sourceStartTime?: string,
+  sourceEndTime?: string,
+  minClipLength = 30,
+  maxClipLength = 90,
 ): Promise<UploadResponse> {
   return new Promise((resolve, reject) => {
     const formData = new FormData();
@@ -81,6 +87,10 @@ export function uploadVideo(
     if (saveFolder?.trim() && !isInvalidSaveFolder(saveFolder)) formData.append('save_folder', saveFolder.trim());
     formData.append('render_mode', renderMode);
     formData.append('video_quality', videoQuality);
+    if (sourceStartTime) formData.append('source_start_time', sourceStartTime);
+    if (sourceEndTime) formData.append('source_end_time', sourceEndTime);
+    formData.append('min_clip_length', String(minClipLength));
+    formData.append('max_clip_length', String(maxClipLength));
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', apiUrl('/upload'));

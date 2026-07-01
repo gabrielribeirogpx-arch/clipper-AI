@@ -103,6 +103,13 @@ const clampTime = (value: number, duration: number) => Math.min(Math.max(value, 
 const SNAP = 0.1;
 const snap = (time: number) => Math.round(time / SNAP) * SNAP;
 
+const tracksForClip = (clip: GeneratedClip | null): Record<TrackType, ClipBlock[]> => ({
+  broll: [],
+  hooks: clip ? [{ id: `hook-${clip.id}`, track: 'hooks', label: clip.label || 'Hook', start: 0, end: clip.duration, text: clip.title }] : [],
+  cuts: clip ? [{ id: `cut-${clip.id}`, track: 'cuts', label: 'Clip renderizado', start: 0, end: Math.min(0.1, clip.duration) }] : [],
+  effects: [],
+});
+
 const tracksSeed: Record<TrackType, ClipBlock[]> = {
   broll: [{ id: 'br-1', track: 'broll', label: 'B-roll Produto', start: 3, end: 8 }],
   hooks: [{ id: 'hk-1', track: 'hooks', label: 'Hook 1', start: 0, end: 2.5 }],
@@ -172,7 +179,8 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
         selectedClipId: clipId,
         videoUrl: mediaUrl(nextVideoUrl),
         duration: clip.duration,
-        currentTime: clip.start,
+        currentTime: 0,
+        tracks: tracksForClip(clip),
       };
     }),
   selectBlock: (selectedBlockId) => set({ selectedBlockId }),
@@ -301,7 +309,7 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
         ? mediaUrl(selectedClip.final_video)
         : renderMode === 'export' ? exportVideoUrl : previewVideoUrl,
       duration: selectedClip?.duration ?? data.duration ?? 0,
-      currentTime: selectedClip?.start ?? 0,
+      currentTime: 0,
       isPlaying: false,
       selectedBlockId: null,
       generatedClips,
@@ -312,10 +320,12 @@ export const useTimelineStore = create<TimelineState>()(persist((set, get) => ({
       isHydratingFromBackend: false,
       hasHydratedFromBackend: true,
       tracks: {
-        broll: mapTrack(data.broll, 'broll'),
-        hooks: mapTrack(data.hooks, 'hooks'),
-        cuts: mapTrack(data.cuts, 'cuts'),
-        effects: [],
+        ...(selectedClip ? tracksForClip(selectedClip) : {
+          broll: mapTrack(data.broll, 'broll'),
+          hooks: mapTrack(data.hooks, 'hooks'),
+          cuts: mapTrack(data.cuts, 'cuts'),
+          effects: [],
+        }),
       }
     });
     if (selectedClipId) {
