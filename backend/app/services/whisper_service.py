@@ -52,6 +52,8 @@ def _resolve_device():
 
 def _resolve_faster_whisper_device():
     requested_device = _requested_device()
+    if requested_device == "auto":
+        return "cuda" if _is_cuda_available() else "cpu"
     if requested_device == "cuda" and not _is_cuda_available():
         logger.warning(
             "WHISPER_DEVICE=cuda was requested, but CUDA is not available. "
@@ -59,6 +61,14 @@ def _resolve_faster_whisper_device():
         )
         return "cpu"
     return requested_device
+
+
+def _is_cuda_runtime_error(exc):
+    error_text = str(exc).lower()
+    return any(
+        marker in error_text
+        for marker in ("cuda", "cudnn", "cublas", "ctranslate2", "dll")
+    )
 
 
 def _compute_type_for_device(device):
@@ -140,31 +150,59 @@ def _faster_whisper_result(segments):
     return {"text": normalized["text"], "segments": normalized["segments"]}
 
 
+def _transcribe_with_faster_whisper_device(video_path, model_name, device, profiler=None):
+    if profiler:
+        profiler.start_timer("whisper_load_model")
+    try:
+        model = _load_faster_whisper_model(model_name, device)
+    finally:
+        if profiler:
+            profiler.end_timer("whisper_load_model")
+
+    if profiler:
+        profiler.start_timer("whisper_transcription")
+    try:
+        segments_iter, _info = model.transcribe(video_path)
+        segments = [
+            {
+                "start": float(segment.start or 0.0),
+                "end": float(segment.end or 0.0),
+                "text": str(segment.text or ""),
+            }
+            for segment in segments_iter
+        ]
+    finally:
+        if profiler:
+            profiler.end_timer("whisper_transcription")
+
+    return _faster_whisper_result(segments)
+
+
 def _transcribe_with_faster_whisper(video_path, profiler=None):
     device = _resolve_faster_whisper_device()
     model_name = WHISPER_MODEL
+    logger.info(
+        "TRANSCRIPTION_DEVICE_SELECTED provider=faster_whisper device=%s compute_type=%s",
+        device,
+        _compute_type_for_device(device),
+    )
 
-    if profiler:
-        profiler.start_timer("whisper_load_model")
-    model = _load_faster_whisper_model(model_name, device)
-    if profiler:
-        profiler.end_timer("whisper_load_model")
-        profiler.start_timer("whisper_transcription")
+    try:
+        return _transcribe_with_faster_whisper_device(video_path, model_name, device, profiler=profiler)
+    except Exception as exc:
+        if device != "cuda" or not _is_cuda_runtime_error(exc):
+            raise
 
-    segments_iter, _info = model.transcribe(video_path)
-    segments = [
-        {
-            "start": float(segment.start or 0.0),
-            "end": float(segment.end or 0.0),
-            "text": str(segment.text or ""),
-        }
-        for segment in segments_iter
-    ]
-
-    if profiler:
-        profiler.end_timer("whisper_transcription")
-
-    return _faster_whisper_result(segments)
+        logger.warning(
+            "TRANSCRIPTION_GPU_FAILED_FALLBACK_CPU provider=faster_whisper error=%s",
+            exc,
+        )
+        logger.info(
+            "TRANSCRIPTION_CPU_FALLBACK_STARTED provider=faster_whisper device=cpu compute_type=int8"
+        )
+        result = _transcribe_with_faster_whisper_device(video_path, model_name, "cpu", profiler=profiler)
+        logger.info("TRANSCRIPTION_CPU_FALLBACK_SUCCESS provider=faster_whisper")
+        return result
 
 
 def _transcribe_with_whisperx(video_path, diarize: bool = True, profiler=None):
