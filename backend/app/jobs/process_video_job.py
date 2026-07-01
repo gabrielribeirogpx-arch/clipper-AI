@@ -63,6 +63,69 @@ def _copy_rendered_clip_to_export(final_path: str, auto_save_dir: str | None, an
         return None, None
 
 
+
+def _to_media_url(path: str | None) -> str | None:
+    if not path:
+        return None
+    rel_path = os.path.normpath(path).replace(os.path.normpath("app/clips") + os.sep, "", 1)
+    return f"/media/{rel_path.replace(os.sep, '/')}"
+
+
+def _clip_response_item(hook: dict, index: int) -> dict:
+    return {
+        "id": f"clip-{index}",
+        "label": f"Clip {index + 1}",
+        "start": hook["start"],
+        "end": hook["end"],
+        "duration": round(hook["end"] - hook["start"], 2),
+        "clip_path": _to_media_url(hook["clip_path"]),
+        "raw_clip_path": _to_media_url(hook.get("raw_clip_path", hook["clip_path"])),
+        "final_video": _to_media_url(hook["final_clip"]),
+        "export_path": hook.get("export_path"),
+        "local_export_path": hook.get("local_export_path"),
+        "viral_score": hook["viral_score"],
+        "hook_score": hook.get("hook_score", hook["viral_score"]),
+        "retention_score": hook.get("retention_score"),
+        "emotion_score": hook.get("emotional_score"),
+        "title": hook.get("title_suggestion", ""),
+        "caption": hook.get("caption_suggestion", ""),
+        "description": hook.get("description_suggestion", ""),
+        "hashtags": hook.get("hashtags", []),
+        "emotion": hook.get("emotion", "Não analisado"),
+        "category": hook.get("category", "Auto"),
+        "viral_reason": hook.get("viral_reason", ""),
+        "title_options": hook.get("title_options", []),
+        "metadata_status": hook.get("metadata_status", "no_ai"),
+        "metadata_provider": hook.get("metadata_provider", "none"),
+    }
+
+
+def _persist_ready_timeline_state(analysis_id: str, ready_clips: list[dict], timeline_broll: list, timeline_cuts: list, render_mode: str, dual_region_config: dict | None) -> None:
+    clips = [_clip_response_item(clip, index) for index, clip in enumerate(ready_clips)]
+    first_video = clips[0]["final_video"] if clips else None
+    duration = max((clip.get("end", 0) for clip in ready_clips), default=0.0)
+    state = {
+        "renderMode": "preview",
+        "analysisId": analysis_id,
+        "videoUrl": first_video,
+        "previewVideoUrl": first_video,
+        "exportVideoUrl": first_video,
+        "duration": duration,
+        "clips": clips,
+        "hooks": [{"id": f"hook-{index}", "label": "Hook", "start": clip["start"], "end": clip["end"], "text": clip.get("text", "")} for index, clip in enumerate(ready_clips)],
+        "broll": timeline_broll,
+        "cuts": timeline_cuts,
+        "renderQueue": [],
+        "render_mode": render_mode,
+        "status": "background_processing",
+        "dual_regions": dual_region_config,
+        "dual_region_config": dual_region_config,
+        "semi_auto": None,
+        "semi_auto_config": None,
+    }
+    set_timeline_state(state)
+    save_timeline_state_for_analysis(analysis_id, state)
+
 def _probe_audio_stream(video_path: str):
     probe_cmd = [
         "ffprobe",
@@ -267,11 +330,13 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
             _emit_pipeline_event(event_logger, "CLIP_RENDERED", analysis_id, started_at, len(ready), clip_index=idx, clip=clip)
             if not first_clip_announced:
                 first_clip_announced = True
+                _persist_ready_timeline_state(analysis_id, ready, timeline_broll, timeline_cuts, render_mode, dual_region_config)
                 _emit_pipeline_event(event_logger, "FIRST_CLIP_READY", analysis_id, started_at, len(ready), clip=clip)
                 _emit_pipeline_event(event_logger, "EDITOR_READY", analysis_id, started_at, len(ready))
             if len(ready) == first_batch_size:
                 _emit_pipeline_event(event_logger, "BACKGROUND_PROCESSING", analysis_id, started_at, len(ready), message="Editor can be used while remaining clips and metadata continue.")
     clips = [c for c in generated_clips if c]
+    _persist_ready_timeline_state(analysis_id, clips, timeline_broll, timeline_cuts, render_mode, dual_region_config)
     _emit_pipeline_event(event_logger, "BACKGROUND_FINISHED", analysis_id, started_at, len(clips))
     profiler.end_timer("total_pipeline")
     profiler.finalize()
