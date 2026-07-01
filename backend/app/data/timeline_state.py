@@ -43,39 +43,37 @@ def save_timeline_state_for_analysis(analysis_id: str | None, state: dict[str, A
     if not normalized_analysis_id:
         return
 
-    print("[TIMELINE DB PRE-UPSERT]", {
+    print("[TIMELINE_SAVE_STARTED]", {
         "analysis_id": normalized_analysis_id,
+        "clip_count": len(state.get("clips", [])),
         "render_mode": state.get("render_mode"),
-        "dual_region_config": state.get("dual_region_config"),
-        "semi_auto_config": state.get("semi_auto_config", state.get("semi_auto")),
     })
 
-    with SessionLocal() as session:
-        row = session.get(TimelineRenderState, normalized_analysis_id)
-        print(f"[TIMELINE DB ROW FOUND] analysis_id={normalized_analysis_id} found={row is not None}")
-        if row is None:
-            row = TimelineRenderState(analysis_id=normalized_analysis_id)
-            print(f"[TIMELINE DB ROW CREATED] analysis_id={normalized_analysis_id}")
+    try:
+        with SessionLocal() as session:
+            row = session.get(TimelineRenderState, normalized_analysis_id)
+            if row is None:
+                row = TimelineRenderState(analysis_id=normalized_analysis_id)
 
-        row.render_mode = state.get("render_mode")
-        row.dual_region_config = state.get("dual_region_config")
-        row.semi_auto_config = state.get("semi_auto_config", state.get("semi_auto"))
+            row.render_mode = state.get("render_mode")
+            row.dual_region_config = state.get("dual_region_config")
+            row.semi_auto_config = state.get("semi_auto_config", state.get("semi_auto"))
+            row.state_json = dict(state)
 
-        session.add(row)
-        session.flush()
-        session.commit()
-        session.refresh(row)
+            session.add(row)
+            session.commit()
 
-    print(f"[TIMELINE DB POST-COMMIT VERIFY] analysis_id={normalized_analysis_id}")
-    with SessionLocal() as verify_session:
-        verify_row = verify_session.get(TimelineRenderState, normalized_analysis_id)
-        print("[TIMELINE DB VERIFIED VALUES]", {
+        print("[TIMELINE_SAVE_SUCCESS]", {
             "analysis_id": normalized_analysis_id,
-            "render_mode": verify_row.render_mode if verify_row else None,
-            "dual_region_config": verify_row.dual_region_config if verify_row else None,
-            "semi_auto_config": verify_row.semi_auto_config if verify_row else None,
+            "clip_count": len(state.get("clips", [])),
+            "render_mode": state.get("render_mode"),
         })
-
+    except Exception as error:
+        print("[TIMELINE_SAVE_FAILED]", {
+            "analysis_id": normalized_analysis_id,
+            "error": str(error),
+        })
+        raise
 
 def get_timeline_state_for_analysis(analysis_id: str | None) -> dict[str, Any] | None:
     normalized_analysis_id = str(analysis_id) if analysis_id is not None else None
@@ -89,23 +87,18 @@ def get_timeline_state_for_analysis(analysis_id: str | None) -> dict[str, Any] |
             return None
 
         hydrated = dict(timeline_state)
+        if row.state_json:
+            hydrated.update(row.state_json)
         hydrated["analysisId"] = normalized_analysis_id
-        hydrated["render_mode"] = row.render_mode
-        hydrated["dual_region_config"] = row.dual_region_config
-        hydrated["dual_regions"] = row.dual_region_config
-        hydrated["semi_auto"] = row.semi_auto_config
-        hydrated["semi_auto_config"] = row.semi_auto_config
+        hydrated["render_mode"] = row.render_mode or hydrated.get("render_mode")
+        hydrated["dual_region_config"] = row.dual_region_config or hydrated.get("dual_region_config")
+        hydrated["dual_regions"] = hydrated.get("dual_region_config")
+        hydrated["semi_auto"] = row.semi_auto_config or hydrated.get("semi_auto_config") or hydrated.get("semi_auto")
+        hydrated["semi_auto_config"] = hydrated.get("semi_auto")
 
-        print("[TIMELINE DB HYDRATION SUCCESS]", {
+        print("[TIMELINE_LOAD_SUCCESS]", {
             "analysis_id": normalized_analysis_id,
-            "render_mode": row.render_mode,
-            "dual_region_config": row.dual_region_config,
-            "semi_auto_config": row.semi_auto_config,
-        })
-        print("[RENDER STATE LOAD]", {
-            "analysis_id": normalized_analysis_id,
-            "render_mode": row.render_mode,
-            "dual_region_config": row.dual_region_config,
-            "semi_auto_config": row.semi_auto_config,
+            "clip_count": len(hydrated.get("clips", [])),
+            "render_mode": hydrated.get("render_mode"),
         })
         return hydrated

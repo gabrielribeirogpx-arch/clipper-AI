@@ -51,11 +51,12 @@ def log_timeline_routes() -> None:
     print("[DB MIGRATION CHECK]")
     with engine.begin() as conn:
         columns = conn.execute(text("PRAGMA table_info(timeline_render_state)")).fetchall()
-        exists = any(column[1] == "semi_auto_config" for column in columns)
-        print(f"[DB COLUMN EXISTS] table=timeline_render_state column=semi_auto_config exists={exists}")
-        if not exists:
-            conn.execute(text("ALTER TABLE timeline_render_state ADD COLUMN semi_auto_config JSON"))
-            print("[DB COLUMN CREATED] table=timeline_render_state column=semi_auto_config")
+        for column_name in ("semi_auto_config", "state_json"):
+            exists = any(column[1] == column_name for column in columns)
+            print(f"[DB COLUMN EXISTS] table=timeline_render_state column={column_name} exists={exists}")
+            if not exists:
+                conn.execute(text(f"ALTER TABLE timeline_render_state ADD COLUMN {column_name} JSON"))
+                print(f"[DB COLUMN CREATED] table=timeline_render_state column={column_name}")
     print("[DB MIGRATION COMPLETE]")
     print(f"[TIMELINE DB PATH] {DB_PATH}")
     timeline_routes = [
