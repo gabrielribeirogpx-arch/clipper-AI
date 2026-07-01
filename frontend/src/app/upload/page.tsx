@@ -4,7 +4,7 @@ import { ChangeEvent, DragEvent, MouseEvent, useEffect, useMemo, useRef, useStat
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ApiError, createIngestStream, getIngestJobState, getIngestStatus, ingestYouTubeJob, uploadVideo } from '@/lib/api';
-import { isPlaceholderExportPath } from '@/lib/desktopBridge';
+import { BROWSER_INTERNAL_SAVE_FOLDER_MESSAGE, INTERNAL_APP_FOLDER_LABEL, isAbsoluteLocalPath, isPlaceholderExportPath } from '@/lib/desktopBridge';
 import { useUploadStore } from '@/store/uploadStore';
 import { useTimelineStore } from '@/store/timelineStore';
 import { useExportSettingsStore } from '@/store/exportSettingsStore';
@@ -12,7 +12,7 @@ import { useExportSettingsStore } from '@/store/exportSettingsStore';
 const MAX_SIZE = 1024 * 1024 * 1024;
 const MAX_YOUTUBE_DURATION_SECONDS = 6 * 60 * 60;
 const STALE_INGEST_MESSAGE = 'Previous ingest session expired. Please start a new analysis.';
-const REAL_SAVE_FOLDER_MESSAGE = 'Escolha uma pasta real para salvar os clipes.';
+const REAL_SAVE_FOLDER_MESSAGE = BROWSER_INTERNAL_SAVE_FOLDER_MESSAGE;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -227,7 +227,8 @@ export default function UploadPage() {
     ['Encontrando melhores momentos', store.pipelineEvents.some((event) => event.stage === 'fast_detection' && event.event === 'PIPELINE_STAGE_FINISHED')],
     ['Gerando primeiros clips', store.editorReady || store.clips.length > 0],
   ] as const;
-  const hasRealExportDirectory = !isPlaceholderExportPath(exportDirectory);
+  const hasRealExportDirectory = !isPlaceholderExportPath(exportDirectory) && isAbsoluteLocalPath(exportDirectory);
+  const effectiveSaveFolder = hasRealExportDirectory ? exportDirectory : undefined;
   const validateFile = (file: File) => (['video/mp4', 'video/quicktime'].includes(file.type) ? (file.size > MAX_SIZE ? 'Arquivo maior que 1GB.' : null) : 'Somente MP4 ou MOV.');
 
   const processFile = async (file: File) => {
@@ -235,13 +236,13 @@ export default function UploadPage() {
     fileRef.current = file;
     const validation = validateFile(file);
     if (validation) return setError(validation);
-    if (!hasRealExportDirectory) return setError(REAL_SAVE_FOLDER_MESSAGE);
+    if (!hasRealExportDirectory) setToast(REAL_SAVE_FOLDER_MESSAGE);
     setError(null);
     resetForNewAnalysis();
     store.setUploadedVideo({ name: file.name, size: file.size, type: file.type, previewUrl: URL.createObjectURL(file) });
     store.setUploadStatus('uploading');
     console.log('[UPLOAD SELECTED RENDER MODE]', { source: 'file_upload', renderMode });
-    const result = await uploadVideo(file, analysisName, store.setUploadProgress, renderMode, videoQuality, exportDirectory).catch((e) => {
+    const result = await uploadVideo(file, analysisName, store.setUploadProgress, renderMode, videoQuality, effectiveSaveFolder).catch((e) => {
       store.setUploadStatus('error');
       throw e;
     });
@@ -476,7 +477,7 @@ export default function UploadPage() {
 
   const processYoutube = async () => {
     if (!youtubeUrl.trim()) return setError('YouTube URL is required.');
-    if (!hasRealExportDirectory) return setError(REAL_SAVE_FOLDER_MESSAGE);
+    if (!hasRealExportDirectory) setToast(REAL_SAVE_FOLDER_MESSAGE);
     setError(null);
     if (store.activeJobId) return setError('Já existe um job em execução. Aguarde finalizar.');
     resetForNewAnalysis();
@@ -498,7 +499,7 @@ export default function UploadPage() {
         max_clip_length: 90,
         render_mode: renderMode,
                 video_quality: videoQuality,
-        save_folder: exportDirectory,
+        ...(effectiveSaveFolder ? { save_folder: effectiveSaveFolder } : {}),
       };
       console.log('[FRONTEND INGEST PAYLOAD]', ingestPayload);
       const job = await ingestYouTubeJob(ingestPayload);
@@ -635,21 +636,21 @@ export default function UploadPage() {
           <input value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)} placeholder="https://youtube.com/live/..." className="rounded-lg bg-slate-900 px-3 py-2 text-sm" />
           <div className="rounded-xl border border-cyan-300/20 bg-slate-950/80 p-4 shadow-[0_0_30px_rgba(34,211,238,.08)]">
             <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">📁 Save clips to:</p>
-            <p className="mt-1 truncate text-sm text-cyan-200">{hasRealExportDirectory ? exportDirectory : REAL_SAVE_FOLDER_MESSAGE}</p>
+            <p className="mt-1 truncate text-sm text-cyan-200">{hasRealExportDirectory ? exportDirectory : INTERNAL_APP_FOLDER_LABEL}</p>
             <button type="button" onClick={() => void chooseExportFolder()} className="mt-3 rounded-lg border border-cyan-300/30 px-3 py-1.5 text-xs text-cyan-100 transition hover:bg-cyan-300/10">
               Change Folder
             </button>
           </div>
           {folderPickerUnsupported && (
             <div className="rounded-2xl border border-violet-300/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-100" role="status">
-              <p>Desktop folder picker disponível na versão desktop do Clipper AI.</p>
+              <p>{BROWSER_INTERNAL_SAVE_FOLDER_MESSAGE}</p>
               <button type="button" onClick={dismissFolderPickerUnsupported} className="mt-2 text-xs underline">
                 Entendi
               </button>
             </div>
           )}
           <YouTubeRangeSelector duration={MAX_YOUTUBE_DURATION_SECONDS} start={startSeconds} end={endSeconds} onStart={setStartSeconds} onEnd={setEndSeconds} />
-          <button type="button" onClick={handleAnalyzeYoutube} disabled={!hasRealExportDirectory} className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300">
+          <button type="button" onClick={handleAnalyzeYoutube} className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300">
             Analyze YouTube livestream
           </button>
         </div>

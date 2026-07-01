@@ -37,7 +37,8 @@ def _sanitize_auto_save_dir(auto_save_dir: str | None) -> str | None:
     if "<" in normalized or ">" in normalized or any(token in lowered for token in _PLACEHOLDER_SAVE_FOLDER_TOKENS):
         raise ValueError(INVALID_SAVE_FOLDER_MESSAGE)
     if not os.path.isabs(normalized):
-        raise ValueError(f"{INVALID_SAVE_FOLDER_MESSAGE} Caminhos relativos como '{normalized}' não podem ser usados pelo backend; selecione uma pasta absoluta no computador.")
+        print(f"[INVALID_AUTO_SAVE_DIR_FALLBACK] Caminho relativo ignorado para auto_save_dir: '{normalized}'.")
+        return None
     return os.path.abspath(os.path.expanduser(normalized))
 
 
