@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import os
+import json
 import shlex
 import subprocess
 import tempfile
+from fractions import Fraction
 from typing import Dict, List
 import cv2
 import numpy as np
@@ -85,6 +87,43 @@ def _probe_bitrate(media_path: str) -> str:
     return (proc.stdout or "").strip() or "unknown"
 
 
+def _probe_media_metadata(media_path: str) -> Dict:
+    probe_cmd = [
+        "ffprobe", "-v", "error", "-select_streams", "v:0",
+        "-show_entries", "stream=width,height,codec_name,avg_frame_rate,bit_rate:format=bit_rate,duration,format_name",
+        "-of", "json", media_path,
+    ]
+    proc = subprocess.run(probe_cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        return {"probe_error": proc.stderr.strip()}
+    try:
+        data = json.loads(proc.stdout or "{}")
+    except json.JSONDecodeError:
+        return {"probe_error": "invalid_json", "stdout": proc.stdout}
+    stream = (data.get("streams") or [{}])[0]
+    fmt = data.get("format") or {}
+    fps = stream.get("avg_frame_rate")
+    if fps and fps != "0/0":
+        try:
+            fps = float(Fraction(fps))
+        except (ValueError, ZeroDivisionError):
+            pass
+    return {
+        "width": stream.get("width"),
+        "height": stream.get("height"),
+        "codec": stream.get("codec_name"),
+        "bitrate": stream.get("bit_rate") or fmt.get("bit_rate"),
+        "fps": fps,
+        "duration": fmt.get("duration"),
+        "container": fmt.get("format_name"),
+    }
+
+
+def _log_render_probe(label: str, media_path: str) -> None:
+    metadata = _probe_media_metadata(media_path)
+    print(f"[{label}] path={media_path} width={metadata.get('width')} height={metadata.get('height')} codec={metadata.get('codec')} bitrate={metadata.get('bitrate')} fps={metadata.get('fps')} duration={metadata.get('duration')}")
+
+
 def _log_file_stats(label: str, media_path: str) -> None:
     if os.path.exists(media_path):
         print(f"[{label} SIZE BYTES] {os.path.getsize(media_path)}")
@@ -117,6 +156,7 @@ def _create_proxy_if_needed(video_path: str) -> tuple[str, bool]:
 
 def render_vertical_clip(video_path: str, segments: List[Dict], output_path: str, speaker_segments=None, tracking_video_path: str | None = None, original_video_path: str | None = None) -> str:
     """Render a vertical clip with camera reframing and original audio, without subtitles."""
+    _log_render_probe("RENDER INPUT", video_path)
     tracking_input = tracking_video_path or video_path
     tracking_source, proxy_created = _create_proxy_if_needed(tracking_input)
     if proxy_created:
@@ -173,6 +213,7 @@ def render_vertical_clip(video_path: str, segments: List[Dict], output_path: str
     if (final_w, final_h) != TARGET_RENDER_SIZE:
         raise RuntimeError(f"Rendered video has invalid size {final_w}x{final_h}; expected 1080x1920")
     print(f"[FINAL RESOLUTION] {final_w}x{final_h}")
+    _log_render_probe("RENDER OUTPUT", output_path)
     _log_file_stats("REAL OUTPUT", output_path)
 
     if proxy_created and tracking_source != video_path and os.path.exists(tracking_source):
@@ -187,6 +228,7 @@ def render_vertical_clip(video_path: str, segments: List[Dict], output_path: str
 
 def render_dual_region_clip(video_path: str, output_path: str, dual_regions: Dict) -> str:
     print("[DUAL REGION RENDER START]")
+    _log_render_probe("RENDER INPUT", video_path)
     print("[DUAL REGION PIPELINE ACTIVE]")
     print("[DUAL REGION COMPOSITION START]")
     region_a = dual_regions.get("regionA", {})
@@ -226,6 +268,7 @@ def render_dual_region_clip(video_path: str, output_path: str, dual_regions: Dic
         raise RuntimeError(f"Dual region render failed: {proc.stderr}")
     final_w, final_h = _probe_dimensions(output_path)
     print(f"[FINAL OUTPUT RESOLUTION] {final_w}x{final_h}")
+    _log_render_probe("RENDER OUTPUT", output_path)
     if (final_w, final_h) != TARGET_RENDER_SIZE:
         raise RuntimeError(f"Dual-region rendered video has invalid size {final_w}x{final_h}; expected 1080x1920")
     print("[DUAL REGION COMPOSITION COMPLETE]")
@@ -235,6 +278,7 @@ def render_dual_region_clip(video_path: str, output_path: str, dual_regions: Dic
 
 def render_semi_auto_vertical(video_path: str, output_path: str) -> str:
     print("[SEMI AUTO MODE]")
+    _log_render_probe("RENDER INPUT", video_path)
     print("[SEMI AUTO PIPELINE ACTIVE]")
     vw, vh = _probe_dimensions(video_path)
     cx, cy = _detect_dominant_subject_center(video_path)
@@ -256,6 +300,7 @@ def render_semi_auto_vertical(video_path: str, output_path: str) -> str:
         raise RuntimeError(f"Semi auto render failed: {proc.stderr}")
     final_w, final_h = _probe_dimensions(output_path)
     print(f"[SEMI AUTO OUTPUT RESOLUTION] {final_w}x{final_h}")
+    _log_render_probe("RENDER OUTPUT", output_path)
     if (final_w, final_h) != TARGET_RENDER_SIZE:
         raise RuntimeError(f"Semi-auto rendered video has invalid size {final_w}x{final_h}; expected 1080x1920")
     print("[SEMI AUTO COMPOSITION COMPLETE]")

@@ -14,6 +14,7 @@ import subprocess
 import sys
 import uuid
 import tempfile
+from fractions import Fraction
 from dataclasses import dataclass
 
 UPLOAD_DIR = "app/uploads"
@@ -110,6 +111,7 @@ class FormatSelector:
         ("vp9", ("vp9",)),
         ("av1", ("av01", "av1")),
     )
+    CODEC_SCORE = {"h264": 3, "vp9": 2, "av1": 1, "other": 0}
 
     def __init__(self, requested_quality: str) -> None:
         normalized_quality = (requested_quality or "1080p").strip().lower()
@@ -153,7 +155,8 @@ class FormatSelector:
         fps = self._to_number(format_info.get("fps"), 0)
         tbr = self._to_number(format_info.get("tbr") or format_info.get("vbr"), 0)
         filesize = self._to_number(format_info.get("filesize") or format_info.get("filesize_approx"), 0)
-        return (height, width, fps, tbr, filesize)
+        codec_score = self.CODEC_SCORE.get(self._codec_bucket(format_info.get("vcodec")) or "other", 0)
+        return (height, width, codec_score, fps, tbr, filesize)
 
     def _audio_sort_key(self, format_info: dict) -> tuple:
         abr = self._to_number(format_info.get("abr"), 0)
@@ -184,37 +187,107 @@ class FormatSelector:
             for fmt in formats[:limit]
         ]
 
-    def _log_rejected(self, reason: str, format_info: dict) -> None:
+    @staticmethod
+    def scan_audit_counts(info: dict) -> dict:
+        formats = info.get("formats", []) if isinstance(info, dict) else []
+        dict_formats = [fmt for fmt in formats if isinstance(fmt, dict)]
+        video_formats = [fmt for fmt in dict_formats if FormatSelector._has_video(fmt)]
+        audio_formats = [fmt for fmt in dict_formats if FormatSelector._has_audio(fmt)]
+        adaptive_formats = [fmt for fmt in dict_formats if FormatSelector._has_video(fmt) != FormatSelector._has_audio(fmt)]
+        progressive_formats = [fmt for fmt in dict_formats if FormatSelector._has_video(fmt) and FormatSelector._has_audio(fmt)]
+        codec_counts = {"h264_count": 0, "vp9_count": 0, "av1_count": 0}
+        for fmt in video_formats:
+            bucket = FormatSelector._codec_bucket(fmt.get("vcodec"))
+            if bucket in {"h264", "vp9", "av1"}:
+                codec_counts[f"{bucket}_count"] += 1
+        return {
+            "total_formats": len(dict_formats),
+            "video_formats": len(video_formats),
+            "audio_formats": len(audio_formats),
+            "adaptive_formats": len(adaptive_formats),
+            "progressive_formats": len(progressive_formats),
+            **codec_counts,
+        }
+
+    @staticmethod
+    def log_available_formats(info: dict) -> None:
+        formats = info.get("formats", []) if isinstance(info, dict) else []
+        dict_formats = [fmt for fmt in formats if isinstance(fmt, dict)]
+        logger.info("================ AVAILABLE FORMATS ================", extra={"total": len(dict_formats)})
+        for fmt in dict_formats:
+            logger.info(
+                "AVAILABLE_FORMAT",
+                extra={
+                    "id": fmt.get("format_id"),
+                    "format_id": fmt.get("format_id"),
+                    "resolution": fmt.get("resolution"),
+                    "width": fmt.get("width"),
+                    "height": fmt.get("height"),
+                    "fps": fmt.get("fps"),
+                    "ext": fmt.get("ext"),
+                    "vcodec": fmt.get("vcodec"),
+                    "acodec": fmt.get("acodec"),
+                    "tbr": fmt.get("tbr"),
+                    "vbr": fmt.get("vbr"),
+                    "abr": fmt.get("abr"),
+                    "container": fmt.get("container"),
+                    "format_note": fmt.get("format_note"),
+                    "protocol": fmt.get("protocol"),
+                },
+            )
+        logger.info("===================================================")
+
+    def _log_rejected(self, reason: str, format_info: dict, selected_format_id: str | None = None) -> None:
         logger.info(
             "FORMAT_REJECTED",
             extra={
                 "reason": reason,
+                "id": format_info.get("format_id"),
                 "format_id": format_info.get("format_id"),
+                "selected_format_id": selected_format_id,
+                "resolution": format_info.get("resolution"),
+                "width": format_info.get("width"),
                 "vcodec": format_info.get("vcodec"),
+                "acodec": format_info.get("acodec"),
                 "height": format_info.get("height"),
+                "fps": format_info.get("fps"),
                 "ext": format_info.get("ext"),
             },
         )
+
+    def _rejection_reason(self, fmt: dict, selected: dict) -> str:
+        if not fmt.get("format_id"):
+            return "missing_format_id"
+        if not self._has_video(fmt):
+            return "no_video"
+        height = self._height(fmt)
+        selected_height = self._height(selected) or 0
+        if height is None:
+            return "missing_metadata_height"
+        if height > self.max_height:
+            return "height_above_requested"
+        if height < selected_height:
+            return "lower_resolution_than_selected"
+        codec_score = self.CODEC_SCORE.get(self._codec_bucket(fmt.get("vcodec")) or "other", 0)
+        selected_codec_score = self.CODEC_SCORE.get(self._codec_bucket(selected.get("vcodec")) or "other", 0)
+        if height == selected_height and codec_score < selected_codec_score:
+            return "codec_lower_priority_than_selected_at_same_resolution"
+        if self._video_sort_key(fmt) < self._video_sort_key(selected):
+            return "lower_sort_key_than_selected"
+        return "not_selected"
 
     def _select_best_video(self, videos: list[dict]) -> tuple[dict | None, str | None]:
         known_height_videos = [
             fmt for fmt in videos
             if self._height(fmt) is not None and self._height(fmt) <= self.max_height
         ]
-        tiers = [
-            ("h264_le_requested_height", lambda fmt: self._codec_bucket(fmt.get("vcodec")) == "h264", known_height_videos),
-            ("vp9_le_requested_height", lambda fmt: self._codec_bucket(fmt.get("vcodec")) == "vp9", known_height_videos),
-            ("av1_le_requested_height", lambda fmt: self._codec_bucket(fmt.get("vcodec")) == "av1", known_height_videos),
-            ("any_video_le_requested_height", lambda fmt: True, known_height_videos),
-            ("h264_any_resolution", lambda fmt: self._codec_bucket(fmt.get("vcodec")) == "h264", videos),
-            ("vp9_any_resolution", lambda fmt: self._codec_bucket(fmt.get("vcodec")) == "vp9", videos),
-            ("av1_any_resolution", lambda fmt: self._codec_bucket(fmt.get("vcodec")) == "av1", videos),
-            ("any_video_available", lambda fmt: True, videos),
-        ]
-        for reason, predicate, source_formats in tiers:
-            candidates = [fmt for fmt in source_formats if predicate(fmt)]
-            if candidates:
-                return max(candidates, key=self._video_sort_key), reason
+        if known_height_videos:
+            return max(known_height_videos, key=self._video_sort_key), "highest_resolution_under_requested_preferring_h264_at_same_resolution"
+        unknown_height_videos = [fmt for fmt in videos if self._height(fmt) is None]
+        if unknown_height_videos:
+            return max(unknown_height_videos, key=self._video_sort_key), "missing_height_metadata_best_available"
+        if videos:
+            return min(videos, key=self._video_sort_key), "all_formats_above_requested_lowest_above_requested"
         return None, None
 
     def select(self, info: dict) -> SelectedFormat:
@@ -258,14 +331,23 @@ class FormatSelector:
                 audio_format_id = str(max(audios, key=self._audio_sort_key)["format_id"])
 
         video_format_id = str(selected_video["format_id"])
+        for fmt in formats:
+            if str(fmt.get("format_id")) != video_format_id:
+                self._log_rejected(self._rejection_reason(fmt, selected_video), fmt, video_format_id)
         logger.info(
-            "FORMAT_SELECTED_BY_ID",
+            "FORMAT_SELECTED",
             extra={
+                "id": video_format_id,
                 "format_id": video_format_id,
+                "resolution": selected_video.get("resolution"),
                 "vcodec": selected_video.get("vcodec"),
+                "codec": self._codec_bucket(selected_video.get("vcodec")),
                 "height": self._height(selected_video),
+                "width": selected_video.get("width"),
                 "ext": selected_video.get("ext"),
                 "reason": selection_reason,
+                "fps": selected_video.get("fps"),
+                "tbr": selected_video.get("tbr"),
             },
         )
         download_format = f"{video_format_id}+{audio_format_id}" if audio_format_id else video_format_id
@@ -396,12 +478,16 @@ def _parse_format_scan_result(
         raise YouTubeDownloadError(message="yt-dlp -J returned invalid JSON while scanning formats.", category="format_scan_json") from exc
 
     total_formats, video_formats, audio_formats = FormatSelector.scan_counts(format_info)
+    audit_counts = FormatSelector.scan_audit_counts(format_info)
+    FormatSelector.log_available_formats(format_info)
+    logger.info("SCAN CLIENT = %s", youtube_client or "default")
     logger.info(
         "FORMAT_SCAN_RESULT",
         extra={
             "total_formats": total_formats,
             "video_formats": video_formats,
             "audio_formats": audio_formats,
+            **audit_counts,
             "requested_quality": normalized_quality,
             "youtube_client": youtube_client,
             "video_id": format_info.get("id") if isinstance(format_info, dict) else None,
@@ -470,6 +556,48 @@ def _build_download_command(
         command.extend(["--download-sections", section])
     command.append(youtube_url)
     return command
+
+
+def _ffprobe_media_metadata(media_path: str, ffprobe_location: str | None = None) -> dict:
+    ffprobe = ffprobe_location or shutil.which("ffprobe")
+    if not ffprobe:
+        return {"probe_error": "ffprobe_not_found"}
+    probe_cmd = [
+        ffprobe,
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height,codec_name,avg_frame_rate,bit_rate:format=bit_rate,duration,format_name",
+        "-of",
+        "json",
+        media_path,
+    ]
+    probe_result = subprocess.run(probe_cmd, check=False, capture_output=True, text=True)
+    if probe_result.returncode != 0:
+        return {"probe_error": probe_result.stderr}
+    try:
+        data = json.loads(probe_result.stdout or "{}")
+    except json.JSONDecodeError:
+        return {"probe_error": "invalid_json", "stdout": probe_result.stdout}
+    stream = (data.get("streams") or [{}])[0]
+    fmt = data.get("format") or {}
+    fps = stream.get("avg_frame_rate")
+    if fps and fps != "0/0":
+        try:
+            fps = float(Fraction(fps))
+        except (ValueError, ZeroDivisionError):
+            pass
+    return {
+        "width": stream.get("width"),
+        "height": stream.get("height"),
+        "codec": stream.get("codec_name"),
+        "bitrate": stream.get("bit_rate") or fmt.get("bit_rate"),
+        "fps": fps,
+        "duration": fmt.get("duration"),
+        "container": fmt.get("format_name"),
+    }
 
 
 def _normalize_to_h264_mp4(media_path: str, ffmpeg_location: str | None) -> str:
@@ -651,6 +779,9 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
 
         if video_formats == 0:
             for youtube_client in YOUTUBE_SCAN_CLIENTS:
+                if selected_youtube_client:
+                    logger.info("%s FAILED", selected_youtube_client.upper(), extra={"reason": "no_video_formats"})
+                logger.info("Trying %s...", youtube_client.upper())
                 logger.info(
                     "FORMAT_SCAN_RETRY_CLIENT",
                     extra={"youtube_client": youtube_client, "using_cookies": False, "reason": "no_video_formats"},
@@ -669,7 +800,9 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
                 if video_formats > 0:
                     active_cookies = None
                     selected_youtube_client = youtube_client
+                    logger.info("%s SUCCESS", youtube_client.upper())
                     break
+                logger.info("%s FAILED", youtube_client.upper(), extra={"reason": "no_video_formats"})
 
         if video_formats == 0:
             logger.error("FORMAT_SCAN_NO_VIDEO_FORMATS", extra={"reason": "all_retries_exhausted", "total_formats": total_formats})
@@ -689,6 +822,19 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
                 "reason": selected_format.selection_reason,
                 "fps": selected_format.fps,
                 "tbr": selected_format.tbr,
+            },
+        )
+        logger.info(
+            "DOWNLOAD FORMAT",
+            extra={
+                "id": selected_format.video_format_id,
+                "resolution": f"{selected_format.height}p" if selected_format.height else None,
+                "codec": selected_format.video_codec,
+                "fps": selected_format.fps,
+                "bitrate": selected_format.tbr,
+                "container": selected_format.ext,
+                "download_format": selected_format.download_format,
+                "scan_client": selected_youtube_client or "default",
             },
         )
 
@@ -771,28 +917,23 @@ def download_youtube_video(youtube_url: str, start_time: str | None = None, end_
                 ffprobe_location = shutil.which("ffprobe")
 
             if ffprobe_location:
-                probe_cmd = [
-                    ffprobe_location,
-                    "-v",
-                    "error",
-                    "-show_entries",
-                    "stream=codec_type,width,height,codec_name,avg_frame_rate,bit_rate:format=bit_rate",
-                    "-of",
-                    "default=noprint_wrappers=1",
-                    output_file,
-                ]
-                probe_result = subprocess.run(probe_cmd, check=False, capture_output=True, text=True)
-                if probe_result.returncode == 0:
-                    logger.info("[YOUTUBE SOURCE PROBE]", extra={"metadata": probe_result.stdout})
-                    final_width_match = re.search(r"width=(\d+)", probe_result.stdout)
-                    final_height_match = re.search(r"height=(\d+)", probe_result.stdout)
-                    final_bitrate_match = re.search(r"^bit_rate=(\d+)$", probe_result.stdout, re.MULTILINE)
-                    if final_width_match and final_height_match:
-                        logger.info("[YOUTUBE FINAL RESOLUTION]", extra={"resolution": f"{final_width_match.group(1)}x{final_height_match.group(1)}"})
-                    if final_bitrate_match:
-                        logger.info("[YOUTUBE FINAL_BITRATE]", extra={"bitrate": final_bitrate_match.group(1)})
+                metadata = _ffprobe_media_metadata(output_file, ffprobe_location)
+                if "probe_error" in metadata:
+                    logger.warning("[YOUTUBE SOURCE PROBE FAILED]", extra=metadata)
                 else:
-                    logger.warning("[YOUTUBE SOURCE PROBE FAILED]", extra={"stderr": probe_result.stderr})
+                    logger.info(
+                        "DOWNLOADED FILE",
+                        extra={
+                            "width": metadata.get("width"),
+                            "height": metadata.get("height"),
+                            "resolution": f"{metadata.get('width')}x{metadata.get('height')}",
+                            "codec": metadata.get("codec"),
+                            "bitrate": metadata.get("bitrate"),
+                            "fps": metadata.get("fps"),
+                            "duration": metadata.get("duration"),
+                            "container": metadata.get("container"),
+                        },
+                    )
 
         return output_file
     finally:
