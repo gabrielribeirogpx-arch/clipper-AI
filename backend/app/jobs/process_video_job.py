@@ -36,7 +36,31 @@ def _sanitize_auto_save_dir(auto_save_dir: str | None) -> str | None:
     lowered = normalized.lower()
     if "<" in normalized or ">" in normalized or any(token in lowered for token in _PLACEHOLDER_SAVE_FOLDER_TOKENS):
         raise ValueError(INVALID_SAVE_FOLDER_MESSAGE)
-    return normalized
+    if not os.path.isabs(normalized):
+        raise ValueError(f"{INVALID_SAVE_FOLDER_MESSAGE} Caminhos relativos como '{normalized}' não podem ser usados pelo backend; selecione uma pasta absoluta no computador.")
+    return os.path.abspath(os.path.expanduser(normalized))
+
+
+def _friendly_clip_filename(idx: int, hook: dict, source_path: str) -> str:
+    score = int(round(float(hook.get("viral_score", 0) or 0)))
+    extension = os.path.splitext(source_path)[1] or ".mp4"
+    return f"clip_{idx + 1:02d}_score_{score}{extension}"
+
+
+def _copy_rendered_clip_to_export(final_path: str, auto_save_dir: str | None, analysis_id: str, idx: int, hook: dict) -> tuple[str | None, str | None]:
+    if not auto_save_dir:
+        return None, None
+
+    try:
+        export_dir = os.path.join(auto_save_dir, analysis_id)
+        os.makedirs(export_dir, exist_ok=True)
+        export_path = os.path.join(export_dir, _friendly_clip_filename(idx, hook, final_path))
+        shutil.copy2(final_path, export_path)
+        print(f"[EXPORT_COPY_SUCCESS] analysis_id={analysis_id} clip_index={idx} export_path={export_path}")
+        return export_path, export_path
+    except Exception as error:
+        print(f"[EXPORT_COPY_FAILED] analysis_id={analysis_id} clip_index={idx} source={final_path} error={error}")
+        return None, None
 
 
 def _probe_audio_stream(video_path: str):
@@ -227,9 +251,8 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
             processed = os.path.join(output_dir, f"clip_{idx}_semi_auto.mp4"); render_semi_auto_vertical(raw, processed)
         seg_timeline = broll_engine.build_timeline([s for s in transcription["segments"] if hook["start"] <= s.get("start", 0) <= hook["end"]])
         final = apply_broll_overlay(processed, seg_timeline, f"clip_{idx}_final.mp4", output_dir=output_dir, quality_profile="export")
-        if auto_save_dir:
-            shutil.copy2(final, os.path.join(auto_save_dir, os.path.basename(final)))
-        clip = apply_metadata_to_clip({"raw_clip_path": raw, "clip_path": processed, "final_clip": final, **hook, "title_suggestion": "", "caption_suggestion": "", "description_suggestion": "", "hashtags": [], "emotion": "Não analisado", "category": "Auto", "viral_reason": "", "title_options": [], "broll_timeline": seg_timeline}, no_ai_metadata(hook, idx))
+        export_path, local_export_path = _copy_rendered_clip_to_export(final, auto_save_dir, analysis_id, idx, hook)
+        clip = apply_metadata_to_clip({"raw_clip_path": raw, "clip_path": processed, "final_clip": final, "export_path": export_path, "local_export_path": local_export_path, **hook, "title_suggestion": "", "caption_suggestion": "", "description_suggestion": "", "hashtags": [], "emotion": "Não analisado", "category": "Auto", "viral_reason": "", "title_options": [], "broll_timeline": seg_timeline}, no_ai_metadata(hook, idx))
         return idx, clip
 
     _emit_pipeline_event(event_logger, "PIPELINE_STAGE_STARTED", analysis_id, started_at, stage="top_clip_render")

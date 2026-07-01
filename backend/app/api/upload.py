@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+import os
 import re
 import time
 
@@ -12,7 +13,6 @@ from app.data.timeline_state import set_timeline_state, save_timeline_state_for_
 from app.services.youtube_service import download_youtube_video, YouTubeDownloadError
 from app.data.ingest_jobs import cleanup_jobs, create_job, get_job, register_listener, unregister_listener, update_job
 from app.schemas.upload import YoutubeIngestRequest
-import os
 import uuid
 import shutil
 import threading
@@ -48,11 +48,18 @@ def _sanitize_save_folder(save_folder: str | None, *, reject_invalid: bool = Tru
             raise HTTPException(status_code=400, detail=INVALID_SAVE_FOLDER_MESSAGE)
         return None
 
-    return normalized
+    if not os.path.isabs(normalized):
+        message = f"{INVALID_SAVE_FOLDER_MESSAGE} Caminhos relativos como '{normalized}' não podem ser usados pelo backend; selecione uma pasta absoluta no computador."
+        if reject_invalid:
+            raise HTTPException(status_code=400, detail=message)
+        print(f"[INVALID_SAVE_FOLDER] {message}")
+        return None
+
+    return os.path.abspath(os.path.expanduser(normalized))
 
 
 def _default_backend_save_folder() -> str:
-    return CLIPS_DIR
+    return os.path.abspath(CLIPS_DIR)
 
 
 def _resolve_save_folder(save_folder: str | None, *, reject_invalid: bool = True) -> str:
@@ -292,6 +299,8 @@ def _clip_response_item(hook, index: int) -> dict:
         "clip_path": _to_media_url(hook["clip_path"]),
         "raw_clip_path": _to_media_url(hook.get("raw_clip_path", hook["clip_path"])),
         "final_video": _to_media_url(hook["final_clip"]),
+        "export_path": hook.get("export_path"),
+        "local_export_path": hook.get("local_export_path"),
         "viral_score": hook["viral_score"],
         "hook_score": hook.get("hook_score", hook["viral_score"]),
         "retention_score": hook["retention_score"],
@@ -412,6 +421,8 @@ def _build_upload_response(transcription, file_id: str, filepath: str, render_mo
                 "retention_score": hook["retention_score"],
                 "duration": round(hook["end"] - hook["start"], 2),
                 "final_clip": hook["final_clip"],
+                "export_path": hook.get("export_path"),
+                "local_export_path": hook.get("local_export_path"),
             }
             for hook in hooks
         ],
