@@ -47,6 +47,16 @@ export class ApiError extends Error {
   }
 }
 
+async function responseErrorMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const payload = await response.json() as { detail?: unknown; message?: unknown; error?: { message?: unknown } };
+    const message = payload.error?.message || payload.message || payload.detail;
+    return typeof message === 'string' ? message : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 
 export function uploadVideo(
   file: File,
@@ -105,7 +115,7 @@ export async function ingestYouTubeVideo(payload: YouTubeIngestRequest): Promise
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error('YouTube ingestion failed');
+  if (!response.ok) throw new Error(await responseErrorMessage(response, 'YouTube ingestion failed'));
   return response.json() as Promise<UploadResponse>;
 }
 
@@ -134,7 +144,7 @@ export type IngestJobState = IngestStatus & { job_id: string; finished: boolean 
 export async function ingestYouTubeJob(payload: YouTubeIngestRequest): Promise<IngestJobResponse> {
   console.log('[FRONTEND SEMI AUTO SENT]', { semi_auto_config: payload.semi_auto_config, render_mode: payload.render_mode });
   const response = await fetch(apiUrl('/ingest/youtube'), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-  if (!response.ok) throw new Error("YouTube ingestion failed");
+  if (!response.ok) throw new Error(await responseErrorMessage(response, 'YouTube ingestion failed'));
   return response.json() as Promise<IngestJobResponse>;
 }
 

@@ -108,6 +108,19 @@ function YouTubeRangeSelector({
   );
 }
 
+const cleanDisplayError = (value: unknown): string => {
+  const fallback = 'An error occurred. Please try again.';
+  const raw = value instanceof Error ? value.message : String(value || fallback);
+  try {
+    const parsed = JSON.parse(raw) as { message?: unknown; detail?: unknown; error?: { message?: unknown } };
+    const parsedMessage = parsed.message || parsed.error?.message || parsed.detail;
+    if (typeof parsedMessage === 'string') return parsedMessage;
+  } catch {
+    // The error is already plain text.
+  }
+  return raw.length > 500 ? `${raw.slice(0, 500)}…` : raw;
+};
+
 export default function UploadPage() {
   const [isDragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -556,26 +569,26 @@ export default function UploadPage() {
 
         throw error;
       }
-    })().catch((e) => setError(e.message));
+    })().catch((e) => setError(cleanDisplayError(e)));
     return () => clearIngestResources();
   }, []);
 
   const handleAnalyzeYoutube = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     console.log('[ANALYZE BUTTON CLICKED]');
-    void processYoutube().catch((e) => setError(e.message));
+    void processYoutube().catch((e) => setError(cleanDisplayError(e)));
   };
 
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragging(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) void processFile(file).catch((e) => setError(e.message));
+    if (file) void processFile(file).catch((e) => setError(cleanDisplayError(e)));
   };
 
   const onFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) void processFile(file).catch((err) => setError(err.message));
+    if (file) void processFile(file).catch((err) => setError(cleanDisplayError(err)));
   };
 
   return (
@@ -691,7 +704,7 @@ export default function UploadPage() {
         {error && (
           <p className="mt-5 text-rose-300">
             {error}{' '}
-            <button className="underline" onClick={() => fileRef.current && void processFile(fileRef.current).catch((e) => setError(e.message))}>
+            <button className="underline" onClick={() => fileRef.current && void processFile(fileRef.current).catch((e) => setError(cleanDisplayError(e)))}>
               Retry
             </button>
           </p>
