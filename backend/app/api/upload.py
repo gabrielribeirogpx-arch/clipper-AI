@@ -49,10 +49,8 @@ def _sanitize_save_folder(save_folder: str | None, *, reject_invalid: bool = Tru
         return None
 
     if not os.path.isabs(normalized):
-        message = f"{INVALID_SAVE_FOLDER_MESSAGE} Caminhos relativos como '{normalized}' não podem ser usados pelo backend; selecione uma pasta absoluta no computador."
-        if reject_invalid:
-            raise HTTPException(status_code=400, detail=message)
-        print(f"[INVALID_SAVE_FOLDER] {message}")
+        message = f"Caminho relativo ignorado para save_folder: '{normalized}'. Usando a pasta interna do app."
+        print(f"[INVALID_SAVE_FOLDER_FALLBACK] {message}")
         return None
 
     return os.path.abspath(os.path.expanduser(normalized))

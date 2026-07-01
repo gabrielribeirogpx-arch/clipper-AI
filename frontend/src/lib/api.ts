@@ -30,10 +30,12 @@ export const API_BASE = (process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 
 
 export const apiUrl = (path: string) => `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
 
+const isAbsoluteLocalPath = (path: string) => /^(?:[a-zA-Z]:[\\/]|\\\\|\/)/.test(path);
+
 const isInvalidSaveFolder = (path?: string | null) => {
   const value = (path ?? '').trim();
   if (!value) return true;
-  return value.includes('<') || value.includes('>') || value.toLowerCase().includes('<user>');
+  return value.includes('<') || value.includes('>') || value.toLowerCase().includes('<user>') || !isAbsoluteLocalPath(value);
 };
 
 export const mediaUrl = (path?: string | null) => {

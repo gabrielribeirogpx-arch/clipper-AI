@@ -7,6 +7,7 @@ type DirectoryHandleWithPermissions = FileSystemDirectoryHandle & {
 };
 
 type DesktopAPI = {
+  openDirectoryPicker?: () => Promise<string | null>;
   selectFolder?: () => Promise<string | null>;
   openFolder?: (path: string) => Promise<void>;
   saveFile?: (name: string, sourceUrl: string, outputDir: string) => Promise<string>;
@@ -22,6 +23,15 @@ declare global {
 
 const fallbackExportPath = (): string => '';
 
+export const BROWSER_INTERNAL_SAVE_FOLDER_MESSAGE = 'No navegador, os clipes serão salvos na pasta interna do app. Para escolher uma pasta do PC, use a versão desktop.';
+export const INTERNAL_APP_FOLDER_LABEL = 'Pasta interna do app';
+
+export const isAbsoluteLocalPath = (path?: string | null): boolean => {
+  const value = (path ?? '').trim();
+  if (!value) return false;
+  return /^(?:[a-zA-Z]:[\\/]|\\\\|\/)/.test(value);
+};
+
 export const isPlaceholderExportPath = (path?: string | null): boolean => {
   const value = (path ?? '').trim();
   if (!value) return true;
@@ -33,32 +43,22 @@ export const desktopBridge = {
   async selectFolder(currentPath: string): Promise<{ path: string; handleStored: boolean; native: boolean } | null> {
     console.log('[FOLDER PICKER OPENED]', { currentPath });
 
-    if (window.desktopAPI?.selectFolder) {
-      const selected = await window.desktopAPI.selectFolder();
+    const nativePicker = window.desktopAPI?.openDirectoryPicker ?? window.desktopAPI?.selectFolder;
+    if (nativePicker) {
+      const selected = await nativePicker();
       if (!selected) return null;
       console.log('[FOLDER SELECTED]', { path: selected });
       return { path: selected, handleStored: false, native: true };
     }
 
-    if (typeof window.showDirectoryPicker !== 'function') return null;
-
-    console.log('[NATIVE DIRECTORY PICKER ACTIVE]');
-    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
-    const permission = handle.queryPermission ? await handle.queryPermission({ mode: 'readwrite' }) : 'prompt';
-    const path = handle.name;
-
-    let handleStored = false;
-    try {
-      localStorage.setItem('clipper.export.folderHandle', handle.name);
-      localStorage.setItem('clipper.export.folderPermission', permission);
-      handleStored = true;
-      console.log('[FOLDER HANDLE STORED]', { permission });
-    } catch (error) {
-      console.warn('[FOLDER HANDLE STORAGE FAILED]', error);
+    // The browser File System Access API only exposes a handle/name, not a real
+    // absolute OS path that the backend can write to. In web mode we therefore
+    // fall back to the backend's internal app folder instead of sending a
+    // relative folder name such as "Video" or "Clipes".
+    if (typeof window.showDirectoryPicker === 'function') {
+      console.log('[BROWSER DIRECTORY PICKER IGNORED_NO_ABSOLUTE_PATH]');
     }
-
-    console.log('[FOLDER SELECTED]', { path });
-    return { path, handleStored, native: true };
+    return null;
   },
   async openFolder(path: string): Promise<void> {
     console.log('[OPEN EXPORT FOLDER]', { path });
