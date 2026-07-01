@@ -23,6 +23,21 @@ from app.services.chunk_processing_service import (
 )
 from app.services.performance_profiler import PerformanceProfiler
 
+INVALID_SAVE_FOLDER_MESSAGE = "Escolha uma pasta real para salvar os clipes."
+_PLACEHOLDER_SAVE_FOLDER_TOKENS = ("<user>", "{user}", "%user%", "$user", "username", "your_username")
+
+
+def _sanitize_auto_save_dir(auto_save_dir: str | None) -> str | None:
+    if auto_save_dir is None:
+        return None
+    normalized = auto_save_dir.strip()
+    if not normalized:
+        return None
+    lowered = normalized.lower()
+    if "<" in normalized or ">" in normalized or any(token in lowered for token in _PLACEHOLDER_SAVE_FOLDER_TOKENS):
+        raise ValueError(INVALID_SAVE_FOLDER_MESSAGE)
+    return normalized
+
 
 def _probe_audio_stream(video_path: str):
     probe_cmd = [
@@ -141,6 +156,7 @@ def _speech_timestamps(transcription: dict) -> list[dict]:
 
 def process_video(video_path, original_video_path=None, proxy_video_path=None, output_dir="app/clips", render_mode="ai_tracking", dual_region_config=None, min_clip_length=30, max_clip_length=90, max_clips=25, min_score=0.45, overlap_tolerance=0.6, step_logger=None, auto_save_dir=None, event_logger=None):
     os.makedirs(output_dir, exist_ok=True)
+    auto_save_dir = _sanitize_auto_save_dir(auto_save_dir)
     if auto_save_dir:
         os.makedirs(auto_save_dir, exist_ok=True)
     log = step_logger or (lambda _msg: None)

@@ -22,9 +22,41 @@ router = APIRouter()
 
 UPLOAD_DIR = "app/uploads"
 CLIPS_DIR = "app/clips"
+INVALID_SAVE_FOLDER_MESSAGE = "Escolha uma pasta real para salvar os clipes."
+_PLACEHOLDER_SAVE_FOLDER_TOKENS = ("<user>", "{user}", "%user%", "$user", "username", "your_username")
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(CLIPS_DIR, exist_ok=True)
 
+
+
+def _looks_like_placeholder_path(path: str) -> bool:
+    lowered = path.lower()
+    return "<" in path or ">" in path or any(token in lowered for token in _PLACEHOLDER_SAVE_FOLDER_TOKENS)
+
+
+def _sanitize_save_folder(save_folder: str | None, *, reject_invalid: bool = True) -> str | None:
+    if save_folder is None:
+        return None
+
+    normalized = save_folder.strip()
+    if not normalized:
+        return None
+
+    if _looks_like_placeholder_path(normalized):
+        if reject_invalid:
+            raise HTTPException(status_code=400, detail=INVALID_SAVE_FOLDER_MESSAGE)
+        return None
+
+    return normalized
+
+
+def _default_backend_save_folder() -> str:
+    return CLIPS_DIR
+
+
+def _resolve_save_folder(save_folder: str | None, *, reject_invalid: bool = True) -> str:
+    return _sanitize_save_folder(save_folder, reject_invalid=reject_invalid) or _default_backend_save_folder()
 
 def _sanitize_analysis_folder(raw_name: str | None) -> str | None:
     if not raw_name:
@@ -110,7 +142,7 @@ async def process_youtube_ingest_job(job_id: str, body: dict, output_dir: str) -
             overlap_tolerance=0.6,
             step_logger=lambda msg: print(msg),
             original_video_path=filepath,
-            auto_save_dir=body.get("save_folder"),
+            auto_save_dir=_resolve_save_folder(body.get("save_folder"), reject_invalid=False),
             event_logger=_stream_event,
         )
 
@@ -169,7 +201,8 @@ async def upload_video(
     print(f"[PROCESS VIDEO JOB MODE] upload_request_render_mode={render_mode}")
     print(f"[PROCESS VIDEO JOB MODE] upload_processing_render_mode={process_render_mode}")
     print("[PROCESS VIDEO JOB CONFIG] upload_request_dual_region_config=None")
-    transcription = process_video(filepath, output_dir=output_dir, render_mode=process_render_mode, original_video_path=filepath, auto_save_dir=save_folder)
+    resolved_save_folder = _resolve_save_folder(save_folder)
+    transcription = process_video(filepath, output_dir=output_dir, render_mode=process_render_mode, original_video_path=filepath, auto_save_dir=resolved_save_folder)
     return _build_upload_response(transcription, file_id, filepath, render_mode=render_mode, video_quality=video_quality)
 
 
@@ -190,6 +223,7 @@ async def ingest_youtube(request: Request):
     job_id = str(uuid.uuid4())
     body = payload.model_dump()
     body["youtube_url"] = youtube_url
+    body["save_folder"] = _resolve_save_folder(body.get("save_folder"))
     create_job(job_id, analysis_id)
     if body.get("save_folder"):
         print("[AUTO SAVE PIPELINE ACTIVE]")

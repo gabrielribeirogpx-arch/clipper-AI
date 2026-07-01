@@ -20,11 +20,13 @@ declare global {
   }
 }
 
-const fallbackExportPath = (): string => {
-  const platform = typeof navigator !== 'undefined' ? navigator.platform.toLowerCase() : '';
-  if (platform.includes('win')) return 'C:/Users/<user>/Videos/ClipperAI';
-  if (platform.includes('mac')) return '~/Movies/ClipperAI';
-  return '~/Videos/ClipperAI';
+const fallbackExportPath = (): string => '';
+
+export const isPlaceholderExportPath = (path?: string | null): boolean => {
+  const value = (path ?? '').trim();
+  if (!value) return true;
+  const lowered = value.toLowerCase();
+  return value.includes('<') || value.includes('>') || lowered.includes('<user>') || lowered.includes('{user}') || lowered.includes('%user%');
 };
 
 export const desktopBridge = {
