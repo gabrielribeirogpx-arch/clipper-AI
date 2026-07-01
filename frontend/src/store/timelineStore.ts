@@ -43,6 +43,8 @@ export type GeneratedClip = {
   duration: number;
   clip_path: string;
   final_video: string;
+  export_path?: string | null;
+  local_export_path?: string | null;
   viral_score: number;
   hook_score: number;
   retention_score: number;

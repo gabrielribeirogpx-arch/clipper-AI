@@ -37,6 +37,8 @@ function ClipCard({ clip, index }: { clip: GeneratedClip; index: number }) {
   const selected = selectedClipId === clip.id;
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const clipUrl = mediaUrl(clip.final_video);
+  const exportedPath = clip.local_export_path || clip.export_path || clip.final_video;
+  const downloadTarget = clip.export_path || clipUrl || clip.final_video;
   const title = clip.title || clip.label || `Clip ${index + 1}`;
   const badge = metadataBadge(clip);
 
@@ -76,8 +78,8 @@ function ClipCard({ clip, index }: { clip: GeneratedClip; index: number }) {
         <p className="mb-2 text-[11px] leading-relaxed text-slate-400">{scoreReason(clip)}</p>
         <div className="grid grid-cols-3 gap-2 text-[11px]">
           <button onClick={() => selectClip(clip.id)} className="rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-2 py-1.5 font-medium text-cyan-100">Aplicar</button>
-          <button onClick={() => void desktopBridge.openFolder(clip.final_video)} className="rounded-lg border border-white/12 px-2 py-1.5 text-slate-200">Pasta</button>
-          <button onClick={() => window.open(clipUrl ?? clip.final_video, '_blank')} className="rounded-lg border border-emerald-300/25 bg-emerald-300/10 px-2 py-1.5 font-medium text-emerald-100">Exportar</button>
+          <button onClick={() => void desktopBridge.openFolder(exportedPath)} className="rounded-lg border border-white/12 px-2 py-1.5 text-slate-200">Abrir pasta</button>
+          <button onClick={() => window.open(downloadTarget, '_blank')} className="rounded-lg border border-emerald-300/25 bg-emerald-300/10 px-2 py-1.5 font-medium text-emerald-100">Baixar</button>
         </div>
       </div>
     </motion.article>
