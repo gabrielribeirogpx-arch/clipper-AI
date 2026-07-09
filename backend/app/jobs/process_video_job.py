@@ -22,6 +22,7 @@ from app.services.chunk_processing_service import (
     split_video_into_chunks,
 )
 from app.services.performance_profiler import PerformanceProfiler
+from app.services.ffmpeg_gpu_fallback import run_ffmpeg_with_gpu_fallback
 
 INVALID_SAVE_FOLDER_MESSAGE = "Escolha uma pasta real para salvar os clipes."
 _PLACEHOLDER_SAVE_FOLDER_TOKENS = ("<user>", "{user}", "%user%", "$user", "username", "your_username")
@@ -196,12 +197,12 @@ def _generate_proxy(source_video_path: str, proxy_video_path: str, profiler: Per
         "ffmpeg", "-y", "-hwaccel", "auto", "-threads", "4", "-extra_hw_frames", "8",
         "-i", source_video_path,
         "-map", "0:v:0", "-map", "0:a:0?",
-        "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2",
-        "-c:v", "h264_nvenc", "-preset", "p1", "-tune", "ll",
+        "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+        "-c:v", "h264_nvenc", "-preset", "p1", "-tune", "ll", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "128k", "-ar", "16000", "-ac", "1", "-shortest",
         proxy_video_path,
     ]
-    subprocess.run(proxy_cmd, check=True)
+    run_ffmpeg_with_gpu_fallback(proxy_cmd, check=True, log_prefix="[PROXY FFMPEG]")
     profiler.end_timer("proxy_generation")
     return proxy_video_path
 
