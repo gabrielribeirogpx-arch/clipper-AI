@@ -151,10 +151,9 @@ async def _save_upload_file(file: UploadFile, analysis_id: str) -> str:
     max_upload_bytes = _max_upload_size_bytes()
     upload_dir = Path(UPLOAD_DIR) / analysis_id
     upload_dir.mkdir(parents=True, exist_ok=True)
-    base_name = _sanitize_upload_filename(file.filename)
-    destination = upload_dir / f"{base_name}{extension}"
+    destination = upload_dir / f"arquivo_original{extension}"
     if destination.exists():
-        destination = upload_dir / f"{base_name}_{uuid.uuid4().hex[:8]}{extension}"
+        destination = upload_dir / f"arquivo_original_{uuid.uuid4().hex[:8]}{extension}"
 
     bytes_written = 0
     try:
