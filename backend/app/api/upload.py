@@ -23,7 +23,9 @@ router = APIRouter()
 UPLOAD_DIR = "data/uploads"
 CLIPS_DIR = "app/clips"
 ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm"}
-UPLOAD_CHUNK_SIZE = 1024 * 1024
+UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024
+DEFAULT_MAX_UPLOAD_SIZE_GB = 20
+MAX_UPLOAD_SIZE_ENV = "MAX_UPLOAD_SIZE_GB"
 INVALID_SAVE_FOLDER_MESSAGE = "Escolha uma pasta real para salvar os clipes."
 _PLACEHOLDER_SAVE_FOLDER_TOKENS = ("<user>", "{user}", "%user%", "$user", "username", "your_username")
 
@@ -100,6 +102,34 @@ def _parse_time_to_seconds(value: str | None) -> float | None:
     return parts[0]
 
 
+def _parse_max_upload_size_gb() -> float:
+    raw_value = os.getenv(MAX_UPLOAD_SIZE_ENV, str(DEFAULT_MAX_UPLOAD_SIZE_GB)).strip()
+    try:
+        value = float(raw_value)
+    except ValueError:
+        print(f"[UPLOAD CONFIG] Invalid {MAX_UPLOAD_SIZE_ENV}={raw_value!r}; using {DEFAULT_MAX_UPLOAD_SIZE_GB}GB")
+        return float(DEFAULT_MAX_UPLOAD_SIZE_GB)
+    return max(value, 0.0)
+
+
+def _max_upload_size_bytes() -> int | None:
+    max_gb = _parse_max_upload_size_gb()
+    if max_gb == 0:
+        return None
+    return int(max_gb * 1024 * 1024 * 1024)
+
+
+def _format_upload_limit_gb(max_bytes: int | None = None) -> str:
+    if max_bytes is None:
+        return "0"
+    value = max_bytes / (1024 * 1024 * 1024)
+    return f"{value:g}"
+
+
+def _upload_limit_error_message(max_bytes: int) -> str:
+    return f"Arquivo maior que o limite configurado de {_format_upload_limit_gb(max_bytes)}GB."
+
+
 def _safe_upload_extension(filename: str | None, content_type: str | None = None) -> str:
     suffix = Path(filename or "").suffix.lower()
     if suffix in ALLOWED_VIDEO_EXTENSIONS:
@@ -118,6 +148,7 @@ def _sanitize_upload_filename(filename: str | None, fallback: str = "source") ->
 
 async def _save_upload_file(file: UploadFile, analysis_id: str) -> str:
     extension = _safe_upload_extension(file.filename, file.content_type)
+    max_upload_bytes = _max_upload_size_bytes()
     upload_dir = Path(UPLOAD_DIR) / analysis_id
     upload_dir.mkdir(parents=True, exist_ok=True)
     base_name = _sanitize_upload_filename(file.filename)
@@ -126,13 +157,19 @@ async def _save_upload_file(file: UploadFile, analysis_id: str) -> str:
         destination = upload_dir / f"{base_name}_{uuid.uuid4().hex[:8]}{extension}"
 
     bytes_written = 0
-    with destination.open("wb") as buffer:
-        while True:
-            chunk = await file.read(UPLOAD_CHUNK_SIZE)
-            if not chunk:
-                break
-            bytes_written += len(chunk)
-            buffer.write(chunk)
+    try:
+        with destination.open("wb") as buffer:
+            while True:
+                chunk = await file.read(UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                bytes_written += len(chunk)
+                if max_upload_bytes is not None and bytes_written > max_upload_bytes:
+                    raise HTTPException(status_code=413, detail=_upload_limit_error_message(max_upload_bytes))
+                buffer.write(chunk)
+    except HTTPException:
+        destination.unlink(missing_ok=True)
+        raise
 
     if bytes_written == 0:
         destination.unlink(missing_ok=True)
@@ -295,6 +332,14 @@ async def upload_video(
     create_job(job_id, analysis_id)
     asyncio.create_task(process_upload_ingest_job(job_id, body, output_dir, filepath))
     return {"success": True, "job_id": job_id, "analysis_id": analysis_id, "status": "uploaded"}
+
+
+@router.get("/api/upload/config")
+async def upload_config():
+    return {
+        "max_upload_size_gb": _parse_max_upload_size_gb(),
+        "allowed_extensions": sorted(extension.lstrip(".") for extension in ALLOWED_VIDEO_EXTENSIONS),
+    }
 
 
 @router.post("/ingest/youtube")

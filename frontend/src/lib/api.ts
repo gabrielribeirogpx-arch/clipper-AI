@@ -32,6 +32,17 @@ export const API_BASE = (process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 
 
 export const apiUrl = (path: string) => `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
 
+export type UploadConfig = {
+  max_upload_size_gb: number;
+  allowed_extensions: string[];
+};
+
+export async function getUploadConfig(): Promise<UploadConfig> {
+  const response = await fetch(apiUrl('/api/upload/config'));
+  if (!response.ok) throw new Error(await responseErrorMessage(response, 'Failed to fetch upload config'));
+  return response.json() as Promise<UploadConfig>;
+}
+
 const isAbsoluteLocalPath = (path: string) => /^(?:[a-zA-Z]:[\\/]|\\\\|\/)/.test(path);
 
 const isInvalidSaveFolder = (path?: string | null) => {
