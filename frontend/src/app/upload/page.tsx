@@ -3,13 +3,13 @@
 import { ChangeEvent, DragEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ApiError, createIngestStream, getIngestJobState, getIngestStatus, ingestYouTubeJob, uploadVideo } from '@/lib/api';
+import { ApiError, createIngestStream, getIngestJobState, getIngestStatus, getUploadConfig, ingestYouTubeJob, uploadVideo } from '@/lib/api';
 import { BROWSER_INTERNAL_SAVE_FOLDER_MESSAGE, INTERNAL_APP_FOLDER_LABEL, isAbsoluteLocalPath, isPlaceholderExportPath } from '@/lib/desktopBridge';
 import { useUploadStore } from '@/store/uploadStore';
 import { useTimelineStore } from '@/store/timelineStore';
 import { useExportSettingsStore } from '@/store/exportSettingsStore';
 
-const MAX_SIZE = 1024 * 1024 * 1024;
+const DEFAULT_UPLOAD_CONFIG = { max_upload_size_gb: 20, allowed_extensions: ['mp4', 'mov', 'mkv', 'webm'] };
 const MAX_YOUTUBE_DURATION_SECONDS = 6 * 60 * 60;
 const STALE_INGEST_MESSAGE = 'Previous ingest session expired. Please start a new analysis.';
 const REAL_SAVE_FOLDER_MESSAGE = BROWSER_INTERNAL_SAVE_FOLDER_MESSAGE;
@@ -221,7 +221,7 @@ export default function UploadPage() {
   const isRealFileUploadActive = Boolean(store.uploadedVideo) && isUploadStatusInProgress;
   const isRealIngestActive = Boolean(store.activeJobId);
   const showUploadCard = isRealIngestActive || isStartingYoutubeIngest || isRealFileUploadActive;
-  const uploadCardLabel = store.uploadStatus === 'uploading' ? 'Enviando vídeo...' : (store.processingStage ?? store.currentStep ?? 'Processing...');
+  const uploadCardLabel = store.uploadStatus === 'uploading' ? 'Enviando vídeo grande, isso pode levar alguns minutos.' : (store.processingStage ?? store.currentStep ?? 'Processing...');
   const streamingStages = [
     ['Download', store.uploadProgress >= 10],
     ['Proxy / áudio / waveform', store.pipelineEvents.some((event) => event.stage === 'ingestion' && event.event === 'PIPELINE_STAGE_FINISHED')],
@@ -231,13 +231,27 @@ export default function UploadPage() {
   ] as const;
   const hasRealExportDirectory = !isPlaceholderExportPath(exportDirectory) && isAbsoluteLocalPath(exportDirectory);
   const effectiveSaveFolder = hasRealExportDirectory ? exportDirectory : undefined;
-  const ALLOWED_FILE_EXTENSIONS = ['.mp4', '.mov', '.mkv', '.webm'];
+  const [uploadConfig, setUploadConfig] = useState(DEFAULT_UPLOAD_CONFIG);
+  const allowedFileExtensions = useMemo(() => uploadConfig.allowed_extensions.map((extension) => extension.startsWith('.') ? extension.toLowerCase() : `.${extension.toLowerCase()}`), [uploadConfig.allowed_extensions]);
+  const uploadLimitBytes = uploadConfig.max_upload_size_gb > 0 ? uploadConfig.max_upload_size_gb * 1024 * 1024 * 1024 : 0;
+  const uploadLimitLabel = `${uploadConfig.max_upload_size_gb}GB`;
   const validateFile = (file: File) => {
     const lowerName = file.name.toLowerCase();
-    const hasAllowedExtension = ALLOWED_FILE_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
+    const hasAllowedExtension = allowedFileExtensions.some((extension) => lowerName.endsWith(extension));
     if (!hasAllowedExtension) return 'Formato inválido. Envie um arquivo MP4, MOV, MKV ou WEBM.';
-    return file.size > MAX_SIZE ? 'Arquivo maior que 1GB.' : null;
+    return uploadLimitBytes > 0 && file.size > uploadLimitBytes ? `Arquivo maior que o limite configurado de ${uploadLimitLabel}.` : null;
   };
+
+
+  useEffect(() => {
+    let cancelled = false;
+    getUploadConfig()
+      .then((config) => {
+        if (!cancelled) setUploadConfig(config);
+      })
+      .catch((error) => console.warn('[UPLOAD CONFIG FALLBACK]', error));
+    return () => { cancelled = true; };
+  }, []);
 
   const selectLocalFile = (file: File) => {
     const validation = validateFile(file);
@@ -262,6 +276,7 @@ export default function UploadPage() {
     resetForNewAnalysis();
     store.setUploadedVideo({ name: file.name, size: file.size, type: file.type, previewUrl: URL.createObjectURL(file) });
     store.setUploadStatus('uploading');
+    store.setProcessingStage('Enviando vídeo grande, isso pode levar alguns minutos.');
     console.log('[UPLOAD SELECTED RENDER MODE]', { source: 'file_upload', renderMode });
     const result = await uploadVideo(file, analysisName, store.setUploadProgress, renderMode, videoQuality, effectiveSaveFolder, undefined, undefined, minClipLength, maxClipLength).catch((e) => {
       store.setUploadStatus('error');
