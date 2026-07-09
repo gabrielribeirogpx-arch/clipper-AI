@@ -283,8 +283,11 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
     profiler.record_gpu_info()
     profiler.start_timer("total_pipeline")
     source_video_path = original_video_path or video_path
+    analysis_video_path = proxy_video_path or os.path.join(output_dir, "proxy_720p.mp4")
     source_start_time = float(source_start_time or 0)
-    proxy_video_path = proxy_video_path or os.path.join(output_dir, "proxy_720p.mp4")
+    proxy_video_path = analysis_video_path
+    print(f"[FINAL RENDER SOURCE] original_video_path={source_video_path}")
+    print(f"[ANALYSIS PROXY SOURCE] proxy_path={proxy_video_path}")
     audio_path = os.path.join(output_dir, "audio_16k.wav")
     waveform_path = os.path.join(output_dir, "waveform.png")
     cache = load_analysis_cache(analysis_id) or {}
@@ -340,7 +343,9 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
     max_parallel_renders = max(1, int(os.getenv("MAX_PARALLEL_RENDERS", "2")))
 
     def _render(idx, hook):
-        raw = cut_clip(proxy_video_path, hook["start"], hook["end"], f"raw_clip_{idx}.mp4", output_dir=output_dir)
+        print(f"[FINAL RENDER SOURCE] original_video_path={source_video_path}")
+        print(f"[ANALYSIS PROXY SOURCE] proxy_path={proxy_video_path}")
+        raw = cut_clip(source_video_path, hook["start"], hook["end"], f"raw_clip_{idx}.mp4", output_dir=output_dir)
         processed = raw
         if render_mode == "ai_tracking":
             processed = render_vertical_clip(raw, transcription["segments"], os.path.join(output_dir, f"clip_{idx}.mp4"), speaker_segments=transcription.get("speaker_segments", []), tracking_video_path=proxy_video_path, original_video_path=source_video_path)

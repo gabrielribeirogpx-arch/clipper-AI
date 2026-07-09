@@ -9,6 +9,7 @@ from app.services.render_quality import (
     EXPORT_AUDIO_BITRATE,
     EXPORT_AUDIO_CODEC,
     EXPORT_CRF,
+    EXPORT_QUALITY_MODE,
     EXPORT_MOVFLAGS,
     EXPORT_PIXEL_FORMAT,
     EXPORT_PRESET,
@@ -43,6 +44,28 @@ os.makedirs(CLIPS_DIR, exist_ok=True)
 FFMPEG_TIMEOUT_SECONDS = int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "7200"))
 
 
+
+def _probe_video_stream(media_path: str) -> Dict:
+    cmd = [
+        "ffprobe", "-v", "error", "-select_streams", "v:0",
+        "-show_entries", "stream=width,height,avg_frame_rate", "-of", "json", media_path,
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        return {"error": proc.stderr.strip()}
+    try:
+        data = __import__("json").loads(proc.stdout or "{}")
+    except ValueError:
+        return {"error": "invalid_json"}
+    streams = data.get("streams") or []
+    return streams[0] if streams else {}
+
+def _export_settings_for_mode() -> Dict[str, str]:
+    mode = EXPORT_QUALITY_MODE
+    crf = "18" if mode == "balanced" else "14"
+    preset = "medium" if mode == "balanced" else "slow"
+    return {"crf": crf, "preset": preset, "mode": mode}
+
 def _probe_bitrate(media_path: str) -> str:
     cmd = [
         "ffprobe", "-v", "error", "-select_streams", "v:0",
@@ -75,56 +98,58 @@ def cut_clip(input_file, start, end, output_name, output_dir: str = CLIPS_DIR, p
 
     os.makedirs(output_dir, exist_ok=True)
     output_path = f"{output_dir}/{output_name}"
-
+    settings = _export_settings_for_mode()
+    metadata = _probe_video_stream(input_file)
+    print(f"[EXPORT QUALITY] mode={settings['mode']}")
+    print(f"[STREAM COPY FINAL] enabled={prefer_stream_copy and settings['mode'] == 'original'}")
+    print(f"[FINAL RENDER RESOLUTION] width={metadata.get('width')} height={metadata.get('height')}")
     print("[FAST SEEK ENABLED]")
     print("[PRE-INPUT SEEK ACTIVE]")
     print("[SMART REMUX ACTIVE]")
-    command = [
-        "ffmpeg",
-        "-y",
-        "-ss",
-        str(start),
-        "-to",
-        str(end),
-        "-i",
-        input_file,
-        "-avoid_negative_ts",
-        "make_zero",
-        "-fflags",
-        "+genpts",
-    ]
 
-    if prefer_stream_copy:
+    def _stream_copy_command() -> List[str]:
+        return [
+            "ffmpeg", "-y", "-ss", str(start), "-to", str(end), "-i", input_file,
+            "-map", "0:v:0", "-map", "0:a:0?", "-avoid_negative_ts", "make_zero",
+            "-fflags", "+genpts", "-c", "copy", output_path,
+        ]
+
+    def _reencode_command() -> List[str]:
+        return [
+            "ffmpeg", "-y", "-ss", str(start), "-to", str(end), "-i", input_file,
+            "-map", "0:v:0", "-map", "0:a:0?", "-avoid_negative_ts", "make_zero",
+            "-fflags", "+genpts", "-c:v", ENCODER.codec, "-preset", settings["preset"],
+            "-crf", settings["crf"], "-pix_fmt", EXPORT_PIXEL_FORMAT, "-c:a", "aac",
+            "-b:a", "320k", "-movflags", EXPORT_MOVFLAGS, output_path,
+        ]
+
+    commands = []
+    if prefer_stream_copy and settings["mode"] == "original":
         print("[STREAM COPY ENABLED]")
-        command.extend(["-c", "copy", output_path])
-    else:
-        command.extend([
-            "-c:v",
-            ENCODER.codec,
-            "-preset",
-            ENCODER.preset,
-            "-crf",
-            str(EXPORT_CRF),
-            "-c:a",
-            "aac",
-            "-b:a",
-            EXPORT_AUDIO_BITRATE,
-            output_path
-        ])
+        commands.append(("stream_copy", _stream_copy_command()))
+    commands.append(("reencode", _reencode_command()))
 
-    _log_real_ffmpeg_command(command, input_file, output_path, {"crf": str(EXPORT_CRF), "preset": ENCODER.preset}, "cut")
-    print(f"[FFMPEG START] profile=cut command={' '.join(command)}")
-    try:
-        proc = run_ffmpeg_with_gpu_fallback(command, timeout=FFMPEG_TIMEOUT_SECONDS, log_prefix="[FFMPEG]")
-    except subprocess.TimeoutExpired:
-        print(f"[FFMPEG TIMEOUT] profile=cut timeout={FFMPEG_TIMEOUT_SECONDS}s output={output_path}")
-        return output_path
-    if proc.returncode != 0:
-        print(f"[FFMPEG ERROR] profile=cut output={output_path} stderr={proc.stderr}")
-    else:
-        print(f"[FFMPEG SUCCESS] profile=cut output={output_path}")
-        _log_output_stats(output_path)
+    last_error = None
+    for profile, command in commands:
+        _log_real_ffmpeg_command(command, input_file, output_path, {"crf": settings["crf"], "preset": settings["preset"]}, f"cut_{profile}")
+        print(f"[FFMPEG START] profile=cut_{profile} command={' '.join(command)}")
+        try:
+            proc = run_ffmpeg_with_gpu_fallback(command, timeout=FFMPEG_TIMEOUT_SECONDS, log_prefix="[FFMPEG]")
+        except subprocess.TimeoutExpired:
+            last_error = f"timeout:{FFMPEG_TIMEOUT_SECONDS}s"
+            print(f"[FFMPEG TIMEOUT] profile=cut_{profile} timeout={FFMPEG_TIMEOUT_SECONDS}s output={output_path}")
+            continue
+        if proc.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            print(f"[FFMPEG SUCCESS] profile=cut_{profile} output={output_path}")
+            _log_output_stats(output_path)
+            return output_path
+        last_error = proc.stderr
+        print(f"[FFMPEG ERROR] profile=cut_{profile} output={output_path} stderr={proc.stderr}")
+        if profile == "stream_copy":
+            print(f"[FINAL RENDER FALLBACK] reason=stream_copy_failed")
 
+    if last_error:
+        print(f"[FINAL RENDER FALLBACK] reason={str(last_error)[:500]}")
     return output_path
 
 

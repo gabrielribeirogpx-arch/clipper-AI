@@ -68,13 +68,19 @@ def _detect_dominant_subject_center(video_path: str) -> tuple[float, float]:
 def _probe_dimensions(media_path: str) -> tuple[int, int]:
     probe_cmd = [
         "ffprobe", "-v", "error", "-select_streams", "v:0",
-        "-show_entries", "stream=width,height", "-of", "csv=p=0:s=x", media_path,
+        "-show_entries", "stream=width,height", "-of", "json", media_path,
     ]
     proc = subprocess.run(probe_cmd, capture_output=True, text=True, check=False)
     if proc.returncode != 0:
         raise RuntimeError(f"Failed to probe video dimensions for {media_path}: {proc.stderr}")
-    w, h = (proc.stdout or "").strip().split("x", 1)
-    return int(w), int(h)
+    try:
+        data = json.loads(proc.stdout or "{}")
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"Failed to parse ffprobe dimensions for {media_path}: {error}") from error
+    stream = next((item for item in data.get("streams", []) if item.get("width") and item.get("height")), None)
+    if not stream:
+        raise RuntimeError(f"No video dimensions found for {media_path}")
+    return int(stream["width"]), int(stream["height"])
 
 
 def _probe_bitrate(media_path: str) -> str:
