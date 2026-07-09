@@ -4,6 +4,7 @@ import shlex
 from pathlib import Path
 from typing import Dict, List, Literal
 from app.services.video_encoder_service import detect_best_encoder
+from app.services.ffmpeg_gpu_fallback import run_ffmpeg_with_gpu_fallback
 from app.services.render_quality import (
     EXPORT_AUDIO_BITRATE,
     EXPORT_AUDIO_CODEC,
@@ -114,7 +115,7 @@ def cut_clip(input_file, start, end, output_name, output_dir: str = CLIPS_DIR, p
     _log_real_ffmpeg_command(command, input_file, output_path, {"crf": str(EXPORT_CRF), "preset": ENCODER.preset}, "cut")
     print(f"[FFMPEG START] profile=cut command={' '.join(command)}")
     try:
-        proc = subprocess.run(command, capture_output=True, text=True, check=False, timeout=FFMPEG_TIMEOUT_SECONDS)
+        proc = run_ffmpeg_with_gpu_fallback(command, timeout=FFMPEG_TIMEOUT_SECONDS, log_prefix="[FFMPEG]")
     except subprocess.TimeoutExpired:
         print(f"[FFMPEG TIMEOUT] profile=cut timeout={FFMPEG_TIMEOUT_SECONDS}s output={output_path}")
         return output_path
@@ -204,7 +205,7 @@ def apply_broll_overlay(
     _log_real_ffmpeg_command(command, clip_path, output_path, settings, quality_profile)
     print(f"[FFMPEG START] profile={quality_profile} command={' '.join(command)}")
     try:
-        proc = subprocess.run(command, capture_output=True, text=True, check=False, timeout=FFMPEG_TIMEOUT_SECONDS)
+        proc = run_ffmpeg_with_gpu_fallback(command, timeout=FFMPEG_TIMEOUT_SECONDS, log_prefix="[FFMPEG]")
     except subprocess.TimeoutExpired:
         print(f"[FFMPEG TIMEOUT] profile=cut timeout={FFMPEG_TIMEOUT_SECONDS}s output={output_path}")
         return output_path

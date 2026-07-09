@@ -13,6 +13,7 @@ import numpy as np
 from moviepy.editor import VideoFileClip
 
 from app.services.reframing_service import ReframingService
+from app.services.ffmpeg_gpu_fallback import run_ffmpeg_with_gpu_fallback
 from app.services.render_quality import (
     EXPORT_AUDIO_BITRATE,
     EXPORT_AUDIO_CODEC,
@@ -139,16 +140,16 @@ def _create_proxy_if_needed(video_path: str) -> tuple[str, bool]:
     proxy_file.close()
     proxy_path = proxy_file.name
     cmd = [
-        "ffmpeg", "-y", "-i", video_path, "-vf", "scale=1920:-2",
-        "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p", "-an", proxy_path,
+        "ffmpeg", "-y", "-i", video_path, "-vf", "scale=1920:-2,format=yuv420p",
+        "-c:v", "h264_nvenc", "-preset", "p4", "-crf", "18", "-pix_fmt", "yuv420p", "-an", proxy_path,
     ]
     print(f"[REAL FFMPEG COMMAND] {' '.join(shlex.quote(part) for part in cmd)}")
     print(f"[REAL INPUT FILE] {video_path}")
     print(f"[REAL OUTPUT FILE] {proxy_path}")
     print("[REAL CRF] 18")
-    print("[REAL PRESET] medium")
+    print("[REAL PRESET] p4")
     _log_file_stats("REAL INPUT", video_path)
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    proc = run_ffmpeg_with_gpu_fallback(cmd, log_prefix="[TRACKING PROXY FFMPEG]")
     if proc.returncode != 0:
         raise RuntimeError(f"Failed to create proxy video.\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
     return proxy_path, True
@@ -263,7 +264,7 @@ def render_dual_region_clip(video_path: str, output_path: str, dual_regions: Dic
     ]
     print("[DUAL REGION FFMPEG START]")
     print(f"[DUAL REGION FFMPEG COMMAND] {' '.join(shlex.quote(part) for part in cmd)}")
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    proc = run_ffmpeg_with_gpu_fallback(cmd, log_prefix="[TRACKING PROXY FFMPEG]")
     if proc.returncode != 0:
         raise RuntimeError(f"Dual region render failed: {proc.stderr}")
     final_w, final_h = _probe_dimensions(output_path)
@@ -295,7 +296,7 @@ def render_semi_auto_vertical(video_path: str, output_path: str) -> str:
     print(f"[SEMI AUTO FINAL CROP] x={x} y={y} width={crop_w} height={crop_h}")
     vf = f"crop={crop_w}:{crop_h}:{x}:{y},scale=1080:1920:flags=lanczos,format=yuv420p"
     cmd = ["ffmpeg","-y","-i",video_path,"-vf",vf,"-map","0:v","-map","0:a?","-c:v",EXPORT_VIDEO_CODEC,"-crf",str(EXPORT_CRF),"-preset",EXPORT_PRESET,"-pix_fmt",EXPORT_PIXEL_FORMAT,"-c:a",EXPORT_AUDIO_CODEC,"-b:a",EXPORT_AUDIO_BITRATE,"-movflags",EXPORT_MOVFLAGS,output_path]
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    proc = run_ffmpeg_with_gpu_fallback(cmd, log_prefix="[TRACKING PROXY FFMPEG]")
     if proc.returncode != 0:
         raise RuntimeError(f"Semi auto render failed: {proc.stderr}")
     final_w, final_h = _probe_dimensions(output_path)

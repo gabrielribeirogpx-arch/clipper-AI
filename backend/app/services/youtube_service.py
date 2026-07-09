@@ -17,8 +17,11 @@ import tempfile
 from fractions import Fraction
 from dataclasses import dataclass
 
+from app.services.ffmpeg_gpu_fallback import run_ffmpeg_with_gpu_fallback
+
 UPLOAD_DIR = "app/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 logger = logging.getLogger(__name__)
 QUALITY_HEIGHTS = {
     "720p": 720,
@@ -649,6 +652,8 @@ def _normalize_to_h264_mp4(media_path: str, ffmpeg_location: str | None) -> str:
         "0:v:0",
         "-map",
         "0:a:0?",
+        "-vf",
+        "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
         "-c:v",
         "h264_nvenc",
         "-preset",
@@ -664,13 +669,7 @@ def _normalize_to_h264_mp4(media_path: str, ffmpeg_location: str | None) -> str:
         normalized_path,
     ]
     logger.info("FORMAT_NORMALIZATION", extra={"codec": codec_name, "format": format_name, "command": nvenc_cmd})
-    normalize_result = subprocess.run(nvenc_cmd, check=False, capture_output=True, text=True)
-    if normalize_result.returncode != 0:
-        libx264_cmd = [*nvenc_cmd]
-        libx264_cmd[libx264_cmd.index("h264_nvenc")] = "libx264"
-        libx264_cmd[libx264_cmd.index("p4")] = "veryfast"
-        logger.warning("[YOUTUBE NORMALIZE NVENC FALLBACK]", extra={"stderr": normalize_result.stderr, "command": libx264_cmd})
-        normalize_result = subprocess.run(libx264_cmd, check=False, capture_output=True, text=True)
+    normalize_result = run_ffmpeg_with_gpu_fallback(nvenc_cmd, log_prefix="[YOUTUBE NORMALIZE FFMPEG]")
     if normalize_result.returncode != 0:
         logger.error("[YOUTUBE NORMALIZE FAILED]", extra={"stderr": normalize_result.stderr})
         return media_path
