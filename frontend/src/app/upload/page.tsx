@@ -231,15 +231,34 @@ export default function UploadPage() {
   ] as const;
   const hasRealExportDirectory = !isPlaceholderExportPath(exportDirectory) && isAbsoluteLocalPath(exportDirectory);
   const effectiveSaveFolder = hasRealExportDirectory ? exportDirectory : undefined;
-  const validateFile = (file: File) => (['video/mp4', 'video/quicktime'].includes(file.type) ? (file.size > MAX_SIZE ? 'Arquivo maior que 1GB.' : null) : 'Somente MP4 ou MOV.');
+  const ALLOWED_FILE_EXTENSIONS = ['.mp4', '.mov', '.mkv', '.webm'];
+  const validateFile = (file: File) => {
+    const lowerName = file.name.toLowerCase();
+    const hasAllowedExtension = ALLOWED_FILE_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
+    if (!hasAllowedExtension) return 'Formato inválido. Envie um arquivo MP4, MOV, MKV ou WEBM.';
+    return file.size > MAX_SIZE ? 'Arquivo maior que 1GB.' : null;
+  };
+
+  const selectLocalFile = (file: File) => {
+    const validation = validateFile(file);
+    if (validation) {
+      setError(validation);
+      return;
+    }
+    fileRef.current = file;
+    setError(null);
+    store.setUploadedVideo({ name: file.name, size: file.size, type: file.type || 'video/local', previewUrl: URL.createObjectURL(file) });
+    store.setUploadStatus('idle');
+    store.setProcessingStage('Upload pronto para iniciar.');
+  };
 
   const processFile = async (file: File) => {
     dualRegionRedirectedRef.current = false;
-    fileRef.current = file;
     const validation = validateFile(file);
     if (validation) return setError(validation);
     if (!hasRealExportDirectory) setToast(REAL_SAVE_FOLDER_MESSAGE);
     setError(null);
+    if (store.activeJobId) return setError('Já existe um job em execução. Aguarde finalizar.');
     resetForNewAnalysis();
     store.setUploadedVideo({ name: file.name, size: file.size, type: file.type, previewUrl: URL.createObjectURL(file) });
     store.setUploadStatus('uploading');
@@ -249,30 +268,12 @@ export default function UploadPage() {
       throw e;
     });
     store.setUploadStatus('processing');
-    store.setProcessingStage('Processing upload...');
-    store.setUploadResult(result.project_id, result.timeline);
-    store.updateIngestState({ status: result.status ?? 'completed' });
-    const analysisId = result.analysis_id;
-    if (!analysisId) throw new Error('Missing analysis_id in upload response');
-    store.updateIngestState({ analysisId, status: result.status ?? 'completed' });
-    console.log('[UPLOAD SUCCESS RENDER MODE]', { source: 'file_upload', render_mode: result.render_mode, analysis_id: analysisId });
-    await hydrateFromBackend(analysisId);
-    store.setUploadStatus('success');
-    setRecentUploads((prev) => [file.name, ...prev].slice(0, 4));
-      if ((result.clips?.length ?? 0) > 0) setTimeout(() => {
-        console.log('[FRONTEND ANALYSIS ID]', analysisId);
-        redirectToPostAnalyzeTarget(analysisId, renderMode, result.render_mode);
-      }, 600);
-      if (result.status === 'waiting_dual_region') {
-        store.updateIngestState({ status: 'waiting_dual_region', analysisId });
-        console.log('[DUAL REGION STATUS RECEIVED]', { analysis_id: analysisId, status: result.status });
-        setTimeout(() => redirectToPostAnalyzeTarget(analysisId, renderMode, result.render_mode), 300);
-      }
-      if (result.status === 'processing') {
-        store.updateIngestState({ status: 'processing', analysisId });
-        console.log('[SEMI AUTO WAITING FOR SETUP]', { analysis_id: analysisId, status: result.status });
-        setTimeout(() => redirectToPostAnalyzeTarget(analysisId, renderMode, result.render_mode), 300);
-      }
+    store.setUploadProgress(5);
+    store.setProcessingStage('Upload concluído. Preparando análise');
+    store.setActiveJob(result.job_id, result.analysis_id);
+    console.log('[UPLOAD JOB CREATED]', { source: 'file_upload', job_id: result.job_id, analysis_id: result.analysis_id });
+    const outcome = await subscribeToJob(result.job_id);
+    if (outcome === 'completed') setRecentUploads((prev) => [file.name, ...prev].slice(0, 4));
   };
 
   const clearIngestResources = (jobId?: string) => {
@@ -478,7 +479,7 @@ export default function UploadPage() {
   });
 
   const processYoutube = async () => {
-    if (!youtubeUrl.trim()) return setError('YouTube URL is required.');
+    if (!youtubeUrl.trim()) return setError('Informe um link do YouTube ou selecione um arquivo de vídeo.');
     if (!hasRealExportDirectory) setToast(REAL_SAVE_FOLDER_MESSAGE);
     setError(null);
     if (store.activeJobId) return setError('Já existe um job em execução. Aguarde finalizar.');
@@ -581,22 +582,31 @@ export default function UploadPage() {
     return () => clearIngestResources();
   }, []);
 
-  const handleAnalyzeYoutube = (event: MouseEvent<HTMLButtonElement>) => {
+  const handleAnalyze = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     console.log('[ANALYZE BUTTON CLICKED]');
-    void processYoutube().catch((e) => setError(cleanDisplayError(e)));
+    const selectedFile = fileRef.current;
+    if (selectedFile) {
+      void processFile(selectedFile).catch((e) => setError(cleanDisplayError(e)));
+      return;
+    }
+    if (youtubeUrl.trim()) {
+      void processYoutube().catch((e) => setError(cleanDisplayError(e)));
+      return;
+    }
+    setError('Selecione um arquivo de vídeo ou informe um link do YouTube.');
   };
 
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragging(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) void processFile(file).catch((e) => setError(cleanDisplayError(e)));
+    if (file) selectLocalFile(file);
   };
 
   const onFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) void processFile(file).catch((err) => setError(cleanDisplayError(err)));
+    if (file) selectLocalFile(file);
   };
 
   return (
@@ -620,10 +630,10 @@ export default function UploadPage() {
           animate={{ scale: isDragging ? 1.01 : 1, boxShadow: isDragging ? '0 0 50px rgba(34,211,238,.35)' : '0 0 20px rgba(168,85,247,.18)' }}
           className="mt-5 rounded-2xl border border-dashed border-cyan-300/45 bg-[#081025]/70 p-5 text-center sm:p-6"
         >
-          <p className="text-base">Drag & drop MP4/MOV</p>
+          <p className="text-base">Drag & drop MP4/MOV/MKV/WEBM</p>
           <label className="mx-auto mt-4 inline-flex cursor-pointer rounded-xl bg-gradient-to-r from-cyan-300 to-violet-500 px-5 py-2.5 text-sm font-semibold text-slate-950">
             Upload Video
-            <input type="file" accept="video/mp4,video/quicktime" className="hidden" onChange={onFileSelect} />
+            <input type="file" accept="video/mp4,video/quicktime,video/x-matroska,video/webm,.mp4,.mov,.mkv,.webm" className="hidden" onChange={onFileSelect} />
           </label>
         </motion.div>
 
@@ -664,8 +674,8 @@ export default function UploadPage() {
               <input type="number" min={minClipLength} max={300} value={maxClipLength} onChange={(e) => setMaxClipLength(clamp(Number(e.target.value), minClipLength, 300))} className="w-full rounded-lg bg-slate-900 px-3 py-2" />
             </label>
           </div>
-          <button type="button" onClick={handleAnalyzeYoutube} className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300">
-            Analyze YouTube livestream
+          <button type="button" onClick={handleAnalyze} className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300">
+            Analisar vídeo
           </button>
         </div>
 
