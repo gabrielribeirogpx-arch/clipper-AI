@@ -14,14 +14,16 @@ from app.services.youtube_service import download_youtube_video, YouTubeDownload
 from app.data.ingest_jobs import cleanup_jobs, create_job, get_job, register_listener, unregister_listener, update_job
 from app.schemas.upload import YoutubeIngestRequest
 import uuid
-import shutil
 import threading
+from dataclasses import dataclass
 from app.services.ai_metadata_service import apply_metadata_to_clip, generate_metadata, max_clips, select_provider
 
 router = APIRouter()
 
-UPLOAD_DIR = "app/uploads"
+UPLOAD_DIR = "data/uploads"
 CLIPS_DIR = "app/clips"
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm"}
+UPLOAD_CHUNK_SIZE = 1024 * 1024
 INVALID_SAVE_FOLDER_MESSAGE = "Escolha uma pasta real para salvar os clipes."
 _PLACEHOLDER_SAVE_FOLDER_TOKENS = ("<user>", "{user}", "%user%", "$user", "username", "your_username")
 
@@ -98,102 +100,170 @@ def _parse_time_to_seconds(value: str | None) -> float | None:
     return parts[0]
 
 
-async def process_youtube_ingest_job(job_id: str, body: dict, output_dir: str) -> None:
-    try:
-        update_job(job_id, status="downloading", progress=10, step="Downloading YouTube video")
-        print(f"[SOURCE_INTERVAL_SELECTED] source_start_time={body.get('source_start_time') or body.get('start_time')} source_end_time={body.get('source_end_time') or body.get('end_time')}")
-        filepath = await asyncio.to_thread(
+def _safe_upload_extension(filename: str | None, content_type: str | None = None) -> str:
+    suffix = Path(filename or "").suffix.lower()
+    if suffix in ALLOWED_VIDEO_EXTENSIONS:
+        return suffix
+    raise HTTPException(
+        status_code=400,
+        detail="Formato de vídeo inválido. Envie um arquivo .mp4, .mov, .mkv ou .webm.",
+    )
+
+
+def _sanitize_upload_filename(filename: str | None, fallback: str = "source") -> str:
+    stem = Path(filename or fallback).stem.strip()
+    stem = re.sub(r"[^a-zA-Z0-9._-]+", "_", stem).strip("._-")
+    return stem or fallback
+
+
+async def _save_upload_file(file: UploadFile, analysis_id: str) -> str:
+    extension = _safe_upload_extension(file.filename, file.content_type)
+    upload_dir = Path(UPLOAD_DIR) / analysis_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    base_name = _sanitize_upload_filename(file.filename)
+    destination = upload_dir / f"{base_name}{extension}"
+    if destination.exists():
+        destination = upload_dir / f"{base_name}_{uuid.uuid4().hex[:8]}{extension}"
+
+    bytes_written = 0
+    with destination.open("wb") as buffer:
+        while True:
+            chunk = await file.read(UPLOAD_CHUNK_SIZE)
+            if not chunk:
+                break
+            bytes_written += len(chunk)
+            buffer.write(chunk)
+
+    if bytes_written == 0:
+        destination.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="O arquivo enviado está vazio.")
+
+    print(f"[LOCAL UPLOAD SAVED] analysis_id={analysis_id} filename={file.filename} path={destination} bytes={bytes_written}")
+    return destination.as_posix()
+
+
+@dataclass
+class YouTubeSource:
+    youtube_url: str
+    start_time: str | None = None
+    end_time: str | None = None
+    video_quality: str = "1080p"
+
+    async def to_local_file(self) -> str:
+        return await asyncio.to_thread(
             download_youtube_video,
-            body["youtube_url"],
-            body.get("source_start_time") or body.get("start_time"),
-            body.get("source_end_time") or body.get("end_time"),
-            body.get("video_quality", "1080p"),
+            self.youtube_url,
+            self.start_time,
+            self.end_time,
+            self.video_quality,
         )
 
+
+@dataclass
+class LocalUploadSource:
+    video_path: str
+
+    async def to_local_file(self) -> str:
+        return self.video_path
+
+
+def _stream_progress_to_job(job_id: str):
+    def _stream_event(event: dict) -> None:
+        event_type = event.get("event")
+        progress_by_event = {
+            "PIPELINE_STAGE_STARTED": 20,
+            "PIPELINE_STAGE_FINISHED": 45,
+            "FIRST_CLIP_READY": 82,
+            "EDITOR_READY": 85,
+            "BACKGROUND_PROCESSING": 90,
+            "CLIP_RENDERED": 92,
+            "METADATA_READY": 96,
+            "BACKGROUND_FINISHED": 99,
+        }
+        stage = event.get("stage") or event_type
+        status = "processing"
+        step = str(stage).replace("_", " ").title()
+        clips = None
+        if event.get("clip"):
+            current = get_job(job_id) or {}
+            raw_clips = current.get("_raw_clips", [])
+            raw_clips = [*raw_clips, event["clip"]]
+            clips = [_clip_response_item(hook, index) for index, hook in enumerate(raw_clips)]
+            update_job(job_id, _raw_clips=raw_clips)
+        if event_type == "FIRST_CLIP_READY":
+            status = "editor_ready"
+            step = "Editor disponível — gerando mais clipes em background"
+        elif event_type == "BACKGROUND_PROCESSING":
+            status = "background_processing"
+            step = "Você já pode editar enquanto continuamos processando."
+        update_job(job_id, status=status, progress=progress_by_event.get(event_type, 50), step=step, clips=clips if clips is not None else (get_job(job_id) or {}).get("clips", []), pipeline_event=event)
+
+    return _stream_event
+
+
+async def _run_process_video_source(job_id: str, body: dict, output_dir: str, source, source_type: str, initial_step: str) -> None:
+    try:
+        update_job(job_id, status="preparing", progress=8, step=initial_step)
+        filepath = await source.to_local_file()
         render_mode = body.get("render_mode", "ai_tracking")
-        process_render_mode = render_mode
-        print(f"[BACKEND RECEIVED RENDER MODE] source=ingest_youtube render_mode={render_mode}")
-        print(f"[PROCESS VIDEO JOB MODE] ingest_request_render_mode={render_mode}")
-        print(f"[PROCESS VIDEO JOB MODE] ingest_processing_render_mode={process_render_mode}")
-        print(f"[PROCESS VIDEO JOB CONFIG] ingest_request_dual_region_config={body.get('dual_region_config')}")
-        def _stream_event(event: dict) -> None:
-            event_type = event.get("event")
-            progress_by_event = {
-                "PIPELINE_STAGE_STARTED": 20,
-                "PIPELINE_STAGE_FINISHED": 45,
-                "FIRST_CLIP_READY": 82,
-                "EDITOR_READY": 85,
-                "BACKGROUND_PROCESSING": 90,
-                "CLIP_RENDERED": 92,
-                "METADATA_READY": 96,
-                "BACKGROUND_FINISHED": 99,
-            }
-            stage = event.get("stage") or event_type
-            status = "processing"
-            step = str(stage).replace("_", " ").title()
-            clips = None
-            if event.get("clip"):
-                current = get_job(job_id) or {}
-                raw_clips = current.get("_raw_clips", [])
-                raw_clips = [*raw_clips, event["clip"]]
-                clips = [_clip_response_item(hook, index) for index, hook in enumerate(raw_clips)]
-                update_job(job_id, _raw_clips=raw_clips)
-            if event_type == "FIRST_CLIP_READY":
-                status = "editor_ready"
-                step = "Editor available — generating more clips in background"
-            elif event_type == "BACKGROUND_PROCESSING":
-                status = "background_processing"
-                step = "Você já pode editar enquanto continuamos processando."
-            update_job(job_id, status=status, progress=progress_by_event.get(event_type, 50), step=step, clips=clips if clips is not None else (get_job(job_id) or {}).get("clips", []), pipeline_event=event)
+        print(f"[PROCESS VIDEO SOURCE] source_type={source_type} analysis_id={(get_job(job_id) or {}).get('analysis_id')} video_path={filepath}")
+        print(f"[BACKEND RECEIVED RENDER MODE] source={source_type} render_mode={render_mode}")
+        print(f"[PROCESS VIDEO JOB MODE] {source_type}_processing_render_mode={render_mode}")
+        print(f"[PROCESS VIDEO JOB CONFIG] {source_type}_dual_region_config={body.get('dual_region_config')}")
+        update_job(job_id, status="processing", progress=15, step="Processando vídeo")
 
         transcription = await asyncio.to_thread(
             process_video,
             filepath,
             output_dir=output_dir,
-            render_mode=process_render_mode,
-            dual_region_config=body.get('dual_region_config'),
-            source_start_time=0,
-            source_end_time=None,
+            render_mode=render_mode,
+            dual_region_config=body.get("dual_region_config"),
+            source_start_time=0 if source_type == "youtube" else (_parse_time_to_seconds(body.get("source_start_time")) or 0),
+            source_end_time=None if source_type == "youtube" else _parse_time_to_seconds(body.get("source_end_time")),
             min_clip_length=int(body.get("min_clip_length", 30)),
             max_clip_length=int(body.get("max_clip_length", 90)),
             max_clips=25,
             min_score=0.45,
             overlap_tolerance=0.6,
-            step_logger=lambda msg: print(msg),
+            step_logger=lambda msg: print(f"[PIPELINE source_type={source_type}] {msg}"),
             original_video_path=filepath,
             auto_save_dir=_resolve_save_folder(body.get("save_folder"), reject_invalid=False),
-            event_logger=_stream_event,
+            event_logger=_stream_progress_to_job(job_id),
         )
 
+        update_job(job_id, status="processing", progress=96, step="Gerando clipes")
         response_payload = _build_upload_response(transcription, str(uuid.uuid4()), filepath, render_mode=render_mode, video_quality=body.get("video_quality", "1080p"))
         if response_payload.get("status") == "waiting_dual_region":
-            update_job(
-                job_id,
-                status="waiting_dual_region",
-                progress=100,
-                step="Waiting dual-region setup",
-                clips=response_payload.get("clips", []),
-                result=response_payload,
-            )
-            print(f"[JOB WAITING DUAL REGION] job_id={job_id}")
+            update_job(job_id, status="waiting_dual_region", progress=100, step="Waiting dual-region setup", clips=response_payload.get("clips", []), result=response_payload)
+            print(f"[JOB WAITING DUAL REGION] job_id={job_id} source_type={source_type}")
         else:
-            update_job(
-                job_id,
-                status="completed",
-                progress=100,
-                step="Completed",
-                clips=response_payload.get("clips", []),
-                result=response_payload,
-            )
-            print(f"[JOB COMPLETED] job_id={job_id}")
+            update_job(job_id, status="completed", progress=100, step="Upload concluído" if source_type == "upload" else "Completed", clips=response_payload.get("clips", []), result=response_payload)
+            print(f"[JOB COMPLETED] job_id={job_id} source_type={source_type}")
     except YouTubeDownloadError as error:
         update_job(job_id, status="failed", progress=100, step="Failed", error={"category": error.category, "message": error.message})
-        print(f"[JOB FAILED] job_id={job_id} category={error.category} message={error.message}")
+        print(f"[JOB FAILED] job_id={job_id} source_type={source_type} category={error.category} message={error.message}")
     except Exception as error:
         update_job(job_id, status="failed", progress=100, step="Failed", error={"category": "unknown", "message": str(error)})
-        print(f"[JOB FAILED] job_id={job_id} error={error}")
+        print(f"[JOB FAILED] job_id={job_id} source_type={source_type} error={error}")
+
+
+async def process_youtube_ingest_job(job_id: str, body: dict, output_dir: str) -> None:
+    print(f"[SOURCE_INTERVAL_SELECTED] source_start_time={body.get('source_start_time') or body.get('start_time')} source_end_time={body.get('source_end_time') or body.get('end_time')}")
+    source = YouTubeSource(
+        youtube_url=body["youtube_url"],
+        start_time=body.get("source_start_time") or body.get("start_time"),
+        end_time=body.get("source_end_time") or body.get("end_time"),
+        video_quality=body.get("video_quality", "1080p"),
+    )
+    await _run_process_video_source(job_id, body, output_dir, source, "youtube", "Preparando análise")
+
+async def process_upload_ingest_job(job_id: str, body: dict, output_dir: str, filepath: str) -> None:
+    print(f"[SOURCE_INTERVAL_SELECTED] source_start_time={body.get('source_start_time')} source_end_time={body.get('source_end_time')}")
+    await _run_process_video_source(job_id, body, output_dir, LocalUploadSource(filepath), "upload", "Preparando análise")
+
 
 @router.post("/upload")
+@router.post("/api/upload")
 async def upload_video(
     file: UploadFile = File(...),
     analysis_name: str | None = Form(default=None),
@@ -206,28 +276,25 @@ async def upload_video(
     min_clip_length: int = Form(default=30),
     max_clip_length: int = Form(default=90),
 ):
-
-    file_id = str(uuid.uuid4())
-
-    filepath = f"{UPLOAD_DIR}/{file_id}.mp4"
-
-    with open(filepath, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
     analysis_folder = _resolve_analysis_folder(analysis_name, output_folder)
+    analysis_id = analysis_folder
     output_dir = os.path.join(CLIPS_DIR, analysis_folder)
     os.makedirs(output_dir, exist_ok=True)
     print(f"[ANALYSIS FOLDER CREATED] {output_dir}")
-
-    process_render_mode = render_mode
-    print(f"[BACKEND RECEIVED RENDER MODE] source=upload render_mode={render_mode}")
-    print(f"[PROCESS VIDEO JOB MODE] upload_request_render_mode={render_mode}")
-    print(f"[PROCESS VIDEO JOB MODE] upload_processing_render_mode={process_render_mode}")
-    print("[PROCESS VIDEO JOB CONFIG] upload_request_dual_region_config=None")
-    resolved_save_folder = _resolve_save_folder(save_folder)
-    print(f"[SOURCE_INTERVAL_SELECTED] source_start_time={source_start_time} source_end_time={source_end_time}")
-    transcription = process_video(filepath, output_dir=output_dir, render_mode=process_render_mode, original_video_path=filepath, auto_save_dir=resolved_save_folder, source_start_time=_parse_time_to_seconds(source_start_time) or 0, source_end_time=_parse_time_to_seconds(source_end_time), min_clip_length=min_clip_length, max_clip_length=max_clip_length)
-    return _build_upload_response(transcription, file_id, filepath, render_mode=render_mode, video_quality=video_quality)
+    filepath = await _save_upload_file(file, analysis_id)
+    job_id = str(uuid.uuid4())
+    body = {
+        "render_mode": render_mode,
+        "video_quality": video_quality,
+        "save_folder": _resolve_save_folder(save_folder),
+        "source_start_time": source_start_time,
+        "source_end_time": source_end_time,
+        "min_clip_length": min_clip_length,
+        "max_clip_length": max_clip_length,
+    }
+    create_job(job_id, analysis_id)
+    asyncio.create_task(process_upload_ingest_job(job_id, body, output_dir, filepath))
+    return {"success": True, "job_id": job_id, "analysis_id": analysis_id, "status": "uploaded"}
 
 
 @router.post("/ingest/youtube")

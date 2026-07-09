@@ -79,7 +79,7 @@ export function uploadVideo(
   sourceEndTime?: string,
   minClipLength = 30,
   maxClipLength = 90,
-): Promise<UploadResponse> {
+): Promise<IngestJobResponse> {
   return new Promise((resolve, reject) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -103,7 +103,7 @@ export function uploadVideo(
 
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(JSON.parse(xhr.responseText) as UploadResponse);
+        resolve(JSON.parse(xhr.responseText) as IngestJobResponse);
       } else {
         void responseErrorMessage(new Response(xhr.responseText, { status: xhr.status }), 'Upload failed').then((message) => reject(new Error(message)));
       }
