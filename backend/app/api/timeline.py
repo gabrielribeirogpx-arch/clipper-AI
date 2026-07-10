@@ -1,4 +1,6 @@
 from pathlib import Path
+import json
+import subprocess
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
 from app.data.timeline_state import (
@@ -31,6 +33,46 @@ def _to_filesystem_path(media_url: str) -> Path:
 def _to_media_url(path: Path) -> str:
     rel_path = path.as_posix().replace('app/clips/', '', 1)
     return f"/media/{rel_path}"
+
+
+def _run_ffprobe(video_path: Path) -> dict:
+    cmd = ["ffprobe", "-v", "error", "-show_format", "-show_streams", "-of", "json", video_path.as_posix()]
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        return {"error": proc.stderr.strip()}
+    try:
+        data = json.loads(proc.stdout or "{}")
+    except json.JSONDecodeError:
+        return {"error": "invalid_json"}
+    video_stream = next((s for s in data.get("streams", []) if s.get("codec_type") == "video"), {})
+    fmt = data.get("format", {})
+    return {
+        "duration": float(fmt.get("duration") or 0),
+        "width": video_stream.get("width"),
+        "height": video_stream.get("height"),
+        "bitrate": video_stream.get("bit_rate") or fmt.get("bit_rate"),
+    }
+
+
+def _metadata_for_clip(path: Path, clip: dict) -> dict:
+    start = float(clip.get("start", 0) or 0)
+    end = float(clip.get("end", start) or start)
+    metadata = _run_ffprobe(path)
+    metadata.update({"start": start, "end": end, "source_range": {"start": start, "end": end}})
+    print(f"[CLIP FFPROBE METADATA] path={path.as_posix()} start={start} end={end} duration={metadata.get('duration')} width={metadata.get('width')} height={metadata.get('height')} bitrate={metadata.get('bitrate')}")
+    return metadata
+
+
+def _warn_duplicate_clip_ranges(clips: list[dict]) -> None:
+    seen: dict[tuple[float, float], int] = {}
+    for index, clip in enumerate(clips):
+        start = round(float(clip.get("start", 0) or 0), 2)
+        end = round(float(clip.get("end", 0) or 0), 2)
+        key = (start, end)
+        if key in seen:
+            print(f"[DUPLICATE CLIP RANGE WARNING] first_index={seen[key]} duplicate_index={index} start={start} end={end}")
+        else:
+            seen[key] = index
 
 
 @router.get("/render-state")
@@ -137,18 +179,25 @@ def render_dual_region_final(payload: DualRegionRenderRequest):
     print(f"[DUAL REGION RAW CLIPS LOADED] count={len(clips)}")
     print('[DUAL REGION FINAL RENDER START]')
 
+    _warn_duplicate_clip_ranges(clips)
     updated_clips = []
     for index, clip in enumerate(clips):
+        clip_index = int(clip.get('clip_index', index))
+        print(f"[CLIP RENDER PLAN] index={clip_index} start={clip.get('start')} end={clip.get('end')} duration={clip.get('duration')}")
         raw_clip_path = _to_filesystem_path(clip.get('raw_clip_path') or clip.get('clip_path'))
         if not raw_clip_path.exists():
             raise HTTPException(status_code=404, detail=f'raw clip missing: {raw_clip_path.as_posix()}')
 
-        dual_clip_path = raw_clip_path.with_name(f"clip_{index}_dual.mp4")
+        print(f"[RAW CLIP CREATED] index={clip_index} path={raw_clip_path.as_posix()} start={clip.get('start')} end={clip.get('end')}")
+        dual_clip_path = raw_clip_path.with_name(f"clip_{clip_index}.mp4")
         render_dual_region_clip(str(raw_clip_path), str(dual_clip_path), payload.dual_region_config)
+        print(f"[FINAL CLIP CREATED] index={clip_index} path={dual_clip_path.as_posix()} source_raw={raw_clip_path.as_posix()}")
 
-        updated = {**clip}
+        updated = {**clip, 'clip_index': clip_index}
         updated['clip_path'] = _to_media_url(dual_clip_path)
         updated['final_video'] = _to_media_url(dual_clip_path)
+        updated['final_output_path'] = _to_media_url(dual_clip_path)
+        updated['render_metadata'] = {'raw': _metadata_for_clip(raw_clip_path, clip), 'final': _metadata_for_clip(dual_clip_path, clip)}
         updated_clips.append(updated)
 
     state['clips'] = updated_clips
@@ -173,15 +222,31 @@ def render_semi_auto_final(payload: SemiAutoRenderRequest):
     if payload.render_mode != 'semi_auto':
         raise HTTPException(status_code=400, detail='render_mode must be semi_auto')
     state = get_timeline_state()
+    if state.get('analysisId') != payload.analysis_id:
+        recovered = get_timeline_state_for_analysis(payload.analysis_id)
+        if recovered:
+            state = recovered
+            set_timeline_state(state)
+    if state.get('analysisId') != payload.analysis_id:
+        raise HTTPException(status_code=404, detail='analysis not found in timeline state')
     clips = state.get('clips', [])
+    _warn_duplicate_clip_ranges(clips)
     updated_clips = []
     for index, clip in enumerate(clips):
+        clip_index = int(clip.get('clip_index', index))
+        print(f"[CLIP RENDER PLAN] index={clip_index} start={clip.get('start')} end={clip.get('end')} duration={clip.get('duration')}")
         raw_clip_path = _to_filesystem_path(clip.get('raw_clip_path') or clip.get('clip_path'))
-        semi_auto_clip_path = raw_clip_path.with_name(f"clip_{index}_semi_auto.mp4")
+        if not raw_clip_path.exists():
+            raise HTTPException(status_code=404, detail=f'raw clip missing: {raw_clip_path.as_posix()}')
+        print(f"[RAW CLIP CREATED] index={clip_index} path={raw_clip_path.as_posix()} start={clip.get('start')} end={clip.get('end')}")
+        semi_auto_clip_path = raw_clip_path.with_name(f"clip_{clip_index}.mp4")
         render_semi_auto_vertical(str(raw_clip_path), str(semi_auto_clip_path))
-        updated = {**clip}
+        print(f"[FINAL CLIP CREATED] index={clip_index} path={semi_auto_clip_path.as_posix()} source_raw={raw_clip_path.as_posix()}")
+        updated = {**clip, 'clip_index': clip_index}
         updated['clip_path'] = _to_media_url(semi_auto_clip_path)
         updated['final_video'] = _to_media_url(semi_auto_clip_path)
+        updated['final_output_path'] = _to_media_url(semi_auto_clip_path)
+        updated['render_metadata'] = {'raw': _metadata_for_clip(raw_clip_path, clip), 'final': _metadata_for_clip(semi_auto_clip_path, clip)}
         updated_clips.append(updated)
     state['clips'] = updated_clips
     state['render_mode'] = 'semi_auto'

@@ -77,12 +77,17 @@ def _clip_response_item(hook: dict, index: int) -> dict:
     return {
         "id": f"clip-{index}",
         "label": f"Clip {index + 1}",
+        "clip_index": hook.get("clip_index", index),
         "start": hook["start"],
         "end": hook["end"],
-        "duration": round(hook["end"] - hook["start"], 2),
+        "duration": hook.get("duration", round(hook["end"] - hook["start"], 2)),
+        "source_video_path": hook.get("source_video_path"),
+        "original_video_path": hook.get("original_video_path"),
         "clip_path": _to_media_url(hook["clip_path"]),
         "raw_clip_path": _to_media_url(hook.get("raw_clip_path", hook["clip_path"])),
+        "final_output_path": _to_media_url(hook.get("final_output_path", hook["final_clip"])),
         "final_video": _to_media_url(hook["final_clip"]),
+        "render_metadata": hook.get("render_metadata"),
         "export_path": hook.get("export_path"),
         "local_export_path": hook.get("local_export_path"),
         "viral_score": hook["viral_score"],
@@ -179,12 +184,35 @@ def _run_ffprobe(video_path: str) -> dict:
         return {"error": proc.stderr}
     data = json.loads(proc.stdout or "{}")
     video_stream = next((s for s in data.get("streams", []) if s.get("codec_type") == "video"), {})
+    fmt = data.get("format", {})
     return {
-        "duration": float(data.get("format", {}).get("duration") or 0),
+        "duration": float(fmt.get("duration") or 0),
         "fps": video_stream.get("r_frame_rate"),
         "width": video_stream.get("width"),
         "height": video_stream.get("height"),
+        "bitrate": video_stream.get("bit_rate") or fmt.get("bit_rate"),
     }
+
+
+def _clip_render_metadata(video_path: str, start: float, end: float) -> dict:
+    metadata = _run_ffprobe(video_path)
+    metadata.update({"start": start, "end": end, "source_range": {"start": start, "end": end}})
+    print(
+        f"[CLIP FFPROBE METADATA] path={video_path} start={start} end={end} "
+        f"duration={metadata.get('duration')} width={metadata.get('width')} "
+        f"height={metadata.get('height')} bitrate={metadata.get('bitrate')}"
+    )
+    return metadata
+
+
+def _warn_duplicate_clip_ranges(hooks: list[dict]) -> None:
+    seen: dict[tuple[float, float], int] = {}
+    for idx, hook in enumerate(hooks):
+        range_key = (round(float(hook.get("start", 0) or 0), 2), round(float(hook.get("end", 0) or 0), 2))
+        if range_key in seen:
+            print(f"[DUPLICATE CLIP RANGE WARNING] first_index={seen[range_key]} duplicate_index={idx} start={range_key[0]} end={range_key[1]}")
+        else:
+            seen[range_key] = idx
 
 
 def _generate_proxy(source_video_path: str, proxy_video_path: str, profiler: PerformanceProfiler) -> str:
@@ -334,6 +362,13 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
         hooks = detect_hooks({**transcription, "segments": interval_segments}, min_duration=min_clip_length, max_duration=max_clip_length, max_clips=max(80, max_clips), min_score=min_score, overlap_tolerance=overlap_tolerance)
     hooks = _validate_clip_durations(hooks, source_start_time, source_end_time, min_clip_length, max_clip_length)
     hooks = sorted(hooks, key=lambda h: h.get("viral_score", 0), reverse=True)[:max_clips]
+    for clip_index, hook in enumerate(hooks):
+        hook["clip_index"] = clip_index
+        hook["duration"] = round(float(hook["end"]) - float(hook["start"]), 2)
+        hook["source_video_path"] = source_video_path
+        hook["original_video_path"] = source_video_path
+        print(f"[CLIP RENDER PLAN] index={clip_index} start={hook['start']} end={hook['end']} duration={hook['duration']}")
+    _warn_duplicate_clip_ranges(hooks)
     save_analysis_cache(analysis_id, {**cache, "transcription": transcription, "hooks": hooks, "waveform": waveform_path, "speech_timestamps": speech, "scene_changes": scene_changes, "silence": silence, "probe": ingest_results.get("probe"), "proxy": proxy_video_path})
     _emit_pipeline_event(event_logger, "PIPELINE_STAGE_FINISHED", analysis_id, started_at, len(hooks), stage="fast_detection")
 
@@ -343,20 +378,38 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
     max_parallel_renders = max(1, int(os.getenv("MAX_PARALLEL_RENDERS", "2")))
 
     def _render(idx, hook):
+        clip_index = int(hook.get("clip_index", idx))
+        clip_start = float(hook["start"])
+        clip_end = float(hook["end"])
+        clip_duration = round(clip_end - clip_start, 2)
         print(f"[FINAL RENDER SOURCE] original_video_path={source_video_path}")
         print(f"[ANALYSIS PROXY SOURCE] proxy_path={proxy_video_path}")
-        raw = cut_clip(source_video_path, hook["start"], hook["end"], f"raw_clip_{idx}.mp4", output_dir=output_dir)
+        print(f"[CLIP RENDER PLAN] index={clip_index} start={clip_start} end={clip_end} duration={clip_duration}")
+        raw = cut_clip(source_video_path, clip_start, clip_end, f"raw_clip_{clip_index}.mp4", output_dir=output_dir)
+        print(f"[RAW CLIP CREATED] index={clip_index} path={raw} start={clip_start} end={clip_end}")
+        raw_metadata = _clip_render_metadata(raw, clip_start, clip_end)
         processed = raw
         if render_mode == "ai_tracking":
-            processed = render_vertical_clip(raw, transcription["segments"], os.path.join(output_dir, f"clip_{idx}.mp4"), speaker_segments=transcription.get("speaker_segments", []), tracking_video_path=proxy_video_path, original_video_path=source_video_path)
+            processed = render_vertical_clip(raw, transcription["segments"], os.path.join(output_dir, f"clip_{clip_index}.mp4"), speaker_segments=transcription.get("speaker_segments", []), tracking_video_path=proxy_video_path, original_video_path=source_video_path)
         elif render_mode == "dual_region" and dual_region_config:
-            processed = os.path.join(output_dir, f"clip_{idx}_dual.mp4"); render_dual_region_clip(raw, processed, dual_region_config)
+            processed = os.path.join(output_dir, f"clip_{clip_index}.mp4"); render_dual_region_clip(raw, processed, dual_region_config)
         elif render_mode == "semi_auto":
-            processed = os.path.join(output_dir, f"clip_{idx}_semi_auto.mp4"); render_semi_auto_vertical(raw, processed)
-        seg_timeline = broll_engine.build_timeline([s for s in transcription["segments"] if hook["start"] <= s.get("start", 0) <= hook["end"]])
-        final = apply_broll_overlay(processed, seg_timeline, f"clip_{idx}_final.mp4", output_dir=output_dir, quality_profile="export")
-        export_path, local_export_path = _copy_rendered_clip_to_export(final, auto_save_dir, analysis_id, idx, hook)
-        clip = apply_metadata_to_clip({"raw_clip_path": raw, "clip_path": processed, "final_clip": final, "export_path": export_path, "local_export_path": local_export_path, **hook, "title_suggestion": "", "caption_suggestion": "", "description_suggestion": "", "hashtags": [], "emotion": "Não analisado", "category": "Auto", "viral_reason": "", "title_options": [], "broll_timeline": seg_timeline}, no_ai_metadata(hook, idx))
+            processed = os.path.join(output_dir, f"clip_{clip_index}.mp4"); render_semi_auto_vertical(raw, processed)
+        seg_timeline = broll_engine.build_timeline([s for s in transcription["segments"] if clip_start <= s.get("start", 0) <= clip_end])
+        final = apply_broll_overlay(processed, seg_timeline, f"clip_{clip_index}_final.mp4", output_dir=output_dir, quality_profile="export")
+        print(f"[FINAL CLIP CREATED] index={clip_index} path={final} source_raw={raw}")
+        final_metadata = _clip_render_metadata(final, clip_start, clip_end)
+        export_path, local_export_path = _copy_rendered_clip_to_export(final, auto_save_dir, analysis_id, clip_index, hook)
+        clip_payload = {
+            "clip_index": clip_index, "start": clip_start, "end": clip_end, "duration": clip_duration,
+            "source_video_path": source_video_path, "original_video_path": source_video_path,
+            "raw_clip_path": raw, "clip_path": processed, "final_clip": final, "final_output_path": final,
+            "export_path": export_path, "local_export_path": local_export_path, **hook,
+            "render_metadata": {"raw": raw_metadata, "final": final_metadata},
+            "title_suggestion": "", "caption_suggestion": "", "description_suggestion": "", "hashtags": [],
+            "emotion": "Não analisado", "category": "Auto", "viral_reason": "", "title_options": [], "broll_timeline": seg_timeline,
+        }
+        clip = apply_metadata_to_clip(clip_payload, no_ai_metadata(hook, clip_index))
         return idx, clip
 
     _emit_pipeline_event(event_logger, "PIPELINE_STAGE_STARTED", analysis_id, started_at, stage="top_clip_render")
