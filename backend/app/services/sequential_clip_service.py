@@ -102,4 +102,5 @@ def _build_sequential_hooks(transcription: dict, source_start: float, source_end
             gaps += int(s0 > ranges[i - 1][1]); overlaps += int(s0 < ranges[i - 1][1])
     coverage = round((covered / total) * 100, 2) if total else 100
     print(f"[SEQUENTIAL VALIDATION] gaps={gaps} overlaps={overlaps} duplicates={duplicates} coverage={coverage}%")
+    print(f"[SEQUENTIAL GENERATED] total_candidates={len(hooks)}")
     return hooks

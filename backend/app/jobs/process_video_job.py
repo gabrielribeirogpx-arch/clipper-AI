@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from app.services.whisper_service import transcribe_video
 from app.services.hook_detector import detect_hooks
+from app.services.sequential_clip_service import _build_sequential_hooks as build_sequential_clip_candidates
 from app.services.ffmpeg_service import cut_clip, apply_broll_overlay
 from app.services.vertical_render_service import render_vertical_clip, render_dual_region_clip, render_semi_auto_vertical
 from app.services.broll_engine import BRollEngine
@@ -462,7 +463,8 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
     clip_strategy = "sequential" if clip_strategy == "sequential" else "highlights"
     print(f"[CLIP STRATEGY] strategy={clip_strategy}")
     if clip_strategy == "sequential":
-        hooks = _build_sequential_hooks(transcription, source_start_time, source_end_time, sequential_clip_duration, adjust_to_sentence_boundaries, avoid_short_last_clip, generate_clip_titles)
+        hooks = build_sequential_clip_candidates(transcription, source_start_time, source_end_time, sequential_clip_duration, adjust_to_sentence_boundaries, avoid_short_last_clip, generate_clip_titles)
+        print(f"[SEQUENTIAL GENERATED] total_candidates={len(hooks)}")
     else:
         if cache.get("hooks"):
             hooks = cache["hooks"]
@@ -472,6 +474,7 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
             hooks = detect_hooks({**transcription, "segments": interval_segments}, min_duration=min_clip_length, max_duration=max_clip_length, max_clips=max(80, max_clips), min_score=min_score, overlap_tolerance=overlap_tolerance)
         hooks = _validate_clip_durations(hooks, source_start_time, source_end_time, min_clip_length, max_clip_length)
         hooks = sorted(hooks, key=lambda h: h.get("viral_score", 0), reverse=True)[:max_clips]
+    print(f"[SEQUENTIAL DISPATCH] candidates_to_render={len(hooks) if clip_strategy == 'sequential' else 0}")
     for clip_index, hook in enumerate(hooks):
         hook["clip_index"] = clip_index
         hook["duration"] = round(float(hook["end"]) - float(hook["start"]), 2)
@@ -524,6 +527,7 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
         clip = apply_metadata_to_clip(clip_payload, no_ai_metadata(hook, clip_index))
         return idx, clip
 
+    print(f"[RENDER LOOP START] analysis_id={analysis_id} candidates_to_render={len(hooks)} exports_dir={exports_dir}")
     _emit_pipeline_event(event_logger, "PIPELINE_STAGE_STARTED", analysis_id, started_at, stage="top_clip_render")
     with ThreadPoolExecutor(max_workers=max_parallel_renders) as render_pool:
         futures = [render_pool.submit(_render, i, h) for i, h in enumerate(hooks)]
@@ -542,8 +546,11 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
             if len(ready) == first_batch_size:
                 _emit_pipeline_event(event_logger, "BACKGROUND_PROCESSING", analysis_id, started_at, len(ready), message="Editor can be used while remaining clips and metadata continue.")
     clips = [c for c in generated_clips if c]
+    exported_files = [c.get("final_clip") for c in clips if c.get("final_clip") and os.path.exists(c.get("final_clip")) and os.path.commonpath([os.path.abspath(exports_dir), os.path.abspath(c.get("final_clip"))]) == os.path.abspath(exports_dir)]
+    print(f"[RENDER LOOP FINISH] analysis_id={analysis_id} rendered={len(clips)} exported={len(exported_files)} exports_dir={exports_dir}")
+    print(f"[PROCESS VIDEO SUMMARY] analysis_id={analysis_id} candidates_generated={len(hooks)} candidates_to_render={len(hooks)} exported={len(exported_files)} export_files={exported_files}")
     _persist_ready_timeline_state(analysis_id, clips, timeline_broll, timeline_cuts, render_mode, dual_region_config)
     _emit_pipeline_event(event_logger, "BACKGROUND_FINISHED", analysis_id, started_at, len(clips))
     profiler.end_timer("total_pipeline")
     profiler.finalize()
-    return {"text": " ".join([s.get("text", "") for s in transcription.get("segments", [])]), "hooks": clips, "status": "completed", "timeline": {"broll": timeline_broll, "cuts": timeline_cuts}, "pipeline": {"fast_pipeline": fast_pipeline, "first_batch_size": first_batch_size}}
+    return {"text": " ".join([s.get("text", "") for s in transcription.get("segments", [])]), "hooks": clips, "status": "completed", "analysis_id": analysis_id, "exports_dir": exports_dir, "exported_files": exported_files, "summary": {"candidates_generated": len(hooks), "candidates_to_render": len(hooks), "exported": len(exported_files), "export_files": exported_files}, "timeline": {"broll": timeline_broll, "cuts": timeline_cuts}, "pipeline": {"fast_pipeline": fast_pipeline, "first_batch_size": first_batch_size}}
