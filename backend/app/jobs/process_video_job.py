@@ -3,6 +3,9 @@ import time
 import subprocess
 import json
 import shutil
+import re
+import unicodedata
+import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from app.services.whisper_service import transcribe_video
@@ -43,10 +46,28 @@ def _sanitize_auto_save_dir(auto_save_dir: str | None) -> str | None:
     return os.path.abspath(os.path.expanduser(normalized))
 
 
-def _friendly_clip_filename(idx: int, hook: dict, source_path: str) -> str:
-    score = int(round(float(hook.get("viral_score", 0) or 0)))
+def _slugify_title(title: str, fallback: str, used: set[str] | None = None, max_length: int = 80) -> str:
+    value = unicodedata.normalize("NFKD", title or "").encode("ascii", "ignore").decode("ascii")
+    value = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", value)
+    value = re.sub(r"[^\w\s-]", "", value).strip().lower()
+    value = re.sub(r"[\s-]+", "_", value).strip("_")[:max_length].strip("_")
+    value = value or fallback
+    if used is not None:
+        base = value
+        suffix = 2
+        while value in used:
+            value = f"{base}_{suffix}"
+            suffix += 1
+        used.add(value)
+    return value
+
+
+def _friendly_clip_filename(idx: int, hook: dict, source_path: str, used: set[str] | None = None) -> str:
     extension = os.path.splitext(source_path)[1] or ".mp4"
-    return f"clip_{idx + 1:02d}_score_{score}{extension}"
+    fallback = f"parte_{idx + 1:02d}"
+    title = hook.get("title") or hook.get("title_suggestion") or fallback
+    slug = _slugify_title(str(title), fallback, used=used)
+    return f"{idx + 1:02d}_{slug}{extension}"
 
 
 def _copy_rendered_clip_to_export(final_path: str, auto_save_dir: str | None, analysis_id: str, idx: int, hook: dict) -> tuple[str | None, str | None]:
@@ -271,6 +292,84 @@ def _speech_timestamps(transcription: dict) -> list[dict]:
     return [{"start": s.get("start", 0), "end": s.get("end", 0)} for s in transcription.get("segments", [])]
 
 
+
+def _segments_for_range(transcription: dict, start: float, end: float) -> list[dict]:
+    return [s for s in transcription.get("segments", []) if float(s.get("start", 0) or 0) < end and float(s.get("end", 0) or 0) > start]
+
+
+def _transcript_excerpt(transcription: dict, start: float, end: float) -> str:
+    return " ".join(str(s.get("text", "")).strip() for s in _segments_for_range(transcription, start, end)).strip()
+
+
+def _deterministic_title(text: str, index: int) -> str:
+    words = re.findall(r"[\wÀ-ÿ]{4,}", (text or "").lower())
+    stop = {"para", "como", "esse", "essa", "isso", "aqui", "mais", "muito", "sobre", "porque", "quando", "onde", "voce", "você", "entao", "então", "that", "this", "with", "from", "your", "have", "will"}
+    selected = []
+    for word in words:
+        normalized = unicodedata.normalize("NFKD", word).encode("ascii", "ignore").decode("ascii")
+        if normalized in stop or normalized in selected:
+            continue
+        selected.append(normalized)
+        if len(selected) == 5:
+            break
+    return " ".join(selected).title() if selected else f"Parte {index + 1:02d}"
+
+
+def _adjust_cut_to_sentence_boundary(planned: float, previous: float, source_end: float, segments: list[dict], max_adjust: float) -> float:
+    candidates = []
+    for segment in segments:
+        end = float(segment.get("end", 0) or 0)
+        text = str(segment.get("text", "")).strip()
+        if previous < end < source_end and abs(end - planned) <= max_adjust and (not text or text[-1:] in ".!?…"):
+            candidates.append(end)
+    if not candidates:
+        return planned
+    adjusted = min(candidates, key=lambda value: abs(value - planned))
+    return adjusted if adjusted > previous else planned
+
+
+def _build_sequential_hooks(transcription: dict, source_start: float, source_end: float, clip_duration: int, adjust_to_sentence_boundaries: bool, avoid_short_last_clip: bool, generate_clip_titles: bool, max_adjust: float = 5.0) -> list[dict]:
+    total = max(0.0, source_end - source_start)
+    clip_duration = max(10, int(clip_duration or 60))
+    print(f"[CLIP STRATEGY] strategy=sequential")
+    print(f"[SEQUENTIAL PLAN] duration={round(total, 2)} clip_duration={clip_duration} estimated_clips={math.ceil(total / clip_duration) if clip_duration else 0}")
+    ranges = []
+    cursor = source_start
+    while cursor < source_end - 0.001:
+        planned_end = min(cursor + clip_duration, source_end)
+        end = planned_end
+        if adjust_to_sentence_boundaries and planned_end < source_end:
+            end = _adjust_cut_to_sentence_boundary(planned_end, cursor, source_end, transcription.get("segments", []), max_adjust)
+        ranges.append([round(cursor, 2), round(min(end, source_end), 2)])
+        cursor = ranges[-1][1]
+    if avoid_short_last_clip and len(ranges) >= 2 and (ranges[-1][1] - ranges[-1][0]) < clip_duration * 0.2:
+        combined_start, combined_end = ranges[-2][0], ranges[-1][1]
+        midpoint = round(combined_start + ((combined_end - combined_start) / 2), 2)
+        ranges[-2] = [combined_start, midpoint]
+        ranges[-1] = [midpoint, combined_end]
+    hooks, used = [], set()
+    for idx, (start, end) in enumerate(ranges):
+        excerpt = _transcript_excerpt(transcription, start, end)
+        title = _deterministic_title(excerpt, idx) if generate_clip_titles else f"Parte {idx + 1:02d}"
+        filename = _friendly_clip_filename(idx, {"title": title}, ".mp4", used=used)
+        print(f"[SEQUENTIAL RANGE] index={idx} start={start:g} end={end:g}")
+        print(f"[CLIP TITLE] index={idx} title=\"{title}\"")
+        print(f"[CLIP EXPORT NAME] index={idx} filename=\"{filename}\"")
+        hooks.append({"clip_index": idx, "start": start, "end": end, "duration": round(end - start, 2), "viral_score": 0, "hook_score": 0, "strategy": "sequential", "title": title, "title_suggestion": title, "filename": filename, "transcript_excerpt": excerpt})
+    gaps = overlaps = duplicates = 0
+    seen = set()
+    covered = sum(max(0, e - s) for s, e in ranges)
+    for i, (s0, e0) in enumerate(ranges):
+        duplicates += (round(s0, 2), round(e0, 2)) in seen
+        seen.add((round(s0, 2), round(e0, 2)))
+        if s0 >= e0 or s0 < source_start - .01 or e0 > source_end + .01:
+            gaps += 1
+        if i and abs(s0 - ranges[i - 1][1]) > .02:
+            gaps += int(s0 > ranges[i - 1][1]); overlaps += int(s0 < ranges[i - 1][1])
+    coverage = round((covered / total) * 100, 2) if total else 100
+    print(f"[SEQUENTIAL VALIDATION] gaps={gaps} overlaps={overlaps} duplicates={duplicates} coverage={coverage}%")
+    return hooks
+
 def _validate_clip_durations(hooks: list[dict], source_start_time: float, source_end_time: float, min_clip_length: int, max_clip_length: int) -> list[dict]:
     validated = []
     for hook in hooks:
@@ -297,17 +396,23 @@ def _validate_clip_durations(hooks: list[dict], source_start_time: float, source
     return validated
 
 
-def process_video(video_path, original_video_path=None, proxy_video_path=None, output_dir="app/clips", render_mode="ai_tracking", dual_region_config=None, source_start_time=0, source_end_time=None, min_clip_length=30, max_clip_length=90, max_clips=25, min_score=0.45, overlap_tolerance=0.6, step_logger=None, auto_save_dir=None, event_logger=None):
+def process_video(video_path, original_video_path=None, proxy_video_path=None, output_dir="app/clips", render_mode="ai_tracking", dual_region_config=None, source_start_time=0, source_end_time=None, min_clip_length=30, max_clip_length=90, max_clips=25, min_score=0.45, overlap_tolerance=0.6, step_logger=None, auto_save_dir=None, event_logger=None, clip_strategy="highlights", sequential_clip_duration=60, adjust_to_sentence_boundaries=True, generate_clip_titles=True, avoid_short_last_clip=False):
     os.makedirs(output_dir, exist_ok=True)
+    root_output_dir = output_dir
+    internal_dir = os.path.join(root_output_dir, "internal")
+    exports_dir = os.path.join(root_output_dir, "exports")
+    os.makedirs(internal_dir, exist_ok=True)
+    os.makedirs(exports_dir, exist_ok=True)
+    output_dir = internal_dir
     auto_save_dir = _sanitize_auto_save_dir(auto_save_dir)
     if auto_save_dir:
         os.makedirs(auto_save_dir, exist_ok=True)
     log = step_logger or (lambda _msg: None)
     started_at = time.perf_counter()
-    analysis_id = os.path.basename(output_dir.rstrip("/"))
+    analysis_id = os.path.basename(root_output_dir.rstrip("/"))
     fast_pipeline = os.getenv("FAST_PIPELINE", "true").lower() in {"1", "true", "yes", "on"}
     first_batch_size = 5 if fast_pipeline else min(10, max_clips)
-    profiler = PerformanceProfiler(report_path=os.path.join(output_dir, "performance_report.json"))
+    profiler = PerformanceProfiler(report_path=os.path.join(root_output_dir, "performance_report.json"))
     profiler.record_gpu_info()
     profiler.start_timer("total_pipeline")
     source_video_path = original_video_path or video_path
@@ -354,14 +459,19 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
     _emit_pipeline_event(event_logger, "PIPELINE_STAGE_FINISHED", analysis_id, started_at, stage="transcription")
 
     _emit_pipeline_event(event_logger, "PIPELINE_STAGE_STARTED", analysis_id, started_at, stage="fast_detection")
-    if cache.get("hooks"):
-        hooks = cache["hooks"]
-        print("[HOOK CACHE HIT]")
+    clip_strategy = "sequential" if clip_strategy == "sequential" else "highlights"
+    print(f"[CLIP STRATEGY] strategy={clip_strategy}")
+    if clip_strategy == "sequential":
+        hooks = _build_sequential_hooks(transcription, source_start_time, source_end_time, sequential_clip_duration, adjust_to_sentence_boundaries, avoid_short_last_clip, generate_clip_titles)
     else:
-        interval_segments = [s for s in transcription.get("segments", []) if s.get("start", 0) < source_end_time and s.get("end", 0) > source_start_time]
-        hooks = detect_hooks({**transcription, "segments": interval_segments}, min_duration=min_clip_length, max_duration=max_clip_length, max_clips=max(80, max_clips), min_score=min_score, overlap_tolerance=overlap_tolerance)
-    hooks = _validate_clip_durations(hooks, source_start_time, source_end_time, min_clip_length, max_clip_length)
-    hooks = sorted(hooks, key=lambda h: h.get("viral_score", 0), reverse=True)[:max_clips]
+        if cache.get("hooks"):
+            hooks = cache["hooks"]
+            print("[HOOK CACHE HIT]")
+        else:
+            interval_segments = [s for s in transcription.get("segments", []) if s.get("start", 0) < source_end_time and s.get("end", 0) > source_start_time]
+            hooks = detect_hooks({**transcription, "segments": interval_segments}, min_duration=min_clip_length, max_duration=max_clip_length, max_clips=max(80, max_clips), min_score=min_score, overlap_tolerance=overlap_tolerance)
+        hooks = _validate_clip_durations(hooks, source_start_time, source_end_time, min_clip_length, max_clip_length)
+        hooks = sorted(hooks, key=lambda h: h.get("viral_score", 0), reverse=True)[:max_clips]
     for clip_index, hook in enumerate(hooks):
         hook["clip_index"] = clip_index
         hook["duration"] = round(float(hook["end"]) - float(hook["start"]), 2)
@@ -396,14 +506,16 @@ def process_video(video_path, original_video_path=None, proxy_video_path=None, o
         elif render_mode == "semi_auto":
             processed = os.path.join(output_dir, f"clip_{clip_index}.mp4"); render_semi_auto_vertical(raw, processed)
         seg_timeline = broll_engine.build_timeline([s for s in transcription["segments"] if clip_start <= s.get("start", 0) <= clip_end])
-        final = apply_broll_overlay(processed, seg_timeline, f"clip_{clip_index}_final.mp4", output_dir=output_dir, quality_profile="export")
+        export_filename = hook.get("filename") or _friendly_clip_filename(clip_index, hook, processed)
+        final = apply_broll_overlay(processed, seg_timeline, export_filename, output_dir=exports_dir, quality_profile="export")
         print(f"[FINAL CLIP CREATED] index={clip_index} path={final} source_raw={raw}")
         final_metadata = _clip_render_metadata(final, clip_start, clip_end)
+        print(f'[CLIP EXPORT NAME] index={clip_index} filename="{os.path.basename(final)}"')
         export_path, local_export_path = _copy_rendered_clip_to_export(final, auto_save_dir, analysis_id, clip_index, hook)
         clip_payload = {
             "clip_index": clip_index, "start": clip_start, "end": clip_end, "duration": clip_duration,
             "source_video_path": source_video_path, "original_video_path": source_video_path,
-            "raw_clip_path": raw, "clip_path": processed, "final_clip": final, "final_output_path": final,
+            "raw_clip_path": raw, "clip_path": final, "final_clip": final, "final_output_path": final,
             "export_path": export_path, "local_export_path": local_export_path, **hook,
             "render_metadata": {"raw": raw_metadata, "final": final_metadata},
             "title_suggestion": "", "caption_suggestion": "", "description_suggestion": "", "hashtags": [],
