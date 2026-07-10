@@ -15,6 +15,11 @@ class YoutubeIngestRequest(BaseModel):
     max_clips: int = Field(default=25, ge=1, le=200)
     min_score: float = Field(default=0.45, ge=0.0, le=1.0)
     overlap_tolerance: float = Field(default=0.6, ge=0.0, le=1.0)
+    clip_strategy: str = Field(default="highlights")
+    sequential_clip_duration: int = Field(default=60, ge=10, le=300)
+    adjust_to_sentence_boundaries: bool = True
+    generate_clip_titles: bool = True
+    avoid_short_last_clip: bool = False
     video_quality: str = Field(default="1080p")
     render_mode: str | None = "ai_tracking"
     dual_region_config: dict | None = None

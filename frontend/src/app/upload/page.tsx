@@ -3,7 +3,7 @@
 import { ChangeEvent, DragEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ApiError, createIngestStream, getIngestJobState, getIngestStatus, getUploadConfig, ingestYouTubeJob, uploadVideo } from '@/lib/api';
+import { ApiError, ClipStrategy, createIngestStream, getIngestJobState, getIngestStatus, getUploadConfig, ingestYouTubeJob, uploadVideo } from '@/lib/api';
 import { BROWSER_INTERNAL_SAVE_FOLDER_MESSAGE, INTERNAL_APP_FOLDER_LABEL, isAbsoluteLocalPath, isPlaceholderExportPath } from '@/lib/desktopBridge';
 import { useUploadStore } from '@/store/uploadStore';
 import { useTimelineStore } from '@/store/timelineStore';
@@ -137,6 +137,11 @@ export default function UploadPage() {
   const [endSeconds, setEndSeconds] = useState(MAX_YOUTUBE_DURATION_SECONDS);
   const [minClipLength, setMinClipLength] = useState(30);
   const [maxClipLength, setMaxClipLength] = useState(90);
+  const [clipStrategy, setClipStrategy] = useState<ClipStrategy>('highlights');
+  const [sequentialClipDuration, setSequentialClipDuration] = useState(60);
+  const [avoidShortLastClip, setAvoidShortLastClip] = useState(false);
+  const [adjustToSentenceBoundaries, setAdjustToSentenceBoundaries] = useState(true);
+  const [generateClipTitles, setGenerateClipTitles] = useState(true);
   const fileRef = useRef<File | null>(null);
   const ingestStreamRef = useRef<EventSource | null>(null);
   const activeStreamJobIdRef = useRef<string | null>(null);
@@ -216,6 +221,8 @@ export default function UploadPage() {
     router.push(target);
   };
 
+  const selectedDuration = Math.max(0, endSeconds - startSeconds);
+  const estimatedSequentialClips = Math.ceil(selectedDuration / Math.max(10, sequentialClipDuration));
   const sizeLabel = useMemo(() => (store.uploadedVideo ? `${(store.uploadedVideo.size / (1024 * 1024)).toFixed(1)} MB` : null), [store.uploadedVideo]);
   const isUploadStatusInProgress = store.uploadStatus === 'uploading' || store.uploadStatus === 'processing';
   const isRealFileUploadActive = Boolean(store.uploadedVideo) && isUploadStatusInProgress;
@@ -278,7 +285,7 @@ export default function UploadPage() {
     store.setUploadStatus('uploading');
     store.setProcessingStage('Enviando vídeo grande, isso pode levar alguns minutos.');
     console.log('[UPLOAD SELECTED RENDER MODE]', { source: 'file_upload', renderMode });
-    const result = await uploadVideo(file, analysisName, store.setUploadProgress, renderMode, videoQuality, effectiveSaveFolder, undefined, undefined, minClipLength, maxClipLength).catch((e) => {
+    const result = await uploadVideo(file, analysisName, store.setUploadProgress, renderMode, videoQuality, effectiveSaveFolder, undefined, undefined, minClipLength, maxClipLength, clipStrategy, sequentialClipDuration, adjustToSentenceBoundaries, generateClipTitles, avoidShortLastClip).catch((e) => {
       store.setUploadStatus('error');
       throw e;
     });
@@ -515,6 +522,11 @@ export default function UploadPage() {
         source_end_time: toHhMmSs(endSeconds),
         min_clip_length: minClipLength,
         max_clip_length: maxClipLength,
+        clip_strategy: clipStrategy,
+        sequential_clip_duration: sequentialClipDuration,
+        adjust_to_sentence_boundaries: adjustToSentenceBoundaries,
+        generate_clip_titles: generateClipTitles,
+        avoid_short_last_clip: avoidShortLastClip,
         render_mode: renderMode,
                 video_quality: videoQuality,
         ...(effectiveSaveFolder ? { save_folder: effectiveSaveFolder } : {}),
@@ -679,15 +691,25 @@ export default function UploadPage() {
             </div>
           )}
           <YouTubeRangeSelector duration={MAX_YOUTUBE_DURATION_SECONDS} start={startSeconds} end={endSeconds} onStart={setStartSeconds} onEnd={setEndSeconds} />
-          <div className="grid gap-3 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm text-slate-100 md:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-xs uppercase tracking-[0.18em] text-slate-400">Duração mínima de cada clipe (s)</span>
-              <input type="number" min={10} max={maxClipLength} value={minClipLength} onChange={(e) => setMinClipLength(clamp(Number(e.target.value), 10, maxClipLength))} className="w-full rounded-lg bg-slate-900 px-3 py-2" />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs uppercase tracking-[0.18em] text-slate-400">Duração máxima de cada clipe (s)</span>
-              <input type="number" min={minClipLength} max={300} value={maxClipLength} onChange={(e) => setMaxClipLength(clamp(Number(e.target.value), minClipLength, 300))} className="w-full rounded-lg bg-slate-900 px-3 py-2" />
-            </label>
+          <div className="space-y-3 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm text-slate-100">
+            <div className="grid gap-2 md:grid-cols-2">
+              <button type="button" onClick={() => setClipStrategy('highlights')} className={`rounded-lg border px-3 py-2 text-left ${clipStrategy === 'highlights' ? 'border-cyan-300 bg-cyan-300/10' : 'border-white/10 bg-slate-900'}`}><strong>Melhores momentos</strong><span className="block text-xs text-slate-400">IA seleciona os trechos mais relevantes.</span></button>
+              <button type="button" onClick={() => setClipStrategy('sequential')} className={`rounded-lg border px-3 py-2 text-left ${clipStrategy === 'sequential' ? 'border-cyan-300 bg-cyan-300/10' : 'border-white/10 bg-slate-900'}`}><strong>Picotar vídeo completo</strong><span className="block text-xs text-slate-400">Divide todo o intervalo sem score mínimo.</span></button>
+            </div>
+            {clipStrategy === 'sequential' ? (
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1"><span className="text-xs uppercase tracking-[0.18em] text-slate-400">Duração de cada parte (s)</span><input type="number" min={10} max={maxClipLength} value={sequentialClipDuration} onChange={(e) => setSequentialClipDuration(clamp(Number(e.target.value), 10, maxClipLength))} className="w-full rounded-lg bg-slate-900 px-3 py-2" /></label>
+                <div className="rounded-lg bg-slate-900 px-3 py-2 text-xs text-slate-300">Vídeo: {formatTimestamp(selectedDuration)}<br />Duração por parte: {sequentialClipDuration}s<br />Resultado estimado: {estimatedSequentialClips} clipes</div>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={avoidShortLastClip} onChange={(e) => setAvoidShortLastClip(e.target.checked)} />Evitar último clipe muito curto</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={adjustToSentenceBoundaries} onChange={(e) => setAdjustToSentenceBoundaries(e.target.checked)} />Ajustar cortes ao final de frases</label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={generateClipTitles} onChange={(e) => setGenerateClipTitles(e.target.checked)} />Gerar títulos automaticamente</label>
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1"><span className="text-xs uppercase tracking-[0.18em] text-slate-400">Duração mínima de cada clipe (s)</span><input type="number" min={10} max={maxClipLength} value={minClipLength} onChange={(e) => setMinClipLength(clamp(Number(e.target.value), 10, maxClipLength))} className="w-full rounded-lg bg-slate-900 px-3 py-2" /></label>
+                <label className="space-y-1"><span className="text-xs uppercase tracking-[0.18em] text-slate-400">Duração máxima de cada clipe (s)</span><input type="number" min={minClipLength} max={300} value={maxClipLength} onChange={(e) => setMaxClipLength(clamp(Number(e.target.value), minClipLength, 300))} className="w-full rounded-lg bg-slate-900 px-3 py-2" /></label>
+              </div>
+            )}
           </div>
           <button type="button" onClick={handleAnalyze} className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300">
             Analisar vídeo

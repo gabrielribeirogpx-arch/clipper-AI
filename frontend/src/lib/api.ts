@@ -11,6 +11,7 @@ export type UploadResponse = {
 };
 
 export type RenderMode = "ai_tracking" | "dual_region" | "semi_auto" | "raw_only";
+export type ClipStrategy = "highlights" | "sequential";
 
 export type YouTubeIngestRequest = {
   youtube_url: string;
@@ -23,6 +24,11 @@ export type YouTubeIngestRequest = {
   source_end_time?: string;
   min_clip_length?: number;
   max_clip_length?: number;
+  clip_strategy?: ClipStrategy;
+  sequential_clip_duration?: number;
+  adjust_to_sentence_boundaries?: boolean;
+  generate_clip_titles?: boolean;
+  avoid_short_last_clip?: boolean;
   render_mode?: RenderMode;
   semi_auto_config?: Record<string, unknown>;
   video_quality?: '720p' | '1080p' | '4k';
@@ -90,6 +96,11 @@ export function uploadVideo(
   sourceEndTime?: string,
   minClipLength = 30,
   maxClipLength = 90,
+  clipStrategy: ClipStrategy = 'highlights',
+  sequentialClipDuration = 60,
+  adjustToSentenceBoundaries = true,
+  generateClipTitles = true,
+  avoidShortLastClip = false,
 ): Promise<IngestJobResponse> {
   return new Promise((resolve, reject) => {
     const formData = new FormData();
@@ -102,6 +113,11 @@ export function uploadVideo(
     if (sourceEndTime) formData.append('source_end_time', sourceEndTime);
     formData.append('min_clip_length', String(minClipLength));
     formData.append('max_clip_length', String(maxClipLength));
+    formData.append('clip_strategy', clipStrategy);
+    formData.append('sequential_clip_duration', String(sequentialClipDuration));
+    formData.append('adjust_to_sentence_boundaries', String(adjustToSentenceBoundaries));
+    formData.append('generate_clip_titles', String(generateClipTitles));
+    formData.append('avoid_short_last_clip', String(avoidShortLastClip));
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', apiUrl('/upload'));

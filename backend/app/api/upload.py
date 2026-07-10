@@ -261,6 +261,11 @@ async def _run_process_video_source(job_id: str, body: dict, output_dir: str, so
             max_clips=25,
             min_score=0.45,
             overlap_tolerance=0.6,
+            clip_strategy=body.get("clip_strategy", "highlights"),
+            sequential_clip_duration=int(body.get("sequential_clip_duration", 60)),
+            adjust_to_sentence_boundaries=bool(body.get("adjust_to_sentence_boundaries", True)),
+            generate_clip_titles=bool(body.get("generate_clip_titles", True)),
+            avoid_short_last_clip=bool(body.get("avoid_short_last_clip", False)),
             step_logger=lambda msg: print(f"[PIPELINE source_type={source_type}] {msg}"),
             original_video_path=filepath,
             auto_save_dir=_resolve_save_folder(body.get("save_folder"), reject_invalid=False),
@@ -311,6 +316,11 @@ async def upload_video(
     source_end_time: str | None = Form(default=None),
     min_clip_length: int = Form(default=30),
     max_clip_length: int = Form(default=90),
+    clip_strategy: str = Form(default="highlights"),
+    sequential_clip_duration: int = Form(default=60),
+    adjust_to_sentence_boundaries: bool = Form(default=True),
+    generate_clip_titles: bool = Form(default=True),
+    avoid_short_last_clip: bool = Form(default=False),
 ):
     analysis_folder = _resolve_analysis_folder(analysis_name, output_folder)
     analysis_id = analysis_folder
@@ -327,6 +337,11 @@ async def upload_video(
         "source_end_time": source_end_time,
         "min_clip_length": min_clip_length,
         "max_clip_length": max_clip_length,
+        "clip_strategy": clip_strategy,
+        "sequential_clip_duration": sequential_clip_duration,
+        "adjust_to_sentence_boundaries": adjust_to_sentence_boundaries,
+        "generate_clip_titles": generate_clip_titles,
+        "avoid_short_last_clip": avoid_short_last_clip,
     }
     create_job(job_id, analysis_id)
     asyncio.create_task(process_upload_ingest_job(job_id, body, output_dir, filepath))
