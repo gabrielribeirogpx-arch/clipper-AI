@@ -273,7 +273,8 @@ async def _run_process_video_source(job_id: str, body: dict, output_dir: str, so
         )
 
         update_job(job_id, status="processing", progress=96, step="Gerando clipes")
-        response_payload = _build_upload_response(transcription, str(uuid.uuid4()), filepath, render_mode=render_mode, video_quality=body.get("video_quality", "1080p"))
+        expected_analysis_id = (get_job(job_id) or {}).get("analysis_id")
+        response_payload = _build_upload_response(transcription, str(uuid.uuid4()), filepath, render_mode=render_mode, video_quality=body.get("video_quality", "1080p"), expected_analysis_id=expected_analysis_id)
         if response_payload.get("status") == "waiting_dual_region":
             update_job(job_id, status="waiting_dual_region", progress=100, step="Waiting dual-region setup", clips=response_payload.get("clips", []), result=response_payload)
             print(f"[JOB WAITING DUAL REGION] job_id={job_id} source_type={source_type}")
@@ -481,12 +482,16 @@ def _start_ai_metadata_background(hooks: list, next_state: dict, output_dir: str
 
     threading.Thread(target=_worker, name="ai-metadata-background", daemon=True).start()
 
-def _build_upload_response(transcription, file_id: str, filepath: str, render_mode: str = "ai_tracking", video_quality: str = "1080p"):
+def _build_upload_response(transcription, file_id: str, filepath: str, render_mode: str = "ai_tracking", video_quality: str = "1080p", expected_analysis_id: str | None = None):
 
     hooks = transcription["hooks"]
     duration = max([round(hook["end"] - hook["start"], 2) for hook in hooks], default=0.0)
     first_final_clip = hooks[0]["final_clip"] if hooks else filepath
-    analysis_id = Path(hooks[0]["final_clip"]).parent.name if hooks else "default"
+    analysis_id = transcription.get("analysis_id") or expected_analysis_id or (Path(hooks[0]["final_clip"]).parents[1].name if hooks and len(Path(hooks[0]["final_clip"]).parents) > 1 else "default")
+    if expected_analysis_id and analysis_id != expected_analysis_id:
+        raise ValueError(f"analysis_id mismatch: expected={expected_analysis_id} actual={analysis_id}")
+    exported_files = transcription.get("exported_files", [])
+    print(f"[UPLOAD RESPONSE SUMMARY] analysis_id={analysis_id} candidates_generated={transcription.get('summary', {}).get('candidates_generated', len(hooks))} candidates_to_render={transcription.get('summary', {}).get('candidates_to_render', len(hooks))} exported={len(exported_files)} export_files={exported_files}")
 
     is_waiting_dual_region = render_mode == "dual_region" and transcription.get("status") == "WAITING_FOR_DUAL_REGION_SETUP"
     status = "waiting_dual_region" if is_waiting_dual_region else "completed"
